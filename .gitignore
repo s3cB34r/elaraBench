@@ -1,0 +1,31 @@
+# Python environments and local configuration
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+
+# Python bytecode and tool caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Packaging and build output
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Editors and operating systems
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Local benchmark run artifacts (benchmark definitions remain tracked)
+runs/
