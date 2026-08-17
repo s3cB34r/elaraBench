@@ -34,10 +34,41 @@ The runner depends only on `ModelProvider`. Ollama-specific translation and HTTP
 in `providers/ollama.py`. The provider owns one reusable synchronous HTTPX client and caches
 preflight metadata for its lifetime.
 
+## Runtime policy resolution
+
+Thinking is a provider-neutral, typed part of `RunConfiguration` and every resolved
+`GenerationRequest`:
+
+- `enabled` requests reasoning/thinking when the provider adapter supports the control.
+- `disabled` explicitly requests no reasoning/thinking and is the ElaraBench default.
+- `provider_default` sends no explicit control and records that behavior depends on the
+  provider/model default.
+
+Resolution is CLI override, then optional suite default, then `disabled`. Ollama derives a typed
+control kind from cached `/api/show` metadata: `none`, `boolean`, `levels`, or `unknown`. Raw
+provider capabilities and architecture remain in model identity; the interpretation is persisted,
+fingerprinted, and compared on resume. The broad `thinking` capability alone remains `unknown`.
+Only an exact provider-reported architecture in the adapter's small compatibility table supplies
+stronger evidence. There are no user-facing model-name heuristics or task-type inference.
+
+Boolean-capable models map explicit policy to top-level `think`, outside generation `options`. A
+non-thinking model satisfies `disabled` without sending `think` and rejects `enabled`. Unknown or
+level-valued control rejects both explicit policies because enforcement cannot be proven with the
+v0.2.1 policy. `provider_default` is safe in every state because it intentionally omits the field.
+Translated requests are preserved as raw evidence. Reasoning-effort levels are outside v0.2.1.
+
+The general request and suite timeout default is 120 seconds. It remains finite, persisted,
+fingerprinted, and CLI-overrideable. Slowness alone never triggers a special retry or adaptive
+timeout. M2.1 does not warm a model before the first sample. Client wall latency therefore retains
+cold-start cost, while Ollama's total, load, prompt-evaluation, and generation durations remain
+separate provider metrics.
+
 Configuration, authentication/authorization, and internal adapter failures terminate a run
 after available evidence is persisted. Ordinary finalized provider/backend failures affect one
 sample, remain visible as evaluator errors, and never become zero scores. Conservative retries
-apply only to explicitly retryable connection, timeout, protocol, and transient HTTP failures.
+apply only to explicitly retryable connection establishment/write, protocol, and transient HTTP
+failures. A generation read timeout is not retried as a presumed transient failure: increasing
+the timeout or starting a new physical run is an explicit user decision.
 
 `KeyboardInterrupt` is handled at the orchestration boundary. Completed artifacts remain valid,
 an in-flight attempt is recorded as interrupted when possible, no response is fabricated for
@@ -57,6 +88,36 @@ incompatibility, or corrupt finalized JSON aborts resume.
 `score` dispatches evaluators over canonical stored responses and replaces only derived
 evaluations and summary. `summarize` reads evaluations and replaces only the summary. Neither
 service constructs a provider, reads the original suite directory, or uses the network.
+Evaluation context carries the physical source result-schema version; composite dispatch forwards
+it unchanged at every nesting level. Current summaries use their own artifact schema version 3
+and separately record whether their canonical source run was result schema 2 or 3.
+Artifact loading receives the physical manifest schema explicitly. A versionless historical v2
+evaluation is interpreted as source schema 2 in memory and is not silently migrated on read;
+current v3 evaluation writes carry the field explicitly.
+
+New physical runs use result schema v3. A narrow compatibility layer validates historical M2
+schema-v2 manifests, snapshots, request hashes, and fingerprint schema v1 without injecting v3
+defaults. Those runs can be scored and summarized, but cannot resume because doing so would mix
+pre-Thinking and explicit-Thinking execution semantics. Canonical v2 evidence remains immutable.
+
+## Evaluation outcome boundaries
+
+An evaluator returns `scored` whenever generation succeeded, its configuration and ground truth
+are valid, and it can deterministically judge the raw output. Both success and model failure are
+scored outcomes: a wrong answer or required-format violation is `scored` with score `0.0` and
+`passed=false`. Strict numeric evaluators do not extract numbers from prose, and strict JSON
+evaluators do not strip Markdown fences, repair syntax, or search for embedded JSON.
+
+`invalid` means benchmark or evaluator inputs cannot support a trustworthy score—for example an
+invalid expected number, regex, or JSON Schema. `error` means generation failed or evaluation hit
+an unexpected technical failure. `pending_review` is explicitly unscored. Composite evaluators
+combine scored children, including zeroes, and preserve child diagnostics; a true invalid, error,
+or pending child propagates as an unscored composite result.
+
+Aggregation counts every `scored` sample in coverage regardless of score. It excludes true
+invalid, error, pending, and missing results without converting them to zero. Thus strict output
+failures lower the model score instead of artificially reducing coverage and inflating the
+partial aggregate.
 
 ## Deliberate v1/M2 limits
 

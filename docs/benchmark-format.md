@@ -29,12 +29,19 @@ The M2 manifest supports:
 - Provenance, license, and contamination notes.
 - `cases.path`, relative to the suite directory and normally `cases.jsonl`.
 - Optional suite `tags`.
-- `defaults.repeats` and `defaults.timeout_seconds`.
+- `defaults.repeats`, `defaults.timeout_seconds` (120 seconds by default), and optional
+  provider-neutral `defaults.thinking` (`enabled`, `disabled`, or `provider_default`).
 - `aggregation.method`, currently `weighted_macro`; `unscored_policy`, currently `exclude`; and
   `minimum_scored_coverage`, default `0.95`.
 
 Defaults must be explicit in a resolved run manifest. A suite may not choose a provider or
 embed provider-specific request fields.
+
+Thinking resolution is an explicit CLI override, then suite default when present, then the
+ElaraBench default of `disabled`. The policy describes requested inference behavior without
+naming a backend field; adapters remain responsible for capability discovery, honest translation,
+or rejection. An explicit suite policy can therefore fail preflight for a model whose provider
+cannot prove compatible control semantics.
 
 ## Case fields
 
@@ -69,17 +76,20 @@ M2 supports these explicit evaluator types:
 | `exact_match` | `expected`; compares the complete output without normalization. |
 | `normalized_match` | `expected`, optional ordered `operations`; compares normalized text. |
 | `numeric` | Decimal `expected` and required nonnegative `tolerance`; boundary is inclusive. |
-| `multiple_choice` | `expected`, at least two `choices`, optional normalization operations. Output outside the choices is invalid. |
+| `multiple_choice` | `expected`, at least two `choices`, optional normalization operations. Any wrong or unknown model choice scores zero. |
 | `regex_full_match` | `pattern`, optional `flags`; uses full-match semantics. |
-| `json_parse` | Empty config; valid JSON scores one, malformed JSON is invalid. |
+| `json_parse` | Empty config; valid raw JSON scores one and malformed or fenced model JSON scores zero. |
 | `json_schema` | `schema`; validates parsed JSON using JSON Schema Draft 2020-12. |
-| `required_content` | Nonempty `required`, `case_sensitive`, and `mode` (`all` or `any`). |
-| `forbidden_content` | Nonempty `forbidden` and `case_sensitive`. |
+| `required_content` | Nonempty `required`, `case_sensitive`, and `mode` (`all` or `any`); the configured condition is binary. |
+| `forbidden_content` | Nonempty `forbidden` and `case_sensitive`; any forbidden match scores zero. |
 | `composite` | Empty config plus positively weighted child `components`. All children must produce scores before a composite score is produced. |
 
 Normalization is limited to the explicitly ordered operations `strip`, `lowercase`, and
 `collapse_whitespace`. No fuzzy, embedding, semantic, human, or LLM-judge evaluation is
 implemented.
 
-Malformed output produces `invalid` for evaluators that require a parseable representation.
-Provider failures produce `error`. Neither is silently assigned score zero.
+Malformed or structurally nonconforming model output is a deterministic model failure and
+normally produces `scored`, score `0.0`, and `passed=false`. `invalid` is reserved for unusable
+benchmark/evaluator input such as an invalid expected value, regex, or JSON Schema. Provider and
+unexpected technical evaluator failures produce `error`. Strict evaluators do not extract
+numbers from prose, strip Markdown fences, repair JSON, or search for embedded fragments.

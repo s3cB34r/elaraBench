@@ -53,12 +53,32 @@ def validate_specification(specification: EvaluationSpecification) -> None:
 
 
 def evaluate(context: EvaluationContext) -> EvaluationResult:
-    """Dispatch a validated specification and preserve provider failures as errors."""
-    evaluator = _evaluator(context.specification)
-    evaluator.validate_specification(context.specification)
+    """Dispatch evaluation and classify model, benchmark, and technical failures."""
+    try:
+        evaluator = _evaluator(context.specification)
+    except EvaluatorConfigurationError as error:
+        if context.response.error is not None:
+            return make_result(
+                context,
+                evaluator_name=context.specification.type,
+                evaluator_version="unknown",
+                status=EvaluationStatus.ERROR,
+                explanation=(
+                    f"generation failed ({context.response.error.code}): "
+                    f"{context.response.error.message}"
+                ),
+            )
+        return make_result(
+            context,
+            evaluator_name=context.specification.type,
+            evaluator_version="unknown",
+            status=EvaluationStatus.INVALID,
+            explanation=str(error),
+        )
+
     if context.response.error is not None:
         return make_result(
-            context.specification,
+            context,
             evaluator_name=evaluator.name,
             evaluator_version=evaluator.version,
             status=EvaluationStatus.ERROR,
@@ -67,4 +87,24 @@ def evaluate(context: EvaluationContext) -> EvaluationResult:
                 f"{context.response.error.message}"
             ),
         )
-    return evaluator.evaluate(context)
+    try:
+        evaluator.validate_specification(context.specification)
+        return evaluator.evaluate(context)
+    except EvaluatorConfigurationError as error:
+        return make_result(
+            context,
+            evaluator_name=evaluator.name,
+            evaluator_version=evaluator.version,
+            status=EvaluationStatus.INVALID,
+            explanation=str(error),
+        )
+    except Exception as error:
+        return make_result(
+            context,
+            evaluator_name=evaluator.name,
+            evaluator_version=evaluator.version,
+            status=EvaluationStatus.ERROR,
+            explanation=(
+                f"evaluator failed unexpectedly: {type(error).__name__}: {error}"
+            ),
+        )

@@ -1,0 +1,47 @@
+{
+  "benchmark_snapshot_hash": "8b66cb746298c490bae29542c44d4e21817d152438d75dbb143e73b342481e61",
+  "configuration": {
+    "concurrency": 1,
+    "endpoint": null,
+    "generation_parameters": {"max_tokens": null, "stop": [], "temperature": null, "top_k": null, "top_p": null},
+    "minimum_scored_coverage": 0.95,
+    "model": "elarabench-fake-v1",
+    "provider": "fake",
+    "repeats": 1,
+    "retry_policy": {"backoff_multiplier": 2.0, "initial_backoff_seconds": 0.5, "max_retries": 0, "maximum_backoff_seconds": 5.0},
+    "seed": null,
+    "suite_path": "/historical/source/legacy-v2-suite",
+    "timeout_seconds": 30.0
+  },
+  "environment": {
+    "architecture": "x86_64", "cpu": "synthetic CPU", "diagnostics": [], "gpu_driver": null,
+    "gpus": [], "operating_system": "Linux", "os_release": "historical-fixture",
+    "python_implementation": "CPython", "python_version": "3.11.9", "runtime_versions": {}
+  },
+  "framework": {"source": {"git_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "git_dirty": false, "source_state_hash": null}, "version": "0.0.0"},
+  "lifecycle": {
+    "completed_at": "2026-08-17T11:18:50.310909Z", "created_at": "2026-08-17T11:18:50.274882Z",
+    "resume_count": 0, "started_at": "2026-08-17T11:18:50.281840Z", "status": "completed",
+    "updated_at": "2026-08-17T11:18:50.310909Z"
+  },
+  "model": {
+    "backend": "deterministic", "backend_version": "1.0.0", "capabilities": [], "chat_template": null,
+    "family": null, "format": null, "model": "elarabench-fake-v1", "model_digest": "sha256:elarabench-fake-v1",
+    "parameter_size": null, "parameters_hash": null, "provider": "fake", "quantization": null,
+    "template_hash": null, "tokenizer": null
+  },
+  "provider": {
+    "adapter_version": "1.0.0",
+    "capabilities": {"seed": true, "structured_output": true, "tools": false, "usage_metrics": false},
+    "endpoint": {"host": "local", "is_local": true, "path": "/", "port": null, "scheme": "fake"},
+    "type": "fake"
+  },
+  "request_plan": [{"identity": {"case_id": "exact-001", "repeat_index": 0}, "request_hash": "cc1303fd668554fd48368b9bf43ac17180a427507eacef918dc569ef70553f87"}],
+  "run_fingerprint": "8b9dccaef129b8f3bca2fd410e15d19e436500c5a43bbe19c831e347090c6f76",
+  "run_id": "historical_v2_run",
+  "schema_version": 2,
+  "seed_control": {"applied": false, "deterministic_output_guaranteed": false, "requested": false, "supported": true},
+  "suite_hash": "166ba8bbf2ff6daad2e111c04dc66d70c55b0b598970683b36a82970ff08fe4c",
+  "suite_id": "legacy-v2-suite",
+  "suite_version": "1.0.0"
+}

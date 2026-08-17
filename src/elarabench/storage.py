@@ -7,7 +7,7 @@ import os
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from typing import TypeVar
+from typing import Any, Literal, TypeVar, cast
 
 from pydantic import BaseModel, JsonValue, TypeAdapter, ValidationError
 
@@ -86,6 +86,18 @@ def _read_model(path: Path, model: type[ModelT]) -> ModelT:
         raise ArtifactStoreError(f"invalid artifact {path}: {error}") from error
 
 
+def _read_json_object(path: Path) -> dict[str, Any]:
+    if not path.is_file():
+        raise ArtifactNotFoundError(f"artifact not found: {path}")
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise ArtifactStoreError(f"invalid artifact {path}: {error}") from error
+    if not isinstance(value, dict):
+        raise ArtifactStoreError(f"invalid artifact {path}: expected a JSON object")
+    return cast(dict[str, Any], value)
+
+
 class ArtifactStore:
     """Factory for deterministic run directories beneath one configured root."""
 
@@ -153,6 +165,10 @@ class RunArtifactStore:
     def read_manifest(self) -> RunManifest:
         return _read_model(self.path / "manifest.json", RunManifest)
 
+    def read_manifest_data(self) -> dict[str, Any]:
+        """Read an unmodified manifest object for version-aware validation."""
+        return _read_json_object(self.path / "manifest.json")
+
     def update_manifest_lifecycle(self, lifecycle: RunLifecycle) -> RunManifest:
         """Atomically update only the guarded lifecycle section."""
         current = self.read_manifest()
@@ -215,6 +231,10 @@ class RunArtifactStore:
     def read_benchmark(self) -> BenchmarkSnapshot:
         return _read_model(self.path / "benchmark.json", BenchmarkSnapshot)
 
+    def read_benchmark_data(self) -> dict[str, Any]:
+        """Read an unmodified benchmark object for version-aware validation."""
+        return _read_json_object(self.path / "benchmark.json")
+
     def write_request(self, identity: SampleIdentity, request: GenerationRequest) -> None:
         """Write a canonical materialized request exactly once."""
         _atomic_write(
@@ -225,6 +245,10 @@ class RunArtifactStore:
 
     def read_request(self, identity: SampleIdentity) -> GenerationRequest:
         return _read_model(self._sample_path(identity) / "request.json", GenerationRequest)
+
+    def read_request_data(self, identity: SampleIdentity) -> dict[str, Any]:
+        """Read an unmodified request object for historical hash verification."""
+        return _read_json_object(self._sample_path(identity) / "request.json")
 
     def write_response(self, identity: SampleIdentity, response: GenerationResponse) -> None:
         """Write a canonical raw/normalized response exactly once."""
@@ -286,8 +310,33 @@ class RunArtifactStore:
             replace=replace,
         )
 
-    def read_evaluation(self, identity: SampleIdentity) -> EvaluationResult:
-        return _read_model(self._sample_path(identity) / "evaluation.json", EvaluationResult)
+    def read_evaluation(
+        self,
+        identity: SampleIdentity,
+        *,
+        source_result_schema_version: Literal[2, 3],
+    ) -> EvaluationResult:
+        """Load derived evaluation data using the physical run schema as provenance."""
+        path = self._sample_path(identity) / "evaluation.json"
+        value = _read_json_object(path)
+        provenance_field = "source_result_schema_version"
+        if provenance_field not in value:
+            if source_result_schema_version != 2:
+                raise ArtifactStoreError(
+                    f"incomplete schema-v3 evaluation artifact {path}: missing required "
+                    f"{provenance_field}"
+                )
+            value[provenance_field] = 2
+        elif value[provenance_field] != source_result_schema_version:
+            raise ArtifactStoreError(
+                f"evaluation source schema mismatch in {path}: "
+                f"stored {value[provenance_field]!r}, "
+                f"physical run schema {source_result_schema_version}"
+            )
+        try:
+            return EvaluationResult.model_validate(value)
+        except ValidationError as error:
+            raise ArtifactStoreError(f"invalid artifact {path}: {error}") from error
 
     def write_summary(self, summary: AggregationSummary) -> None:
         """Compatibility API for atomically writing a derived summary."""

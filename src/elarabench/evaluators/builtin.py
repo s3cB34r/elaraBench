@@ -55,6 +55,14 @@ class NumericConfig(EvaluatorConfig):
     expected: Decimal
     tolerance: Decimal = Field(ge=0)
 
+    @model_validator(mode="after")
+    def validate_finite_values(self) -> NumericConfig:
+        if not self.expected.is_finite():
+            raise ValueError("expected must be finite")
+        if not self.tolerance.is_finite():
+            raise ValueError("tolerance must be finite")
+        return self
+
 
 class MultipleChoiceConfig(EvaluatorConfig):
     expected: str
@@ -176,7 +184,7 @@ class SimpleEvaluator:
     """Shared validation rules for non-composite deterministic evaluators."""
 
     name: str
-    version: str = "1.0.0"
+    version: str = "1.1.0"
     config_model: ClassVar[type[EvaluatorConfig]]
 
     def validate_specification(self, specification: EvaluationSpecification) -> None:
@@ -195,7 +203,7 @@ class ExactMatchEvaluator(SimpleEvaluator):
         config = _configuration(context.specification, ExactMatchConfig)
         passed = context.response.text == config.expected
         return make_result(
-            context.specification,
+            context,
             evaluator_name=self.name,
             evaluator_version=self.version,
             status=EvaluationStatus.SCORED,
@@ -217,7 +225,7 @@ class NormalizedMatchEvaluator(SimpleEvaluator):
         expected = normalize_text(config.expected, config.operations)
         passed = actual == expected
         return make_result(
-            context.specification,
+            context,
             evaluator_name=self.name,
             evaluator_version=self.version,
             status=EvaluationStatus.SCORED,
@@ -238,13 +246,19 @@ class NumericEvaluator(SimpleEvaluator):
         try:
             actual = Decimal(context.response.text.strip())
         except InvalidOperation:
-            return self._invalid(context, "output is not a valid decimal number")
+            return self._format_failure(
+                context,
+                "output does not satisfy the required numeric-only format",
+            )
         if not actual.is_finite():
-            return self._invalid(context, "output must be a finite decimal number")
+            return self._format_failure(
+                context,
+                "output does not satisfy the required finite numeric format",
+            )
         difference = abs(actual - config.expected)
         passed = difference <= config.tolerance
         return make_result(
-            context.specification,
+            context,
             evaluator_name=self.name,
             evaluator_version=self.version,
             status=EvaluationStatus.SCORED,
@@ -257,13 +271,16 @@ class NumericEvaluator(SimpleEvaluator):
                 else "numeric output is outside tolerance"
             ),
         )
-
-    def _invalid(self, context: EvaluationContext, explanation: str) -> EvaluationResult:
+    def _format_failure(
+        self, context: EvaluationContext, explanation: str
+    ) -> EvaluationResult:
         return make_result(
-            context.specification,
+            context,
             evaluator_name=self.name,
             evaluator_version=self.version,
-            status=EvaluationStatus.INVALID,
+            status=EvaluationStatus.SCORED,
+            score=0.0,
+            passed=False,
             explanation=explanation,
         )
 
@@ -278,16 +295,18 @@ class MultipleChoiceEvaluator(SimpleEvaluator):
         choices = tuple(normalize_text(choice, config.operations) for choice in config.choices)
         if actual not in choices:
             return make_result(
-                context.specification,
+                context,
                 evaluator_name=self.name,
                 evaluator_version=self.version,
-                status=EvaluationStatus.INVALID,
+                status=EvaluationStatus.SCORED,
+                score=0.0,
+                passed=False,
                 explanation="output is not one of the configured choices",
             )
         expected = normalize_text(config.expected, config.operations)
         passed = actual == expected
         return make_result(
-            context.specification,
+            context,
             evaluator_name=self.name,
             evaluator_version=self.version,
             status=EvaluationStatus.SCORED,
@@ -311,7 +330,7 @@ class RegexEvaluator(SimpleEvaluator):
             regex_flags(config.flags),
         ) is not None
         return make_result(
-            context.specification,
+            context,
             evaluator_name=self.name,
             evaluator_version=self.version,
             status=EvaluationStatus.SCORED,
@@ -333,14 +352,16 @@ class JsonParsingEvaluator(SimpleEvaluator):
             json.loads(context.response.text)
         except json.JSONDecodeError as error:
             return make_result(
-                context.specification,
+                context,
                 evaluator_name=self.name,
                 evaluator_version=self.version,
-                status=EvaluationStatus.INVALID,
+                status=EvaluationStatus.SCORED,
+                score=0.0,
+                passed=False,
                 explanation=f"output is not valid JSON: {error.msg}",
             )
         return make_result(
-            context.specification,
+            context,
             evaluator_name=self.name,
             evaluator_version=self.version,
             status=EvaluationStatus.SCORED,
@@ -360,10 +381,12 @@ class JsonSchemaEvaluator(SimpleEvaluator):
             instance = json.loads(context.response.text)
         except json.JSONDecodeError as error:
             return make_result(
-                context.specification,
+                context,
                 evaluator_name=self.name,
                 evaluator_version=self.version,
-                status=EvaluationStatus.INVALID,
+                status=EvaluationStatus.SCORED,
+                score=0.0,
+                passed=False,
                 explanation=f"output is not valid JSON: {error.msg}",
             )
         errors = sorted(
@@ -373,7 +396,7 @@ class JsonSchemaEvaluator(SimpleEvaluator):
         passed = not errors
         messages = [error.message for error in errors]
         return make_result(
-            context.specification,
+            context,
             evaluator_name=self.name,
             evaluator_version=self.version,
             status=EvaluationStatus.SCORED,
@@ -400,15 +423,19 @@ class RequiredContentEvaluator(SimpleEvaluator):
         matches = sum(term in output for term in terms)
         ratio = matches / len(terms)
         passed = matches == len(terms) if config.mode == "all" else matches > 0
-        score = ratio if config.mode == "all" else float(passed)
+        score = float(passed)
         return make_result(
-            context.specification,
+            context,
             evaluator_name=self.name,
             evaluator_version=self.version,
             status=EvaluationStatus.SCORED,
             score=score,
             passed=passed,
-            metrics={"matched": float(matches), "required": float(len(terms))},
+            metrics={
+                "matched": float(matches),
+                "required": float(len(terms)),
+                "match_ratio": ratio,
+            },
             explanation=f"matched {matches} of {len(terms)} required content terms",
         )
 
@@ -426,16 +453,20 @@ class ForbiddenContentEvaluator(SimpleEvaluator):
             else tuple(term.lower() for term in config.forbidden)
         )
         matches = sum(term in output for term in terms)
-        score = 1.0 - matches / len(terms)
         passed = matches == 0
+        score = float(passed)
         return make_result(
-            context.specification,
+            context,
             evaluator_name=self.name,
             evaluator_version=self.version,
             status=EvaluationStatus.SCORED,
             score=score,
             passed=passed,
-            metrics={"matched": float(matches), "forbidden": float(len(terms))},
+            metrics={
+                "matched": float(matches),
+                "forbidden": float(len(terms)),
+                "violation_ratio": matches / len(terms),
+            },
             explanation=f"matched {matches} of {len(terms)} forbidden content terms",
         )
 
@@ -444,7 +475,7 @@ class CompositeEvaluator:
     """Combine fully scored child evaluators using explicit positive weights."""
 
     name = "composite"
-    version = "1.0.0"
+    version = "1.1.0"
 
     def __init__(
         self,
@@ -469,6 +500,7 @@ class CompositeEvaluator:
                 EvaluationContext(
                     response=context.response,
                     specification=component.specification,
+                    source_result_schema_version=context.source_result_schema_version,
                 )
             )
             for component in context.specification.components
@@ -480,7 +512,7 @@ class CompositeEvaluator:
         ):
             if any(result.status is status for result in child_results):
                 return make_result(
-                    context.specification,
+                    context,
                     evaluator_name=self.name,
                     evaluator_version=self.version,
                     status=status,
@@ -508,7 +540,7 @@ class CompositeEvaluator:
             passed = None
         metrics = {f"component_{index}_score": value for index, value in enumerate(scores)}
         return make_result(
-            context.specification,
+            context,
             evaluator_name=self.name,
             evaluator_version=self.version,
             status=EvaluationStatus.SCORED,

@@ -2,11 +2,21 @@
 
 from __future__ import annotations
 
+from typing import Literal, cast
+
 import pytest
 
-from elarabench.evaluators import EvaluatorConfigurationError, evaluate
+from elarabench.evaluators import (
+    EvaluatorConfigurationError,
+    evaluate,
+    registry,
+    validate_specification,
+)
+from elarabench.evaluators.base import make_result
+from elarabench.evaluators.builtin import CompositeEvaluator
 from elarabench.models import (
     EvaluationContext,
+    EvaluationResult,
     EvaluationSpecification,
     EvaluationStatus,
     GenerationError,
@@ -29,7 +39,7 @@ def evaluate_text(
         )
     )
     assert result.configuration_hash
-    assert result.evaluator_version == "1.0.0"
+    assert result.evaluator_version == "1.1.0"
     return result.status, result.score, result.passed
 
 
@@ -61,8 +71,9 @@ def test_normalized_match_applies_operations_in_order() -> None:
         ("10.5", EvaluationStatus.SCORED, 1.0),
         ("9.5", EvaluationStatus.SCORED, 1.0),
         ("9.499", EvaluationStatus.SCORED, 0.0),
-        ("not-a-number", EvaluationStatus.INVALID, None),
-        ("NaN", EvaluationStatus.INVALID, None),
+        ("not-a-number", EvaluationStatus.SCORED, 0.0),
+        ("The answer is 10.", EvaluationStatus.SCORED, 0.0),
+        ("NaN", EvaluationStatus.SCORED, 0.0),
     ],
 )
 def test_numeric_tolerance_boundaries(
@@ -74,6 +85,23 @@ def test_numeric_tolerance_boundaries(
 
     assert result[0] is status
     assert result[1] == score
+    assert result[2] is bool(score)
+
+
+def test_invalid_numeric_benchmark_configuration_is_invalid() -> None:
+    result = evaluate(
+        EvaluationContext(
+            response=GenerationResponse(text="10"),
+            specification=EvaluationSpecification(
+                type="numeric",
+                config={"expected": "NaN", "tolerance": 0},
+            ),
+        )
+    )
+
+    assert result.status is EvaluationStatus.INVALID
+    assert result.score is None
+    assert result.passed is None
 
 
 @pytest.mark.parametrize(
@@ -81,7 +109,7 @@ def test_numeric_tolerance_boundaries(
     [
         (" b ", EvaluationStatus.SCORED, 1.0),
         ("a", EvaluationStatus.SCORED, 0.0),
-        ("D", EvaluationStatus.INVALID, None),
+        ("D", EvaluationStatus.SCORED, 0.0),
     ],
 )
 def test_multiple_choice(text: str, status: EvaluationStatus, score: float | None) -> None:
@@ -112,15 +140,19 @@ def test_regex_uses_full_match_semantics_and_explicit_flags() -> None:
     )
 
 
-def test_invalid_regex_configuration_fails_clearly() -> None:
+def test_invalid_regex_configuration_is_invalid_at_evaluation_time() -> None:
     specification = EvaluationSpecification(type="regex_full_match", config={"pattern": "["})
-    with pytest.raises(EvaluatorConfigurationError, match="invalid regular expression"):
-        evaluate(
-            EvaluationContext(
-                response=GenerationResponse(text="x"),
-                specification=specification,
-            )
+    result = evaluate(
+        EvaluationContext(
+            response=GenerationResponse(text="x"),
+            specification=specification,
         )
+    )
+
+    assert result.status is EvaluationStatus.INVALID
+    assert result.score is None
+    with pytest.raises(EvaluatorConfigurationError, match="invalid regular expression"):
+        validate_specification(specification)
 
 
 def test_json_parsing_success_and_malformed_output() -> None:
@@ -129,8 +161,13 @@ def test_json_parsing_success_and_malformed_output() -> None:
         1.0,
     )
     assert evaluate_text("json_parse", {}, "{bad")[:2] == (
-        EvaluationStatus.INVALID,
-        None,
+        EvaluationStatus.SCORED,
+        0.0,
+    )
+    assert evaluate_text("json_parse", {}, '```json\n{"ok": true}\n```') == (
+        EvaluationStatus.SCORED,
+        0.0,
+        False,
     )
 
 
@@ -145,31 +182,39 @@ def test_json_schema_success_failure_and_malformed_json() -> None:
     }
     assert evaluate_text("json_schema", config, '{"answer": 7}')[1] == 1.0
     assert evaluate_text("json_schema", config, '{"answer": "7"}')[1] == 0.0
-    assert evaluate_text("json_schema", config, "not-json")[0] is EvaluationStatus.INVALID
+    assert evaluate_text("json_schema", config, "not-json") == (
+        EvaluationStatus.SCORED,
+        0.0,
+        False,
+    )
 
 
-def test_invalid_json_schema_is_rejected() -> None:
+def test_invalid_json_schema_is_invalid_at_evaluation_time() -> None:
     specification = EvaluationSpecification(
         type="json_schema",
         config={"schema": {"type": "not-a-json-schema-type"}},
     )
-    with pytest.raises(EvaluatorConfigurationError, match="invalid JSON Schema"):
-        evaluate(
-            EvaluationContext(
-                response=GenerationResponse(text="{}"),
-                specification=specification,
-            )
+    result = evaluate(
+        EvaluationContext(
+            response=GenerationResponse(text="{}"),
+            specification=specification,
         )
+    )
+
+    assert result.status is EvaluationStatus.INVALID
+    assert result.score is None
+    with pytest.raises(EvaluatorConfigurationError, match="invalid JSON Schema"):
+        validate_specification(specification)
 
 
-def test_required_content_reports_partial_deterministic_score() -> None:
+def test_required_content_missing_term_is_scored_failure() -> None:
     result = evaluate_text(
         "required_content",
         {"required": ["alpha", "beta"], "case_sensitive": False},
         "Contains ALPHA only",
     )
 
-    assert result == (EvaluationStatus.SCORED, 0.5, False)
+    assert result == (EvaluationStatus.SCORED, 0.0, False)
 
 
 def test_required_content_any_mode() -> None:
@@ -182,12 +227,12 @@ def test_required_content_any_mode() -> None:
     assert result == (EvaluationStatus.SCORED, 1.0, True)
 
 
-def test_forbidden_content_scores_fraction_absent() -> None:
+def test_forbidden_content_violation_is_scored_failure() -> None:
     assert evaluate_text(
         "forbidden_content",
         {"forbidden": ["alpha", "beta"], "case_sensitive": False},
         "ALPHA appears",
-    ) == (EvaluationStatus.SCORED, 0.5, False)
+    ) == (EvaluationStatus.SCORED, 0.0, False)
     assert evaluate_text(
         "forbidden_content",
         {"forbidden": ["alpha", "beta"]},
@@ -222,32 +267,105 @@ def test_composite_evaluator_uses_weights_and_preserves_children() -> None:
     )
 
     assert result.status is EvaluationStatus.SCORED
-    assert result.score == 0.875
+    assert result.score == 0.75
     assert result.passed is False
     assert len(result.artifacts["components"]) == 2  # type: ignore[arg-type]
+    components = result.artifacts["components"]
+    assert isinstance(components, list)
+    first_component = components[0]
+    assert isinstance(first_component, dict)
+    assert first_component["status"] == "scored"
+    assert first_component["score"] == 0.0
 
 
-def test_composite_propagates_invalid_without_partial_score() -> None:
+@pytest.mark.parametrize("source_schema", [2, 3])
+def test_recursive_composite_preserves_physical_source_provenance(
+    source_schema: Literal[2, 3],
+) -> None:
     specification = EvaluationSpecification.model_validate(
         {
             "type": "composite",
             "components": [
                 {
                     "specification": {
-                        "type": "numeric",
-                        "config": {"expected": 1, "tolerance": 0},
+                        "type": "composite",
+                        "components": [
+                            {
+                                "specification": {
+                                    "type": "exact_match",
+                                    "config": {"expected": "ELARA"},
+                                }
+                            }
+                        ],
                     }
-                },
-                {"specification": {"type": "exact_match", "config": {"expected": "x"}}},
+                }
             ],
         }
     )
     result = evaluate(
+        EvaluationContext(
+            response=GenerationResponse(text="ELARA"),
+            specification=specification,
+            source_result_schema_version=source_schema,
+        )
+    )
+
+    outer_components = result.artifacts["components"]
+    assert isinstance(outer_components, list)
+    inner_result = cast(dict[str, object], outer_components[0])
+    inner_artifacts = cast(dict[str, object], inner_result["artifacts"])
+    inner_components = cast(list[object], inner_artifacts["components"])
+    leaf_result = cast(dict[str, object], inner_components[0])
+
+    assert result.source_result_schema_version == source_schema
+    assert inner_result["source_result_schema_version"] == source_schema
+    assert leaf_result["source_result_schema_version"] == source_schema
+
+
+@pytest.mark.parametrize("child_status", [EvaluationStatus.INVALID, EvaluationStatus.ERROR])
+def test_composite_propagates_unscored_child_with_diagnostics(
+    child_status: EvaluationStatus,
+) -> None:
+    specification = EvaluationSpecification.model_validate(
+        {
+            "type": "composite",
+            "components": [
+                {"specification": {"type": "exact_match", "config": {"expected": "x"}}},
+                {"specification": {"type": "exact_match", "config": {"expected": "y"}}},
+            ],
+        }
+    )
+    calls = 0
+
+    def dispatch(context: EvaluationContext) -> EvaluationResult:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return make_result(
+                context,
+                evaluator_name="synthetic",
+                evaluator_version="1.0.0",
+                status=child_status,
+                explanation="synthetic child failure",
+            )
+        return make_result(
+            context,
+            evaluator_name="synthetic",
+            evaluator_version="1.0.0",
+            status=EvaluationStatus.SCORED,
+            score=1.0,
+            passed=True,
+            explanation="synthetic child success",
+        )
+
+    evaluator = CompositeEvaluator(dispatch, lambda _specification: None)
+    result = evaluator.evaluate(
         EvaluationContext(response=GenerationResponse(text="x"), specification=specification)
     )
 
-    assert result.status is EvaluationStatus.INVALID
+    assert result.status is child_status
     assert result.score is None
+    assert len(result.artifacts["components"]) == 2  # type: ignore[arg-type]
 
 
 def test_generation_error_is_not_converted_to_score_zero() -> None:
@@ -259,12 +377,42 @@ def test_generation_error_is_not_converted_to_score_zero() -> None:
     assert result.score is None
 
 
-def test_unknown_evaluator_fails_clearly() -> None:
+def test_unknown_evaluator_is_invalid_at_evaluation_time() -> None:
     specification = EvaluationSpecification(type="unknown", config={})
-    with pytest.raises(EvaluatorConfigurationError, match="unknown evaluator type"):
-        evaluate(
-            EvaluationContext(
-                response=GenerationResponse(text="x"),
-                specification=specification,
-            )
+    result = evaluate(
+        EvaluationContext(
+            response=GenerationResponse(text="x"),
+            specification=specification,
         )
+    )
+
+    assert result.status is EvaluationStatus.INVALID
+    assert "unknown evaluator type" in result.explanation
+
+
+def test_unexpected_evaluator_exception_is_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class ExplodingEvaluator:
+        name = "exact_match"
+        version = "synthetic"
+
+        def validate_specification(self, _specification: EvaluationSpecification) -> None:
+            pass
+
+        def evaluate(self, _context: EvaluationContext) -> EvaluationResult:
+            raise RuntimeError("synthetic evaluator failure")
+
+    monkeypatch.setitem(registry._EVALUATORS, "exact_match", ExplodingEvaluator())
+    result = evaluate(
+        EvaluationContext(
+            response=GenerationResponse(text="x"),
+            specification=EvaluationSpecification(
+                type="exact_match", config={"expected": "x"}
+            ),
+        )
+    )
+
+    assert result.status is EvaluationStatus.ERROR
+    assert result.score is None
+    assert "RuntimeError" in result.explanation

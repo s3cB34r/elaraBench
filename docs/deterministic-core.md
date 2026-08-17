@@ -21,14 +21,19 @@ responses/errors and keeps runner tests entirely offline.
 `OllamaProvider` uses the native non-streaming `/api/chat` endpoint through one synchronous HTTPX
 client. Lifetime-cached preflight calls `/api/version`, `/api/show`, and `/api/tags` discover
 version, digest, quantization, format/family/size, tokenizer, capabilities, and hashes of large
-parameters/template metadata. Missing metadata remains unknown rather than guessed. Messages and
-all supported generation controls are translated explicitly; tools are unsupported in M2, and
-unknown request fields cannot enter strict models.
+parameters/template metadata. Missing metadata remains unknown rather than guessed. The adapter
+uses provider-reported capabilities plus exact architecture evidence—not model aliases—to
+classify Thinking control as none, boolean, levels, or unknown. The broad `thinking` capability
+alone remains unknown. Boolean control maps explicit policy to top-level `think`; a non-thinking
+model omits it for `disabled`; `provider_default` always omits it. Unknown or level-valued control
+rejects explicit policy before generation. Tools are
+unsupported in M2, and unknown request fields cannot enter strict models.
 
 Timeout, connection/protocol, HTTP, provider-payload, malformed JSON/success, configuration,
 interruption, and internal errors remain distinct. HTTP 408, 429, 500, 502, 503, and 504 plus
-transient transport/timeouts are retryable; authentication, invalid requests, malformed success,
-and non-transient provider failures are not. Retries have no jitter and preserve every attempt.
+transient connection/write/protocol failures are retryable; a generation read timeout,
+authentication, invalid request, malformed success, and non-transient provider failure are not.
+Retries have no jitter and preserve every attempt.
 
 ## Evaluation and aggregation
 
@@ -40,6 +45,9 @@ embedding, LLM judge, human-review UI, plugin discovery, or dependency-injection
 Evaluation results retain evaluator name/version and configuration hash. Aggregation excludes
 unscored states, averages repeats per case, applies case weights, exposes category/tag breakdowns,
 reports status counts and repeat variance, and gates the headline score on sample coverage.
+Wrong or malformed model output that can be judged deterministically is `scored` at zero and
+counts toward coverage. Only invalid benchmark/evaluator input is `invalid`; generation and
+unexpected evaluator failures are `error`. Strict evaluators never repair raw responses.
 
 ## Services and testability
 

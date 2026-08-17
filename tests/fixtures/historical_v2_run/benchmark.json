@@ -1,0 +1,20 @@
+{
+  "benchmark_content_hash": "166ba8bbf2ff6daad2e111c04dc66d70c55b0b598970683b36a82970ff08fe4c",
+  "fixtures": [],
+  "minimum_scored_coverage": 0.95,
+  "schema_version": 1,
+  "snapshot_hash": "8b66cb746298c490bae29542c44d4e21817d152438d75dbb143e73b342481e61",
+  "suite": {
+    "aggregation": {"method": "weighted_macro", "minimum_scored_coverage": 0.95, "unscored_policy": "exclude"},
+    "cases": [{
+      "category": "reasoning", "difficulty": null,
+      "evaluation": {"components": [], "config": {"expected": "ELARA"}, "type": "exact_match"},
+      "fixtures": [], "id": "exact-001", "license": null,
+      "messages": [{"content": "Return exactly ELARA.", "role": "user"}],
+      "provenance": null, "response_format": null, "seed": null, "tags": [], "weight": 1.0
+    }],
+    "defaults": {"repeats": 1, "timeout_seconds": 30.0},
+    "description": null, "id": "legacy-v2-suite", "license": null, "provenance": null,
+    "schema_version": 1, "tags": [], "title": "Historical schema-v2 fixture", "version": "1.0.0"
+  }
+}

@@ -8,7 +8,12 @@ from elarabench.hashing import (
     hash_evaluation_specification,
     hash_generation_request,
 )
-from elarabench.models import BenchmarkCase, EvaluationSpecification, GenerationRequest
+from elarabench.models import (
+    BenchmarkCase,
+    EvaluationSpecification,
+    GenerationRequest,
+    ThinkingPolicy,
+)
 
 
 def case(prompt: str = "prompt", expected: str = "answer") -> BenchmarkCase:
@@ -57,3 +62,15 @@ def test_evaluator_hash_includes_configuration() -> None:
     second = EvaluationSpecification(type="exact_match", config={"expected": "b"})
 
     assert hash_evaluation_specification(first) != hash_evaluation_specification(second)
+
+
+def test_generation_request_hash_includes_thinking_policy() -> None:
+    base = GenerationRequest.model_validate(
+        {"messages": [{"role": "user", "content": "prompt"}]}
+    )
+    enabled = base.model_copy(update={"thinking": ThinkingPolicy.ENABLED})
+    provider_default = base.model_copy(update={"thinking": ThinkingPolicy.PROVIDER_DEFAULT})
+
+    assert hash_generation_request(base) != hash_generation_request(enabled)
+    assert hash_generation_request(base) != hash_generation_request(provider_default)
+    assert hash_generation_request(enabled) != hash_generation_request(provider_default)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -27,6 +28,9 @@ from elarabench.models import (
     RunManifest,
     SampleIdentity,
     SeedControlMetadata,
+    ThinkingControlKind,
+    ThinkingControlMetadata,
+    ThinkingPolicy,
 )
 from elarabench.storage import ArtifactExistsError, ArtifactStore, ArtifactStoreError
 
@@ -52,6 +56,12 @@ def manifest(run_id: str) -> RunManifest:
         ),
         model=ModelIdentity(provider="fake", backend="fake", model="elarabench-fake-v1"),
         seed_control=SeedControlMetadata(requested=False, supported=True, applied=False),
+        thinking_control=ThinkingControlMetadata(
+            requested_policy=ThinkingPolicy.DISABLED,
+            model_advertises_thinking=True,
+            control_kind=ThinkingControlKind.BOOLEAN,
+            explicit_control_planned=True,
+        ),
         environment=EnvironmentMetadata(
             python_version="3.12",
             python_implementation="CPython",
@@ -83,6 +93,7 @@ def evaluation(score: float) -> EvaluationResult:
         evaluator_name="exact_match",
         evaluator_version="1.0.0",
         configuration_hash="b" * 64,
+        source_result_schema_version=3,
     )
 
 
@@ -114,7 +125,7 @@ def test_canonical_and_derived_artifacts_round_trip(tmp_path: Path) -> None:
     assert run.read_manifest() == manifest("run-001")
     assert run.read_request(identity) == request()
     assert run.read_response(identity) == response
-    assert run.read_evaluation(identity) == result
+    assert run.read_evaluation(identity, source_result_schema_version=3) == result
     assert run.read_summary() == summary
     assert "café" in (run.path / "samples/case-1/repeat-000/request.json").read_text()
 
@@ -157,7 +168,35 @@ def test_derived_evaluation_requires_explicit_replace(tmp_path: Path) -> None:
         run.write_evaluation(identity, evaluation(1.0))
     run.write_evaluation(identity, evaluation(1.0), replace=True)
 
-    assert run.read_evaluation(identity).score == 1.0
+    assert run.read_evaluation(identity, source_result_schema_version=3).score == 1.0
+
+
+@pytest.mark.parametrize(
+    ("provenance", "expected_message"),
+    [
+        ("absent", "missing required source_result_schema_version"),
+        (None, "evaluation source schema mismatch"),
+        (4, "evaluation source schema mismatch"),
+    ],
+)
+def test_schema_v3_evaluation_requires_valid_explicit_provenance(
+    tmp_path: Path,
+    provenance: object,
+    expected_message: str,
+) -> None:
+    run = ArtifactStore(tmp_path).run("run")
+    identity = SampleIdentity(case_id="case", repeat_index=0)
+    run.write_evaluation(identity, evaluation(1.0))
+    path = run.path / "samples/case/repeat-000/evaluation.json"
+    value = json.loads(path.read_text(encoding="utf-8"))
+    if provenance == "absent":
+        del value["source_result_schema_version"]
+    else:
+        value["source_result_schema_version"] = provenance
+    path.write_text(json.dumps(value), encoding="utf-8")
+
+    with pytest.raises(ArtifactStoreError, match=expected_message):
+        run.read_evaluation(identity, source_result_schema_version=3)
 
 
 def test_summary_is_atomically_regenerable(tmp_path: Path) -> None:

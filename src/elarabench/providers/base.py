@@ -27,7 +27,7 @@ class ModelProvider(Protocol):
         ...
 
     def capabilities(self) -> ProviderCapabilities:
-        """Return explicitly supported provider features."""
+        """Return discovered provider/model features after identity preflight."""
         ...
 
     def generate(self, request: GenerationRequest) -> GenerationResponse:

@@ -1,0 +1,11 @@
+{
+  "attempt_index": 0,
+  "completed_at": "2026-08-17T11:18:50.293180Z",
+  "duration_seconds": 0.002178929997171508,
+  "identity": {"case_id": "exact-001", "repeat_index": 0},
+  "outcome": "succeeded",
+  "request_hash": "cc1303fd668554fd48368b9bf43ac17180a427507eacef918dc569ef70553f87",
+  "response": {"error": null, "finish_reason": "stop", "raw_payload": null, "raw_request_payload": null, "text": "ELARA", "timing": null, "usage": null},
+  "retry_number": 0,
+  "started_at": "2026-08-17T11:18:50.291002Z"
+}

@@ -1,0 +1,7 @@
+{
+  "messages": [{"content": "Return exactly ELARA.", "role": "user"}],
+  "parameters": {"max_tokens": null, "stop": [], "temperature": null, "top_k": null, "top_p": null},
+  "response_format": null,
+  "seed": null,
+  "timeout_seconds": 30.0
+}

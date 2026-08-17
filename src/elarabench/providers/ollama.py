@@ -21,6 +21,8 @@ from elarabench.models import (
     ModelIdentity,
     ProviderCapabilities,
     ResponseFormatType,
+    ThinkingControlKind,
+    ThinkingPolicy,
     TimingMetadata,
     UsageInformation,
 )
@@ -30,7 +32,7 @@ from elarabench.providers.base import ProviderConfigurationError
 class OllamaProvider:
     """Map provider-neutral requests to Ollama's native `/api/chat` API."""
 
-    adapter_version = "1.0.0"
+    adapter_version = "1.3.0"
 
     def __init__(
         self,
@@ -46,13 +48,16 @@ class OllamaProvider:
         self._client = client or httpx.Client(trust_env=False)
         self._owns_client = client is None
         self._identity: ModelIdentity | None = None
+        self._thinking_control = ThinkingControlKind.UNKNOWN
 
     def endpoint_metadata(self) -> EndpointMetadata:
         return self._endpoint_metadata
 
     def capabilities(self) -> ProviderCapabilities:
+        self.describe()
         return ProviderCapabilities(
             seed=True,
+            thinking_control=self._thinking_control,
             structured_output=True,
             tools=False,
             usage_metrics=True,
@@ -136,6 +141,11 @@ class OllamaProvider:
         template = show_payload.get("template")
         parameters = show_payload.get("parameters")
         capabilities = show_payload.get("capabilities")
+        architecture = _optional_string(model_info.get("general.architecture"))
+        self._thinking_control = _discover_thinking_control(
+            capabilities,
+            architecture=architecture,
+        )
         tokenizer = model_info.get("tokenizer.ggml.model")
         return ModelIdentity(
             provider="ollama",
@@ -145,6 +155,7 @@ class OllamaProvider:
             quantization=_optional_string(details.get("quantization_level")),
             backend_version=_optional_string(version_payload.get("version")),
             tokenizer=_optional_string(tokenizer),
+            architecture=architecture,
             format=_optional_string(details.get("format")),
             family=_optional_string(details.get("family")),
             parameter_size=_optional_string(details.get("parameter_size")),
@@ -177,12 +188,13 @@ class OllamaProvider:
         try:
             response = self._client.post(self._url("/api/chat"), json=payload, timeout=timeout)
         except httpx.TimeoutException as error:
+            generation_read_timeout = isinstance(error, httpx.ReadTimeout)
             return _error_response(
                 payload,
                 GenerationErrorKind.TIMEOUT,
-                "http_timeout",
+                "http_read_timeout" if generation_read_timeout else "http_timeout",
                 str(error),
-                retryable=True,
+                retryable=not generation_read_timeout,
                 latency=time.monotonic() - started,
             )
         except (httpx.NetworkError, httpx.ProtocolError) as error:
@@ -294,6 +306,12 @@ class OllamaProvider:
                 code="unsupported_tool_message",
                 message="Ollama M2 does not support tool-role messages",
             )
+        thinking_value = _thinking_value(
+            request.thinking,
+            self.capabilities().thinking_control,
+        )
+        if isinstance(thinking_value, GenerationError):
+            return thinking_value
         options: dict[str, object] = {}
         parameters = request.parameters
         mappings = {
@@ -312,6 +330,8 @@ class OllamaProvider:
             "messages": [message.model_dump(mode="json") for message in request.messages],
             "stream": False,
         }
+        if thinking_value is not None:
+            payload["think"] = thinking_value
         if options:
             payload["options"] = options
         if request.response_format is not None:
@@ -336,6 +356,75 @@ class OllamaProvider:
 
     def __exit__(self, *_args: object) -> None:
         self.close()
+
+
+_BOOLEAN_THINKING_ARCHITECTURES = frozenset({"qwen3", "qwen35"})
+_LEVEL_THINKING_ARCHITECTURES = frozenset({"gptoss"})
+
+
+def _discover_thinking_control(
+    capabilities: object,
+    *,
+    architecture: str | None,
+) -> ThinkingControlKind:
+    """Classify only explicit capability plus documented architecture evidence.
+
+    Ollama's broad ``thinking`` capability does not identify whether ``think`` accepts
+    booleans or levels. Exact ``general.architecture`` values in these small compatibility
+    sets are the stronger evidence; every unrecognized thinking architecture stays unknown.
+    """
+    if not isinstance(capabilities, list) or any(
+        not isinstance(value, str) for value in capabilities
+    ):
+        return ThinkingControlKind.UNKNOWN
+    normalized = {value.strip().lower().replace("-", "_") for value in capabilities}
+    if "thinking" not in normalized:
+        return ThinkingControlKind.NONE
+    normalized_architecture = architecture.strip().lower() if architecture else None
+    if normalized_architecture in _BOOLEAN_THINKING_ARCHITECTURES:
+        return ThinkingControlKind.BOOLEAN
+    if normalized_architecture in _LEVEL_THINKING_ARCHITECTURES:
+        return ThinkingControlKind.LEVELS
+    return ThinkingControlKind.UNKNOWN
+
+
+def _thinking_value(
+    policy: ThinkingPolicy,
+    support: ThinkingControlKind,
+) -> bool | GenerationError | None:
+    if policy is ThinkingPolicy.PROVIDER_DEFAULT:
+        return None
+    if support is ThinkingControlKind.BOOLEAN:
+        return policy is ThinkingPolicy.ENABLED
+    if (
+        support is ThinkingControlKind.NONE
+        and policy is ThinkingPolicy.DISABLED
+    ):
+        return None
+    if support is ThinkingControlKind.NONE:
+        message = (
+            "selected Ollama model does not advertise thinking capability; "
+            "thinking cannot be enabled"
+        )
+        code = "thinking_not_supported"
+    elif support is ThinkingControlKind.UNKNOWN:
+        message = (
+            f"Ollama cannot verify explicit thinking={policy.value!r} control; "
+            "use provider_default only if provider/model defaults are intentional"
+        )
+        code = "thinking_control_unknown"
+    else:
+        message = (
+            f"Ollama model exposes level-valued thinking control, which cannot safely "
+            f"represent thinking={policy.value!r}; use provider_default or choose a "
+            "boolean-controllable model"
+        )
+        code = "thinking_control_levels_unsupported"
+    return GenerationError(
+        kind=GenerationErrorKind.CONFIGURATION,
+        code=code,
+        message=message,
+    )
 
 
 def _normalize_endpoint(endpoint: str) -> tuple[str, EndpointMetadata]:

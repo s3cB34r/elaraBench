@@ -14,6 +14,7 @@ from elarabench.models import (
     RequestPlanEntry,
     RunConfiguration,
     SeedControlMetadata,
+    ThinkingControlMetadata,
 )
 
 
@@ -24,12 +25,13 @@ def run_fingerprint_payload(
     provider: ProviderMetadata,
     model: ModelIdentity,
     seed_control: SeedControlMetadata,
+    thinking_control: ThinkingControlMetadata,
     framework: FrameworkMetadata,
     request_plan: tuple[RequestPlanEntry, ...],
 ) -> dict[str, Any]:
     """Return logical execution identity without timestamps, paths, or hardware."""
     return {
-        "fingerprint_schema_version": 1,
+        "fingerprint_schema_version": 3,
         "benchmark": {
             "snapshot_hash": snapshot.snapshot_hash,
             "content_hash": snapshot.benchmark_content_hash,
@@ -46,6 +48,8 @@ def run_fingerprint_payload(
             "generation_parameters": configuration.generation_parameters.model_dump(
                 mode="json"
             ),
+            "thinking": configuration.thinking.value,
+            "thinking_control": thinking_control.model_dump(mode="json"),
             "seed": configuration.seed,
             "seed_control": seed_control.model_dump(mode="json"),
             "repeats": configuration.repeats,
@@ -65,6 +69,7 @@ def compute_run_fingerprint(
     provider: ProviderMetadata,
     model: ModelIdentity,
     seed_control: SeedControlMetadata,
+    thinking_control: ThinkingControlMetadata,
     framework: FrameworkMetadata,
     request_plan: tuple[RequestPlanEntry, ...],
 ) -> str:
@@ -76,6 +81,7 @@ def compute_run_fingerprint(
             provider=provider,
             model=model,
             seed_control=seed_control,
+            thinking_control=thinking_control,
             framework=framework,
             request_plan=request_plan,
         )

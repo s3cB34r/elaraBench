@@ -16,6 +16,7 @@ from elarabench.benchmark import (
     validate_benchmark_snapshot,
 )
 from elarabench.hashing import hash_benchmark_snapshot
+from elarabench.models import ThinkingPolicy
 
 TINY_SUITE = Path(__file__).parents[1] / "fixtures" / "tiny_suite"
 
@@ -49,6 +50,20 @@ def test_valid_suite_loads_and_preserves_case_order() -> None:
     ]
     assert len(loaded.content_hash) == 64
     assert list(loaded.fixture_files) == ["fixtures/context.txt"]
+
+
+def test_suite_may_define_provider_neutral_thinking_default(tmp_path: Path) -> None:
+    suite = copy_suite(tmp_path)
+    manifest_path = suite / "suite.yaml"
+    manifest = manifest_path.read_text(encoding="utf-8").replace(
+        "  timeout_seconds: 120",
+        "  timeout_seconds: 120\n  thinking: enabled",
+    )
+    manifest_path.write_text(manifest, encoding="utf-8")
+
+    loaded = load_benchmark_suite(suite)
+
+    assert loaded.suite.defaults.thinking is ThinkingPolicy.ENABLED
 
 
 def test_duplicate_case_ids_are_rejected(tmp_path: Path) -> None:

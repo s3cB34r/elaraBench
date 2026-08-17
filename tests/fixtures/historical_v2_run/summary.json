@@ -1,0 +1,18 @@
+{
+  "case_count": 1,
+  "cases": [{
+    "case_id": "exact-001", "category": "reasoning",
+    "repeat_statistics": {"count": 1, "maximum": 1.0, "mean": 1.0, "minimum": 1.0, "population_standard_deviation": null, "population_variance": null},
+    "score": 1.0,
+    "status_counts": {"error": 0, "invalid": 0, "pending_review": 0, "scored": 1},
+    "tags": [], "weight": 1.0
+  }],
+  "categories": {"reasoning": {"case_count": 1, "score": 1.0, "scored_case_count": 1}},
+  "coverage": {"expected_samples": 1, "minimum_required": 0.95, "ratio": 1.0, "scored_samples": 1, "sufficient": true},
+  "partial_score": 1.0,
+  "sample_status_counts": {"error": 0, "invalid": 0, "pending_review": 0, "scored": 1},
+  "schema_version": 2,
+  "score": 1.0,
+  "scored_case_count": 1,
+  "tags": {}
+}

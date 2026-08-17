@@ -13,8 +13,11 @@ from elarabench.models import (
     EvaluationStatus,
     GenerationParameters,
     GenerationRequest,
+    ProviderCapabilities,
     ResponseFormatConstraint,
     SampleIdentity,
+    ThinkingControlKind,
+    ThinkingPolicy,
 )
 
 
@@ -27,6 +30,45 @@ def test_generation_request_preserves_message_order() -> None:
 
     assert request.messages == messages
     assert [message.content for message in request.messages] == ["first", "second"]
+
+
+@pytest.mark.parametrize(
+    "policy",
+    [ThinkingPolicy.ENABLED, ThinkingPolicy.DISABLED, ThinkingPolicy.PROVIDER_DEFAULT],
+)
+def test_thinking_policy_serializes_explicitly(policy: ThinkingPolicy) -> None:
+    request = GenerationRequest.model_validate(
+        {"messages": [{"role": "user", "content": "prompt"}], "thinking": policy}
+    )
+
+    assert request.thinking is policy
+    assert request.model_dump(mode="json")["thinking"] == policy.value
+
+
+def test_invalid_thinking_policy_is_rejected() -> None:
+    with pytest.raises(ValidationError):
+        GenerationRequest.model_validate(
+            {"messages": [{"role": "user", "content": "prompt"}], "thinking": "automatic"}
+        )
+
+
+@pytest.mark.parametrize("support", list(ThinkingControlKind))
+def test_thinking_control_support_serializes_explicitly(
+    support: ThinkingControlKind,
+) -> None:
+    capabilities = ProviderCapabilities(thinking_control=support)
+
+    assert capabilities.thinking_control is support
+    assert capabilities.model_dump(mode="json")["thinking_control"] == support.value
+
+
+def test_runtime_policy_defaults_are_explicit() -> None:
+    request = GenerationRequest.model_validate(
+        {"messages": [{"role": "user", "content": "prompt"}]}
+    )
+
+    assert request.thinking is ThinkingPolicy.DISABLED
+    assert request.timeout_seconds == 120.0
 
 
 @pytest.mark.parametrize(
@@ -60,6 +102,7 @@ def test_evaluation_result_enforces_status_and_score() -> None:
         evaluator_name="test",
         evaluator_version="1.0.0",
         configuration_hash="a" * 64,
+        source_result_schema_version=3,
     )
 
     assert result.status is EvaluationStatus.SCORED
@@ -79,6 +122,7 @@ def test_evaluation_score_bounds(score: float) -> None:
             evaluator_name="test",
             evaluator_version="1.0.0",
             configuration_hash="a" * 64,
+            source_result_schema_version=3,
         )
 
 
@@ -91,6 +135,7 @@ def test_non_scored_result_rejects_score() -> None:
             evaluator_name="test",
             evaluator_version="1.0.0",
             configuration_hash="a" * 64,
+            source_result_schema_version=3,
         )
 
 

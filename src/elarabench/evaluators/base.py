@@ -39,7 +39,7 @@ class ConfiguredEvaluator(Evaluator, Protocol):
 
 
 def make_result(
-    specification: EvaluationSpecification,
+    context: EvaluationContext,
     *,
     evaluator_name: str,
     evaluator_version: str,
@@ -59,6 +59,7 @@ def make_result(
         explanation=explanation,
         evaluator_name=evaluator_name,
         evaluator_version=evaluator_version,
-        configuration_hash=hash_evaluation_specification(specification),
+        configuration_hash=hash_evaluation_specification(context.specification),
         artifacts=artifacts or {},
+        source_result_schema_version=context.source_result_schema_version,
     )

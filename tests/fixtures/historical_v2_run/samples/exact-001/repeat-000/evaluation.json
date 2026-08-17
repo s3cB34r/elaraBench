@@ -1,0 +1,11 @@
+{
+  "artifacts": {},
+  "configuration_hash": "392b82aeed2e36a38f0671972cc132837fda61eda20565b90dce33894c5251dc",
+  "evaluator_name": "exact_match",
+  "evaluator_version": "1.0.0",
+  "explanation": "output exactly matched expected text",
+  "metrics": {},
+  "passed": true,
+  "score": 1.0,
+  "status": "scored"
+}

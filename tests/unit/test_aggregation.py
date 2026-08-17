@@ -22,6 +22,7 @@ def result(status: EvaluationStatus, score: float | None = None) -> EvaluationRe
         evaluator_name="test",
         evaluator_version="1.0.0",
         configuration_hash="a" * 64,
+        source_result_schema_version=3,
     )
 
 
@@ -50,6 +51,8 @@ def test_single_scored_sample() -> None:
     assert summary.case_count == 1
     assert summary.scored_case_count == 1
     assert summary.sample_status_counts.scored == 1
+    assert summary.schema_version == 3
+    assert summary.source_result_schema_version == 3
 
 
 def test_repeats_are_averaged_before_cases_and_report_statistics() -> None:
@@ -128,6 +131,23 @@ def test_unscored_statuses_remain_distinct_and_are_not_zeroes() -> None:
         "pending_review": 1,
     }
     assert summary.cases[1].score is None
+
+
+def test_scored_zero_counts_toward_coverage_but_unscored_statuses_do_not() -> None:
+    summary = aggregate(
+        [
+            sample("pass", 0, result(EvaluationStatus.SCORED, 1.0)),
+            sample("model-failure", 0, result(EvaluationStatus.SCORED, 0.0)),
+            sample("provider-error", 0, result(EvaluationStatus.ERROR)),
+            sample("invalid-benchmark", 0, result(EvaluationStatus.INVALID)),
+            sample("pending", 0, result(EvaluationStatus.PENDING_REVIEW)),
+        ],
+        minimum_scored_coverage=0.0,
+    )
+
+    assert summary.coverage.scored_samples == 2
+    assert summary.coverage.ratio == 0.4
+    assert summary.partial_score == 0.5
 
 
 def test_no_scored_samples_produces_no_model_score() -> None:

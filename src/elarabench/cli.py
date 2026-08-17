@@ -11,11 +11,25 @@ from pydantic import ValidationError
 
 from elarabench import __version__
 from elarabench.benchmark import BenchmarkLoadError, load_benchmark_suite
-from elarabench.models import GenerationParameters, RetryPolicy, RunConfiguration
+from elarabench.models import (
+    GenerationParameters,
+    RetryPolicy,
+    RunConfiguration,
+    ThinkingPolicy,
+)
 from elarabench.providers import ProviderConfigurationError, create_provider
 from elarabench.runner import RunInterrupted, Runner, RunnerError
 from elarabench.scoring import RunIntegrityError, open_run_path, score_run, summarize_run
 from elarabench.storage import ArtifactStoreError
+
+
+def _parse_thinking_policy(value: str) -> ThinkingPolicy:
+    try:
+        return ThinkingPolicy(value.replace("-", "_"))
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(
+            "thinking policy must be enabled, disabled, or provider-default"
+        ) from error
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -57,7 +71,32 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--top-k", type=int)
     run_parser.add_argument("--max-tokens", type=int)
     run_parser.add_argument("--stop", action="append")
-    run_parser.add_argument("--timeout", type=float)
+    thinking_group = run_parser.add_mutually_exclusive_group()
+    thinking_group.add_argument(
+        "--think",
+        dest="thinking",
+        action="store_const",
+        const=ThinkingPolicy.ENABLED,
+        help="explicitly enable model reasoning/thinking",
+    )
+    thinking_group.add_argument(
+        "--no-think",
+        dest="thinking",
+        action="store_const",
+        const=ThinkingPolicy.DISABLED,
+        help="explicitly disable model reasoning/thinking (the ElaraBench default)",
+    )
+    thinking_group.add_argument(
+        "--thinking",
+        type=_parse_thinking_policy,
+        metavar="POLICY",
+        help="set enabled, disabled, or provider-default thinking behavior",
+    )
+    run_parser.add_argument(
+        "--timeout",
+        type=float,
+        help="generation read timeout in seconds (default: suite policy or 120)",
+    )
     run_parser.add_argument("--max-retries", type=int)
     run_parser.add_argument("--retry-backoff", type=float)
     run_parser.add_argument("--minimum-coverage", type=float)
@@ -119,6 +158,11 @@ def _new_run_command(arguments: argparse.Namespace) -> int:
         if arguments.minimum_coverage is not None
         else loaded.suite.aggregation.minimum_scored_coverage
     )
+    thinking = (
+        arguments.thinking
+        if arguments.thinking is not None
+        else loaded.suite.defaults.thinking or ThinkingPolicy.DISABLED
+    )
     parameters = GenerationParameters(
         temperature=arguments.temperature,
         top_p=arguments.top_p,
@@ -139,6 +183,7 @@ def _new_run_command(arguments: argparse.Namespace) -> int:
         endpoint=arguments.endpoint,
         repeats=repeats,
         generation_parameters=parameters,
+        thinking=thinking,
         seed=arguments.seed,
         timeout_seconds=timeout,
         retry_policy=retry_policy,
@@ -178,6 +223,7 @@ def _resume_command(arguments: argparse.Namespace) -> int:
         "top_k",
         "max_tokens",
         "stop",
+        "thinking",
         "timeout",
         "max_retries",
         "retry_backoff",
@@ -186,6 +232,12 @@ def _resume_command(arguments: argparse.Namespace) -> int:
     if any(getattr(arguments, name) is not None for name in incompatible_options):
         raise RunnerError("run configuration options cannot override a resumed run")
     store = open_run_path(arguments.resume)
+    schema_version = store.read_manifest_data().get("schema_version")
+    if schema_version == 2:
+        raise RunnerError(
+            "result schema v2 predates explicit Thinking-policy identity; it may be "
+            "scored or summarized but cannot be resumed under schema v3. Start a new run."
+        )
     manifest = store.read_manifest()
     provider = create_provider(
         manifest.configuration.provider,

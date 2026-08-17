@@ -1,6 +1,6 @@
-# Result format: schema version 2
+# Result format: schema version 3
 
-M2 produces inspectable filesystem runs:
+v0.2.1 produces inspectable filesystem runs:
 
 ```text
 runs/<run-id>/
@@ -20,7 +20,11 @@ runs/<run-id>/
 └── summary.json
 ```
 
-Unsupported production result schemas fail validation rather than being reinterpreted.
+New runs use result schema v3. Schema v3 makes Thinking policy and provider-control provenance
+canonical and changes fingerprint semantics. Historical M2 schema-v2 runs are verified with
+their original models and hashes: `score` and `summarize` remain available, while `run --resume`
+is rejected because v2 predates explicit Thinking identity. Canonical v2 files are never migrated
+or rewritten in place. Other result schemas fail validation.
 
 ## Canonical and derived artifacts
 
@@ -33,6 +37,36 @@ Evaluations and `summary.json` are derived. Evaluation replacement must be expli
 are atomically replaceable. `summary.json` must never hold the only copy of a response, error,
 individual evaluation, benchmark definition, or identity field.
 
+Three version fields have deliberately separate meanings:
+
+- `manifest.json.schema_version` is the physical result schema (`2` historically, `3` now).
+- `evaluation.json.source_result_schema_version` identifies the physical canonical evidence that
+  was evaluated. Composite children inherit the same value recursively.
+- `summary.json.schema_version` is the summary artifact's own shape and is `3` for summaries
+  written by v0.2.1. `summary.json.source_result_schema_version` identifies its physical source.
+
+Consequently, rescoring a historical physical v2 run with current evaluators produces:
+
+```text
+physical result schema:             2
+evaluator version:                  current evaluator version
+evaluation source result schema:    2 (outer and every composite child)
+regenerated summary schema:         3
+summary source result schema:       2
+```
+
+The original strict summary schema v2 had no source-provenance field. It remains historical
+derived data, not a new extended shape masquerading as schema v2. Regeneration may replace that
+derived file with summary schema v3; canonical v2 manifest, benchmark, requests, attempts, and
+responses remain unchanged.
+
+Historical schema-v2 `evaluation.json` files also predate the source-provenance field. Their
+physical manifest is authoritative: version-aware loading infers source result schema 2 in memory
+when the field is absent, without rewriting the evaluation merely to add it. Current schema-v3
+evaluation writers always serialize source result schema 3 explicitly. Missing, null, invalid, or
+contradictory provenance in a physical schema-v3 evaluation is rejected as an integrity error;
+it is never synthesized during read.
+
 All JSON is UTF-8, sorted, indented, and newline-terminated where practical. Atomic-write
 temporary files have a reserved name prefix. Resume safely removes only those leftovers and
 aborts on corrupt finalized JSON.
@@ -43,9 +77,11 @@ The manifest has immutable identity/configuration sections and one guarded mutab
 section. It records result schema version, physical run ID, deterministic run fingerprint,
 ElaraBench/Git source identity, suite and snapshot hashes, resolved run configuration, sanitized
 provider endpoint and capabilities, model digest/quantization/backend/template metadata,
-seed support/application status, ordered request hashes, execution environment, timestamps,
-status, and resume count. Hardware lives in `environment`; it is not silently folded into the
-run fingerprint.
+seed support/application status, requested thinking policy, raw advertised model capabilities,
+discovered thinking-control kind, whether an explicit control field is planned,
+finite timeout, ordered request hashes, execution environment, timestamps, status, and resume
+count. Hardware lives in
+`environment`; it is not silently folded into the run fingerprint.
 
 Lifecycle states are `initializing`, `running`, `completed`, `completed_with_errors`,
 `interrupted`, and `failed`. Lifecycle updates cannot alter identity/configuration or move time
@@ -74,14 +110,47 @@ Ollama responses preserve normalized text, finish reason, token usage, client la
 timings, normalized error details, translated request payload, and raw JSON response. Credentials
 or authorization values are never accepted into endpoint identity or persisted.
 
+Every schema-v3 canonical request serializes one of `enabled`, `disabled`, or `provider_default`
+for thinking. Provider metadata records control kind `none`, `boolean`, `levels`, or `unknown`,
+while model identity preserves raw `/api/show` capabilities and architecture. The broad Ollama
+`thinking` capability alone is not boolean proof. Ollama's translated
+`raw_request_payload` contains top-level `"think": true` or `"think": false` only for explicit
+policies on a boolean-controllable model. It omits the field for `provider_default` and for
+`disabled` on a non-thinking model. Level-valued or unknown explicit control never reaches
+generation. Together these artifacts distinguish requested policy from enforceable control.
+
+Timing does not subtract model load duration from client wall latency. When Ollama supplies the
+data, `latency_seconds`, `provider_total_seconds`, `provider_load_seconds`,
+`provider_prompt_eval_seconds`, and `provider_eval_seconds` remain distinct. No implicit warmup
+request precedes canonical samples.
+
 ## Summary and coverage
+
+Current `summary.json` uses summary schema version 3. A current physical v3 run produces
+`schema_version: 3` and `source_result_schema_version: 3`; a regenerated historical v2 summary
+produces `schema_version: 3` and `source_result_schema_version: 2`.
 
 Repeats are averaged per case, then positive case weights form a macro average. Category and tag
 breakdowns use the same case weighting. Repeat statistics include count, mean, min, max, and
 population variance/standard deviation for at least two scores.
 
 Coverage is `scored samples / (cases × repeats)`. A valid score of zero is covered; provider
-errors, invalid output, pending review, and missing results are not. The default minimum is 0.95.
-At or above it, `score` is the headline aggregate. Below it, `score` is null and `partial_score`
-retains the available aggregate. Status counts remain separate; unscored samples never silently
-become zero.
+errors, invalid benchmark/evaluator inputs, technical evaluation errors, pending review, and
+missing results are not. The default minimum is 0.95. At or above it, `score` is the headline
+aggregate. Below it, `score` is null and `partial_score` retains the available aggregate. Status
+counts remain separate; unscored samples never silently become zero.
+
+Evaluation status is semantic rather than a synonym for pass/fail:
+
+- `scored` has a score in `[0, 1]`; both passing answers and deterministically judged model
+  failures belong here. Malformed model format is normally `scored` with `0.0`.
+- `invalid` has no score because benchmark ground truth or evaluator configuration cannot be
+  trusted.
+- `error` has no score because generation or evaluation failed technically.
+- `pending_review` has no deterministic score.
+
+Derived evaluations retain evaluator version and configuration hash. Rescoring may replace them
+when evaluator semantics change, but canonical response text remains untouched and strict
+evaluators never repair it. Regenerated evaluations and summaries record the physical run's
+source result schema, so a current rescore of v2 evidence is not presented as its historical
+original score.

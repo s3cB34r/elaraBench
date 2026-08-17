@@ -19,6 +19,7 @@ from elarabench.benchmark import (
 from elarabench.environment import discover_environment, discover_framework_metadata
 from elarabench.evaluators.registry import evaluate
 from elarabench.hashing import hash_evaluation_specification, hash_generation_request
+from elarabench.legacy_v2 import LegacyV2RunManifest
 from elarabench.models import (
     AggregationSummary,
     AttemptOutcome,
@@ -43,6 +44,9 @@ from elarabench.models import (
     RunManifest,
     SampleIdentity,
     SeedControlMetadata,
+    ThinkingControlKind,
+    ThinkingControlMetadata,
+    ThinkingPolicy,
 )
 from elarabench.providers.base import ModelProvider, ProviderConfigurationError
 from elarabench.run_identity import compute_run_fingerprint, generate_run_id
@@ -84,6 +88,61 @@ class RunInterrupted(RunnerError):
         self.path = path
 
 
+def _validate_thinking_policy(
+    policy: ThinkingPolicy,
+    support: ThinkingControlKind,
+) -> None:
+    if policy is ThinkingPolicy.PROVIDER_DEFAULT:
+        return
+    if support is ThinkingControlKind.BOOLEAN:
+        return
+    if (
+        support is ThinkingControlKind.NONE
+        and policy is ThinkingPolicy.DISABLED
+    ):
+        return
+    if support is ThinkingControlKind.NONE:
+        raise ProviderConfigurationError(
+            "selected model does not advertise thinking capability; "
+            "thinking cannot be enabled"
+        )
+    if support is ThinkingControlKind.UNKNOWN:
+        raise ProviderConfigurationError(
+            f"provider cannot verify explicit thinking={policy.value!r} control; "
+            "use provider_default only if provider/model defaults are intentional"
+        )
+    raise ProviderConfigurationError(
+        f"provider exposes level-valued thinking control, which cannot safely represent "
+        f"thinking={policy.value!r}; use provider_default or choose a boolean-controllable "
+        "model"
+    )
+
+
+def _thinking_control_metadata(
+    policy: ThinkingPolicy,
+    control_kind: ThinkingControlKind,
+    model: ModelIdentity,
+) -> ThinkingControlMetadata:
+    advertised = any(
+        capability.strip().lower() == "thinking" for capability in model.capabilities
+    )
+    if control_kind in {ThinkingControlKind.BOOLEAN, ThinkingControlKind.LEVELS}:
+        advertised_value: bool | None = True
+    elif control_kind is ThinkingControlKind.NONE:
+        advertised_value = False
+    else:
+        advertised_value = True if advertised else None
+    return ThinkingControlMetadata(
+        requested_policy=policy,
+        model_advertises_thinking=advertised_value,
+        control_kind=control_kind,
+        explicit_control_planned=(
+            control_kind is ThinkingControlKind.BOOLEAN
+            and policy is not ThinkingPolicy.PROVIDER_DEFAULT
+        ),
+    )
+
+
 class Runner:
     """Execute a benchmark through only the narrow ModelProvider protocol."""
 
@@ -122,7 +181,9 @@ class Runner:
                 minimum_scored_coverage=configuration.minimum_scored_coverage,
             )
             validate_benchmark_snapshot(snapshot)
-            provider_metadata, model, seed_control = self._preflight(configuration, snapshot)
+            provider_metadata, model, seed_control, thinking_control = self._preflight(
+                configuration, snapshot
+            )
             requests = self._resolve_requests(snapshot, configuration)
             request_plan = tuple(
                 RequestPlanEntry(identity=identity, request_hash=hash_generation_request(request))
@@ -136,6 +197,7 @@ class Runner:
                 provider=provider_metadata,
                 model=model,
                 seed_control=seed_control,
+                thinking_control=thinking_control,
                 framework=framework,
                 request_plan=request_plan,
             )
@@ -159,6 +221,7 @@ class Runner:
                 provider=provider_metadata,
                 model=model,
                 seed_control=seed_control,
+                thinking_control=thinking_control,
                 environment=environment,
                 request_plan=request_plan,
                 lifecycle=lifecycle,
@@ -197,15 +260,23 @@ class Runner:
             self._provider.close()
 
     def resume(self, path: str | Path) -> RunResult:
-        """Continue an incomplete schema-v2 run after strict identity verification."""
+        """Continue an incomplete schema-v3 run after strict identity verification."""
         store = open_run_path(path)
         invocation_id = f"resume-{uuid4().hex}"
         execution_started = False
         try:
             manifest, snapshot = validate_stored_run(store)
+            if isinstance(manifest, LegacyV2RunManifest):
+                raise RunnerError(
+                    "result schema v2 predates explicit Thinking-policy identity; "
+                    "it may be scored or summarized but cannot be resumed under schema v3. "
+                    "Start a new run instead."
+                )
+            if not isinstance(snapshot, BenchmarkSnapshot):
+                raise RunnerError("schema-v3 manifest has an incompatible benchmark snapshot")
             repaired_event_tail = store.repair_event_log_tail()
             removed = store.cleanup_temporary_files()
-            provider_metadata, model, seed_control = self._preflight(
+            provider_metadata, model, seed_control, thinking_control = self._preflight(
                 manifest.configuration, snapshot
             )
             if provider_metadata != manifest.provider:
@@ -214,6 +285,10 @@ class Runner:
                 raise RunnerError("model identity changed; resume rejected")
             if seed_control != manifest.seed_control:
                 raise RunnerError("seed capability/application identity changed; resume rejected")
+            if thinking_control != manifest.thinking_control:
+                raise RunnerError(
+                    "thinking capability/control interpretation changed; resume rejected"
+                )
             framework = self._framework or discover_framework_metadata()
             if framework != manifest.framework:
                 raise RunnerError("ElaraBench source identity changed; resume rejected")
@@ -231,6 +306,7 @@ class Runner:
                 provider=provider_metadata,
                 model=model,
                 seed_control=seed_control,
+                thinking_control=thinking_control,
                 framework=framework,
                 request_plan=expected_plan,
             )
@@ -279,9 +355,14 @@ class Runner:
         self,
         configuration: RunConfiguration,
         snapshot: BenchmarkSnapshot,
-    ) -> tuple[ProviderMetadata, ModelIdentity, SeedControlMetadata]:
-        capabilities = self._provider.capabilities()
+    ) -> tuple[
+        ProviderMetadata,
+        ModelIdentity,
+        SeedControlMetadata,
+        ThinkingControlMetadata,
+    ]:
         model = self._provider.describe()
+        capabilities = self._provider.capabilities()
         if configuration.provider != model.provider:
             raise ProviderConfigurationError(
                 f"configured provider {configuration.provider!r} does not match "
@@ -297,6 +378,10 @@ class Runner:
         )
         if requested_seed and not capabilities.seed:
             raise ProviderConfigurationError("provider does not support requested seed control")
+        _validate_thinking_policy(
+            configuration.thinking,
+            capabilities.thinking_control,
+        )
         if any(
             case.response_format is not None for case in snapshot.suite.cases
         ) and not capabilities.structured_output:
@@ -320,7 +405,12 @@ class Runner:
             supported=capabilities.seed,
             applied=requested_seed and capabilities.seed,
         )
-        return metadata, model, seed_control
+        thinking_control = _thinking_control_metadata(
+            configuration.thinking,
+            capabilities.thinking_control,
+            model,
+        )
+        return metadata, model, seed_control, thinking_control
 
     def _resolve_requests(
         self,
@@ -334,6 +424,7 @@ class Runner:
                 request = GenerationRequest(
                     messages=case.messages,
                     parameters=configuration.generation_parameters,
+                    thinking=configuration.thinking,
                     seed=case.seed if case.seed is not None else configuration.seed,
                     timeout_seconds=configuration.timeout_seconds,
                     response_format=case.response_format,
@@ -463,7 +554,7 @@ class Runner:
                 store.read_response(identity)
             store.read_attempts(identity)
             if store.evaluation_exists(identity):
-                store.read_evaluation(identity)
+                store.read_evaluation(identity, source_result_schema_version=3)
         if store.summary_exists():
             store.read_summary()
 
@@ -641,7 +732,7 @@ class Runner:
     ) -> None:
         expected_hash = hash_evaluation_specification(case.evaluation)
         if store.evaluation_exists(identity):
-            existing = store.read_evaluation(identity)
+            existing = store.read_evaluation(identity, source_result_schema_version=3)
             if existing.configuration_hash == expected_hash:
                 return
         response = store.read_response(identity)

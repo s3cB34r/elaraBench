@@ -11,7 +11,7 @@ cases:
   path: cases.jsonl
 defaults:
   repeats: 1
-  timeout_seconds: 30
+  timeout_seconds: 120
 aggregation:
   method: weighted_macro
   unscored_policy: exclude

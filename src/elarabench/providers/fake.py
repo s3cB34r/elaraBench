@@ -12,13 +12,14 @@ from elarabench.models import (
     GenerationResponse,
     ModelIdentity,
     ProviderCapabilities,
+    ThinkingControlKind,
 )
 
 
 class FakeProvider:
     """Return configured responses or stable request-hash-derived output."""
 
-    adapter_version = "1.0.0"
+    adapter_version = "1.1.0"
 
     def __init__(
         self,
@@ -46,7 +47,11 @@ class FakeProvider:
 
     def capabilities(self) -> ProviderCapabilities:
         """Advertise only behavior implemented by the fake provider."""
-        return ProviderCapabilities(seed=True, structured_output=True)
+        return ProviderCapabilities(
+            seed=True,
+            thinking_control=ThinkingControlKind.BOOLEAN,
+            structured_output=True,
+        )
 
     def generate(self, request: GenerationRequest) -> GenerationResponse:
         """Return a deterministic response selected by canonical request hash."""

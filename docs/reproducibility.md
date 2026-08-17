@@ -11,16 +11,16 @@ The timestamp and run ID never participate in deterministic identity.
 
 ## Run fingerprint
 
-Fingerprint schema version 1 is SHA-256 over canonical JSON containing:
+Fingerprint schema version 3 is SHA-256 over canonical JSON containing:
 
 - Benchmark snapshot/content hashes, ordered case IDs, evaluator configuration hashes, and the
   ordered sample/request-hash plan.
 - Provider type and adapter version, sanitized endpoint identity, declared capabilities, model
   name/digest, quantization, backend version, tokenizer/family/format/size, model capabilities,
   and hashes of model parameters/template metadata when discoverable.
-- Resolved generation parameters and global seed, provider seed requested/supported/applied
-  state, repeats, timeout, deterministic retry policy, concurrency (exactly one), and minimum
-  scored coverage.
+- Resolved generation parameters, thinking policy, global seed, provider seed
+  requested/supported/applied state, repeats, timeout, deterministic retry policy, concurrency
+  (exactly one), and minimum scored coverage.
 - ElaraBench version and Git/source identity, including dirty source-state hash when available.
 
 The fingerprint excludes run timestamps and ID, absolute suite/run paths, host name, CPU/GPU
@@ -41,6 +41,36 @@ otherwise equivalent logical configurations impossible to group by fingerprint. 
 seed records intent and backend capability/application status; it is never represented as a
 guarantee of deterministic model output. Repeats report observed variance.
 
+Thinking has the same identity status as temperature, seed, and timeout. Changing between
+`enabled`, `disabled`, and `provider_default` changes materialized request hashes and the run
+fingerprint, and prevents incompatible resume. `provider_default` is explicit metadata, but it is
+less reproducible: identical ElaraBench configuration can execute differently after a provider,
+model, or template default changes. Strict comparison therefore requires matching thinking
+policy and compatible runtime behavior; provider-default runs may require qualified comparison.
+
+The manifest and fingerprint also include the discovered provider/model Thinking-control
+interpretation. A valid `/api/show` capability list without thinking records `none`. A broad
+`thinking` capability cannot distinguish boolean from level-valued control and therefore falls
+back to `unknown` without stronger architecture evidence. The adapter has a deliberately small
+exact-architecture compatibility table: Ollama `general.architecture` values `qwen3` and `qwen35`
+are boolean-controllable (the latter matches the validated qwen3.5 smoke path), while `gptoss` is
+level-valued. This uses provider-reported architecture, never a model alias or substring;
+unrecognized architectures remain unknown. Ollama's documented Thinking contract explains that
+[most models use booleans while GPT-OSS requires levels](https://github.com/ollama/ollama/blob/main/docs/capabilities/thinking.mdx).
+
+Resume rejects a changed control interpretation. For a non-thinking model, requested `disabled`
+is satisfied without a native field. Level-valued and unknown states cannot claim explicit
+enforcement under v0.2.1; only `provider_default` is allowed, with omission visible in raw request
+payloads. v0.2.1 intentionally does not model reasoning-effort levels.
+
+Result schema v3 introduced this canonical Thinking identity and fingerprint version. Historical
+schema-v2 artifacts are verified with their original no-Thinking serialization and fingerprint
+schema v1. They may be scored or summarized without their original suite directory, and current
+derived artifacts identify schema v2 as their source. They cannot be resumed or rewritten under
+v3 runtime semantics. Evaluation provenance propagates through every nested composite child.
+Current regenerated summaries use summary artifact schema 3 while separately retaining source
+result schema 2; this does not relabel or migrate the physical historical run.
+
 ## Canonical hashing
 
 All identities use deterministic UTF-8 JSON with sorted object keys, fixed separators, preserved
@@ -48,8 +78,23 @@ array order, explicit null/default values, and rejection of non-finite numbers. 
 hashes include validated execution/scoring metadata, ordered cases, relative fixture paths, and
 fixture-byte SHA-256 hashes. Snapshot self-hashes include embedded fixture bytes and effective
 coverage policy. Request hashes include ordered messages, generation parameters, resolved seed,
-timeout, and response constraint. Modification times, inodes, YAML formatting, dictionary
-insertion order, and absolute paths do not participate.
+thinking policy, timeout, and response constraint. Modification times, inodes, YAML formatting,
+dictionary insertion order, and absolute paths do not participate.
+
+The finite generation timeout defaults to 120 seconds. Timing identity and performance evidence
+remain separate concepts: request timeout participates in the fingerprint, while observed client
+wall latency and provider total/load/prompt/generation durations are recorded results. Cold model
+load is not removed from wall latency, and v0.2.1 performs no automatic warmup. A generation read
+timeout is recorded without an automatic retry; changing the timeout requires an explicit new-run
+configuration and therefore a different fingerprint.
+
+Evaluator semantics are also part of reproducible interpretation. A score of zero is canonical
+scored evidence, not missing data, and participates in coverage and aggregation. `invalid` is
+reserved for benchmark/evaluator inputs that cannot be trusted; `error` records technical
+generation or evaluation failure. Strict parsing failures caused by model output—such as prose
+where a numeric-only answer was required or Markdown fences around required raw JSON—are scored
+zero without extraction or repair. Evaluator versions and configuration hashes make a later
+semantic change visible, while rescoring always retains the original raw response.
 
 ## Comparison classes
 
@@ -60,6 +105,7 @@ approved contract:
 
 Benchmark/snapshot, materialized requests, evaluator definitions, provider/model identity,
 quantization, inference settings, and relevant execution semantics match. Run ID/time may differ.
+Evaluator versions and status semantics must also match.
 
 ### Qualified comparison
 

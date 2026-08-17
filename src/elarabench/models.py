@@ -54,6 +54,23 @@ class GenerationParameters(DomainModel):
     stop: tuple[str, ...] = ()
 
 
+class ThinkingPolicy(StrEnum):
+    """Provider-neutral control over model reasoning/thinking behavior."""
+
+    ENABLED = "enabled"
+    DISABLED = "disabled"
+    PROVIDER_DEFAULT = "provider_default"
+
+
+class ThinkingControlKind(StrEnum):
+    """Provider/model control semantics for an advertised thinking capability."""
+
+    NONE = "none"
+    BOOLEAN = "boolean"
+    LEVELS = "levels"
+    UNKNOWN = "unknown"
+
+
 class ResponseFormatType(StrEnum):
     """Supported provider-neutral response constraints."""
 
@@ -82,6 +99,7 @@ class GenerationRequest(DomainModel):
 
     messages: Annotated[tuple[ChatMessage, ...], Field(min_length=1)]
     parameters: GenerationParameters = Field(default_factory=GenerationParameters)
+    thinking: ThinkingPolicy = ThinkingPolicy.DISABLED
     seed: int | None = None
     timeout_seconds: Annotated[float, Field(gt=0.0)] = 120.0
     response_format: ResponseFormatConstraint | None = None
@@ -154,6 +172,7 @@ class ModelIdentity(DomainModel):
     backend_version: str | None = None
     tokenizer: str | None = None
     chat_template: str | None = None
+    architecture: str | None = None
     format: str | None = None
     family: str | None = None
     parameter_size: str | None = None
@@ -163,9 +182,10 @@ class ModelIdentity(DomainModel):
 
 
 class ProviderCapabilities(DomainModel):
-    """Features a provider adapter can support without silent translation."""
+    """Discovered provider/model features usable without silent translation."""
 
     seed: bool = False
+    thinking_control: ThinkingControlKind = ThinkingControlKind.UNKNOWN
     structured_output: bool = False
     tools: bool = False
     usage_metrics: bool = False
@@ -210,6 +230,7 @@ class EvaluationResult(DomainModel):
     evaluator_version: str
     configuration_hash: Sha256Digest
     artifacts: dict[str, JsonValue] = Field(default_factory=dict)
+    source_result_schema_version: Literal[2, 3]
 
     @model_validator(mode="after")
     def validate_score_status(self) -> Self:
@@ -225,6 +246,7 @@ class SuiteDefaults(DomainModel):
 
     repeats: Annotated[int, Field(gt=0)] = 1
     timeout_seconds: Annotated[float, Field(gt=0.0)] = 120.0
+    thinking: ThinkingPolicy | None = None
 
 
 class AggregationConfiguration(DomainModel):
@@ -316,6 +338,7 @@ class RunConfiguration(DomainModel):
     endpoint: str | None = None
     repeats: Annotated[int, Field(gt=0)] = 1
     generation_parameters: GenerationParameters = Field(default_factory=GenerationParameters)
+    thinking: ThinkingPolicy = ThinkingPolicy.DISABLED
     seed: int | None = None
     timeout_seconds: Annotated[float, Field(gt=0.0)] = 120.0
     retry_policy: RetryPolicy = Field(default_factory=lambda: RetryPolicy())
@@ -400,6 +423,15 @@ class SeedControlMetadata(DomainModel):
     deterministic_output_guaranteed: Literal[False] = False
 
 
+class ThinkingControlMetadata(DomainModel):
+    """Requested policy and discovered provider-control interpretation."""
+
+    requested_policy: ThinkingPolicy
+    model_advertises_thinking: bool | None
+    control_kind: ThinkingControlKind
+    explicit_control_planned: bool
+
+
 class RunLifecycleStatus(StrEnum):
     """Guarded run lifecycle states."""
 
@@ -430,9 +462,9 @@ class RequestPlanEntry(DomainModel):
 
 
 class RunManifest(DomainModel):
-    """Result schema v2 identity/configuration plus guarded lifecycle state."""
+    """Result schema v3 identity/configuration plus guarded lifecycle state."""
 
-    schema_version: Literal[2] = 2
+    schema_version: Literal[3] = 3
     run_id: Identifier
     run_fingerprint: Sha256Digest
     framework: FrameworkMetadata
@@ -444,6 +476,7 @@ class RunManifest(DomainModel):
     provider: ProviderMetadata
     model: ModelIdentity
     seed_control: SeedControlMetadata
+    thinking_control: ThinkingControlMetadata
     environment: EnvironmentMetadata
     request_plan: tuple[RequestPlanEntry, ...]
     lifecycle: RunLifecycle
@@ -532,6 +565,7 @@ class EvaluationContext(DomainModel):
 
     response: GenerationResponse
     specification: EvaluationSpecification
+    source_result_schema_version: Literal[2, 3] = 3
 
 
 class AggregationSample(DomainModel):
@@ -597,7 +631,7 @@ class CoverageSummary(DomainModel):
 class AggregationSummary(DomainModel):
     """Derived deterministic score summary."""
 
-    schema_version: Literal[2] = 2
+    schema_version: Literal[3] = 3
     score: Score | None
     partial_score: Score | None
     coverage: CoverageSummary
@@ -607,3 +641,4 @@ class AggregationSummary(DomainModel):
     cases: tuple[CaseSummary, ...]
     categories: dict[str, BreakdownSummary]
     tags: dict[str, BreakdownSummary]
+    source_result_schema_version: Literal[2, 3] = 3

@@ -13,20 +13,24 @@ from elarabench.benchmark import LoadedBenchmarkSuite, load_benchmark_suite
 from elarabench.hashing import hash_generation_request
 from elarabench.models import (
     EnvironmentMetadata,
+    EvaluationStatus,
     FrameworkMetadata,
     GenerationError,
     GenerationErrorKind,
     GenerationRequest,
     GenerationResponse,
     ModelIdentity,
+    ProviderCapabilities,
     RunConfiguration,
     RunLifecycleStatus,
     SampleIdentity,
     SourceIdentity,
+    ThinkingControlKind,
+    ThinkingPolicy,
 )
-from elarabench.providers import FakeProvider
+from elarabench.providers import FakeProvider, ProviderConfigurationError
 from elarabench.runner import RunInterrupted, Runner, RunnerError
-from elarabench.scoring import score_run, summarize_run
+from elarabench.scoring import RunIntegrityError, score_run, summarize_run
 from elarabench.storage import ArtifactStore, ArtifactStoreError
 
 SUITE_PATH = Path("tests/fixtures/tiny_suite")
@@ -41,7 +45,7 @@ EXPECTED_OUTPUTS = {
 
 def framework() -> FrameworkMetadata:
     return FrameworkMetadata(
-        version="0.0.0",
+        version="0.2.1",
         source=SourceIdentity(git_commit="a" * 40, git_dirty=False),
     )
 
@@ -62,6 +66,7 @@ def configuration(
     *,
     repeats: int = 1,
     max_retries: int = 2,
+    thinking: ThinkingPolicy = ThinkingPolicy.DISABLED,
 ) -> RunConfiguration:
     return RunConfiguration.model_validate(
         {
@@ -69,6 +74,7 @@ def configuration(
             "provider": "fake",
             "model": "elarabench-fake-v1",
             "repeats": repeats,
+            "thinking": thinking,
             "timeout_seconds": 30,
             "retry_policy": {
                 "max_retries": max_retries,
@@ -78,19 +84,31 @@ def configuration(
     )
 
 
-def resolved_request(case_id: str, loaded: LoadedBenchmarkSuite) -> GenerationRequest:
+def resolved_request(
+    case_id: str,
+    loaded: LoadedBenchmarkSuite,
+    *,
+    thinking: ThinkingPolicy = ThinkingPolicy.DISABLED,
+) -> GenerationRequest:
     case = next(case for case in loaded.suite.cases if case.id == case_id)
     return GenerationRequest(
         messages=case.messages,
+        thinking=thinking,
         seed=case.seed,
         timeout_seconds=30,
         response_format=case.response_format,
     )
 
 
-def passing_responses(loaded: LoadedBenchmarkSuite) -> Mapping[str, str]:
+def passing_responses(
+    loaded: LoadedBenchmarkSuite,
+    *,
+    thinking: ThinkingPolicy = ThinkingPolicy.DISABLED,
+) -> Mapping[str, str]:
     return {
-        hash_generation_request(resolved_request(case.id, loaded)): EXPECTED_OUTPUTS[case.id]
+        hash_generation_request(
+            resolved_request(case.id, loaded, thinking=thinking)
+        ): EXPECTED_OUTPUTS[case.id]
         for case in loaded.suite.cases
     }
 
@@ -144,6 +162,34 @@ class CountingProvider(FakeProvider):
         return super().generate(request)
 
 
+class NoThinkingControlProvider(FakeProvider):
+    def capabilities(self) -> ProviderCapabilities:
+        return ProviderCapabilities(seed=True, structured_output=True)
+
+
+class PolicyCapabilityProvider(FakeProvider):
+    def __init__(
+        self,
+        support: ThinkingControlKind,
+        *,
+        responses: Mapping[str, str] | None = None,
+    ) -> None:
+        super().__init__(responses=responses)
+        self._support = support
+        self.generate_calls = 0
+
+    def capabilities(self) -> ProviderCapabilities:
+        return ProviderCapabilities(
+            seed=True,
+            thinking_control=self._support,
+            structured_output=True,
+        )
+
+    def generate(self, request: GenerationRequest) -> GenerationResponse:
+        self.generate_calls += 1
+        return super().generate(request)
+
+
 def test_successful_run_is_ordered_complete_and_self_contained(tmp_path: Path) -> None:
     loaded = load_benchmark_suite(SUITE_PATH)
     runs_dir = tmp_path / "runs"
@@ -157,11 +203,27 @@ def test_successful_run_is_ordered_complete_and_self_contained(tmp_path: Path) -
     assert result.manifest.lifecycle.status is RunLifecycleStatus.COMPLETED
     assert result.summary.score == 1.0
     assert result.summary.coverage.ratio == 1.0
+    assert result.summary.schema_version == 3
+    assert result.summary.source_result_schema_version == 3
     assert result.manifest.run_id == "ordered-run"
+    assert result.manifest.schema_version == 3
+    assert result.manifest.thinking_control.requested_policy is ThinkingPolicy.DISABLED
+    assert result.manifest.thinking_control.control_kind is ThinkingControlKind.BOOLEAN
+    assert result.manifest.thinking_control.explicit_control_planned is True
     assert result.manifest.run_fingerprint not in result.manifest.run_id
     assert result.manifest.environment.cpu == "synthetic CPU"
     store = ArtifactStore(runs_dir).open_run("ordered-run")
     assert store.read_benchmark().suite == loaded.suite
+    evaluation_data = json.loads(
+        (
+            result.path
+            / "samples"
+            / "exact-001"
+            / "repeat-000"
+            / "evaluation.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert evaluation_data["source_result_schema_version"] == 3
     request_events = [
         event.sample
         for event in store.read_events()
@@ -177,6 +239,49 @@ def test_successful_run_is_ordered_complete_and_self_contained(tmp_path: Path) -
         assert len(store.read_attempts(identity)) == 1
         assert store.response_exists(identity)
         assert store.evaluation_exists(identity)
+
+
+def test_live_smoke_response_shape_scores_failures_without_losing_coverage(
+    tmp_path: Path,
+) -> None:
+    loaded = load_benchmark_suite(SUITE_PATH)
+    outputs = {
+        "exact-001": "ELARA",
+        "numeric-001": "The decimal result of 10 divided by 4 is **2.5**.",
+        "choice-001": "B",
+        "json-001": '```json\n{\n  "answer": 7\n}\n```',
+        "content-001": "alpha and beta are present",
+    }
+    responses = {
+        hash_generation_request(resolved_request(case.id, loaded)): outputs[case.id]
+        for case in loaded.suite.cases
+    }
+
+    result = runner(FakeProvider(responses=responses), tmp_path / "runs").run(
+        loaded,
+        configuration(loaded),
+        run_id="live-smoke-shape",
+    )
+    store = ArtifactStore(tmp_path / "runs").open_run("live-smoke-shape")
+    scores = {
+        case.id: store.read_evaluation(
+            SampleIdentity(case_id=case.id, repeat_index=0),
+            source_result_schema_version=3,
+        )
+        for case in loaded.suite.cases
+    }
+
+    assert all(item.status is EvaluationStatus.SCORED for item in scores.values())
+    assert {case_id: item.score for case_id, item in scores.items()} == {
+        "exact-001": 1.0,
+        "numeric-001": 0.0,
+        "choice-001": 1.0,
+        "json-001": 0.0,
+        "content-001": 1.0,
+    }
+    assert result.summary.coverage.ratio == 1.0
+    assert result.summary.coverage.scored_samples == 5
+    assert result.summary.score == pytest.approx(0.6)
 
 
 def test_retryable_error_preserves_attempt_history_and_backoff(tmp_path: Path) -> None:
@@ -376,6 +481,29 @@ def test_score_and_summarize_work_without_benchmark_source_or_provider(
     assert summarized == scored
 
 
+def test_resume_and_summarize_reject_missing_schema_v3_evaluation_provenance(
+    tmp_path: Path,
+) -> None:
+    loaded = load_benchmark_suite(SUITE_PATH)
+    runs_dir = tmp_path / "runs"
+    result = runner(FakeProvider(responses=passing_responses(loaded)), runs_dir).run(
+        loaded,
+        configuration(loaded),
+        run_id="missing-evaluation-provenance",
+    )
+    evaluation_path = result.path / "samples/exact-001/repeat-000/evaluation.json"
+    evaluation_data = json.loads(evaluation_path.read_text(encoding="utf-8"))
+    del evaluation_data["source_result_schema_version"]
+    evaluation_path.write_text(json.dumps(evaluation_data), encoding="utf-8")
+
+    with pytest.raises(RunIntegrityError, match="incomplete schema-v3 evaluation"):
+        summarize_run(result.path)
+    with pytest.raises(ArtifactStoreError, match="incomplete schema-v3 evaluation"):
+        runner(FakeProvider(responses=passing_responses(loaded)), runs_dir).resume(
+            result.path
+        )
+
+
 def test_hard_kill_state_recovers_terminal_attempt_without_regeneration(
     tmp_path: Path,
 ) -> None:
@@ -470,3 +598,171 @@ def test_run_fingerprint_excludes_physical_id_and_general_hardware(tmp_path: Pat
     assert first.manifest.run_id != second.manifest.run_id
     assert first.manifest.environment != second.manifest.environment
     assert first.manifest.run_fingerprint == second.manifest.run_fingerprint
+
+
+def test_thinking_policy_is_persisted_hashed_and_round_trips(tmp_path: Path) -> None:
+    loaded = load_benchmark_suite(SUITE_PATH)
+    fingerprints: set[str] = set()
+    for policy in ThinkingPolicy:
+        responses = passing_responses(loaded, thinking=policy)
+        result = runner(
+            FakeProvider(responses=responses),
+            tmp_path / policy.value,
+        ).run(
+            loaded,
+            configuration(loaded, thinking=policy),
+            run_id=f"thinking-{policy.value}",
+        )
+        store = ArtifactStore(result.path.parent).open_run(result.path.name)
+        stored_request = store.read_request(
+            SampleIdentity(case_id="exact-001", repeat_index=0)
+        )
+
+        assert result.manifest.configuration.thinking is policy
+        assert stored_request.thinking is policy
+        fingerprints.add(result.manifest.run_fingerprint)
+
+    assert len(fingerprints) == len(ThinkingPolicy)
+
+
+def test_resume_rejects_thinking_request_mismatch(tmp_path: Path) -> None:
+    loaded = load_benchmark_suite(SUITE_PATH)
+    runs_dir = tmp_path / "runs"
+    responses = passing_responses(loaded)
+    result = runner(FakeProvider(responses=responses), runs_dir).run(
+        loaded,
+        configuration(loaded),
+        run_id="thinking-resume-run",
+    )
+    request_path = result.path / "samples/exact-001/repeat-000/request.json"
+    request_data = json.loads(request_path.read_text())
+    request_data["thinking"] = ThinkingPolicy.ENABLED.value
+    request_path.write_text(json.dumps(request_data), encoding="utf-8")
+
+    with pytest.raises(RunnerError, match="stored request mismatch"):
+        runner(FakeProvider(responses=responses), runs_dir).resume(result.path)
+
+
+def test_explicit_thinking_requires_provider_control_support(tmp_path: Path) -> None:
+    loaded = load_benchmark_suite(SUITE_PATH)
+    with pytest.raises(ProviderConfigurationError, match="cannot verify explicit thinking"):
+        runner(NoThinkingControlProvider(), tmp_path / "runs").run(
+            loaded,
+            configuration(loaded, thinking=ThinkingPolicy.ENABLED),
+            run_id="unsupported-thinking-run",
+        )
+
+
+def test_provider_default_does_not_require_thinking_control_support(tmp_path: Path) -> None:
+    loaded = load_benchmark_suite(SUITE_PATH)
+    policy = ThinkingPolicy.PROVIDER_DEFAULT
+    result = runner(
+        NoThinkingControlProvider(responses=passing_responses(loaded, thinking=policy)),
+        tmp_path / "runs",
+    ).run(
+        loaded,
+        configuration(loaded, thinking=policy),
+        run_id="provider-default-thinking-run",
+    )
+
+    assert result.manifest.configuration.thinking is policy
+
+
+def test_non_thinking_model_satisfies_disabled_but_rejects_enabled(
+    tmp_path: Path,
+) -> None:
+    loaded = load_benchmark_suite(SUITE_PATH)
+    disabled = PolicyCapabilityProvider(
+        ThinkingControlKind.NONE,
+        responses=passing_responses(loaded),
+    )
+    result = runner(disabled, tmp_path / "disabled").run(
+        loaded,
+        configuration(loaded, thinking=ThinkingPolicy.DISABLED),
+        run_id="non-thinking-disabled",
+    )
+
+    assert result.manifest.provider.capabilities.thinking_control is (
+        ThinkingControlKind.NONE
+    )
+    assert disabled.generate_calls == len(loaded.suite.cases)
+
+    enabled = PolicyCapabilityProvider(ThinkingControlKind.NONE)
+    with pytest.raises(ProviderConfigurationError, match="does not advertise thinking"):
+        runner(enabled, tmp_path / "enabled").run(
+            loaded,
+            configuration(loaded, thinking=ThinkingPolicy.ENABLED),
+            run_id="non-thinking-enabled",
+        )
+    assert enabled.generate_calls == 0
+
+
+@pytest.mark.parametrize(
+    "support",
+    [ThinkingControlKind.UNKNOWN, ThinkingControlKind.LEVELS],
+)
+def test_unverified_thinking_control_allows_only_provider_default(
+    tmp_path: Path,
+    support: ThinkingControlKind,
+) -> None:
+    loaded = load_benchmark_suite(SUITE_PATH)
+    policy = ThinkingPolicy.PROVIDER_DEFAULT
+    allowed = PolicyCapabilityProvider(
+        support,
+        responses=passing_responses(loaded, thinking=policy),
+    )
+    result = runner(allowed, tmp_path / f"allowed-{support.value}").run(
+        loaded,
+        configuration(loaded, thinking=policy),
+        run_id=f"provider-default-{support.value}",
+    )
+
+    assert result.manifest.provider.capabilities.thinking_control is support
+
+    for explicit in (ThinkingPolicy.ENABLED, ThinkingPolicy.DISABLED):
+        rejected = PolicyCapabilityProvider(support)
+        with pytest.raises(ProviderConfigurationError, match="thinking"):
+            runner(rejected, tmp_path / f"rejected-{support.value}-{explicit.value}").run(
+                loaded,
+                configuration(loaded, thinking=explicit),
+                run_id=f"rejected-{support.value}-{explicit.value}",
+            )
+        assert rejected.generate_calls == 0
+
+
+def test_resume_rejects_changed_thinking_control_capability(tmp_path: Path) -> None:
+    loaded = load_benchmark_suite(SUITE_PATH)
+    runs_dir = tmp_path / "runs"
+    original = runner(FakeProvider(responses=passing_responses(loaded)), runs_dir).run(
+        loaded,
+        configuration(loaded),
+        run_id="capability-resume-run",
+    )
+    changed = PolicyCapabilityProvider(ThinkingControlKind.NONE)
+
+    with pytest.raises(RunnerError, match="provider or adapter identity changed"):
+        runner(changed, runs_dir).resume(original.path)
+    assert changed.generate_calls == 0
+
+
+def test_discovered_thinking_control_changes_run_fingerprint(tmp_path: Path) -> None:
+    loaded = load_benchmark_suite(SUITE_PATH)
+    responses = passing_responses(loaded)
+    boolean_run = runner(
+        PolicyCapabilityProvider(
+            ThinkingControlKind.BOOLEAN,
+            responses=responses,
+        ),
+        tmp_path / "boolean",
+    ).run(loaded, configuration(loaded), run_id="boolean-control")
+    non_thinking_run = runner(
+        PolicyCapabilityProvider(
+            ThinkingControlKind.NONE,
+            responses=responses,
+        ),
+        tmp_path / "non-thinking",
+    ).run(loaded, configuration(loaded), run_id="no-control-needed")
+
+    assert boolean_run.manifest.configuration == non_thinking_run.manifest.configuration
+    assert boolean_run.manifest.model == non_thinking_run.manifest.model
+    assert boolean_run.manifest.run_fingerprint != non_thinking_run.manifest.run_fingerprint
