@@ -36,7 +36,7 @@ Derived summaries/comparisons
 
 See [Architecture](docs/architecture.md), [Deterministic core](docs/deterministic-core.md),
 [Benchmark format](docs/benchmark-format.md), [Result format](docs/result-format.md), and
-[Reproducibility](docs/reproducibility.md) for the implemented M1 contracts and planned v1
+[Reproducibility](docs/reproducibility.md) for the implemented M2 contracts and planned v1
 boundaries.
 
 ## Planned benchmark categories
@@ -67,7 +67,15 @@ Run the current CLI:
 elarabench --help
 elarabench --version
 elarabench validate tests/fixtures/tiny_suite
+elarabench run path/to/suite --provider ollama --model gemma3
+elarabench score runs/<run-id>
+elarabench summarize runs/<run-id>
 ```
+
+`run` uses Ollama's native API and defaults to `http://127.0.0.1:11434`. The service and named
+model must already be available; ElaraBench never downloads models. `score` re-evaluates stored
+responses, while `summarize` only aggregates stored evaluations. Neither command contacts a
+provider.
 
 Run the development checks:
 
@@ -79,16 +87,15 @@ python -m pytest
 
 ## Project status
 
-ElaraBench is unreleased and currently at M1: deterministic core. It implements validated
-provider-neutral domain models, safe benchmark loading, canonical SHA-256 identities, a
-deterministic fake provider, built-in deterministic evaluators, weighted aggregation, atomic
-filesystem artifact primitives, and suite validation through the CLI.
+ElaraBench is unreleased and currently at M2: local model execution. It implements the M1
+deterministic core plus a synchronous concurrency-one runner, complete schema-v2 run artifacts,
+bounded retries, durable attempt history, Ctrl-C recovery, strict resume, environment discovery,
+coverage-aware summaries, offline rescoring, and a native Ollama provider. A deterministic fake
+provider keeps the complete runner path testable without network or model hardware.
 
-Real model execution and full run orchestration remain intentionally absent. M2 will add the
-first real provider and runner lifecycle, including Ollama access, retries, resume behavior,
-timeouts, and complete run production. `score` and `summarize` CLI commands remain deferred
-until runner-produced artifacts contain the complete benchmark and evaluator context required
-to make those operations honest and reproducible.
+M2 does not include parallel or distributed execution, OpenAI-compatible or llama.cpp-specific
+providers, model downloading, executable benchmark sandboxes, LLM judges, a database, or a web
+interface.
 
 ## ElaraBench v1 scope
 

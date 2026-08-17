@@ -116,7 +116,9 @@ def test_unscored_statuses_remain_distinct_and_are_not_zeroes() -> None:
         ]
     )
 
-    assert summary.score == 1.0
+    assert summary.score is None
+    assert summary.partial_score == 1.0
+    assert summary.coverage.ratio == 0.25
     assert summary.case_count == 4
     assert summary.scored_case_count == 1
     assert summary.sample_status_counts.model_dump() == {
@@ -139,6 +141,23 @@ def test_duplicate_repeat_identity_is_rejected() -> None:
     repeated = sample("case", 0, result(EvaluationStatus.SCORED, 1.0))
     with pytest.raises(AggregationError, match="duplicate repeat index"):
         aggregate([repeated, repeated])
+
+
+def test_headline_score_requires_minimum_sample_coverage() -> None:
+    nineteen = [
+        sample(f"case-{index}", 0, result(EvaluationStatus.SCORED, 0.0))
+        for index in range(19)
+    ]
+    sufficient = aggregate(nineteen, expected_samples=20)
+    insufficient = aggregate(nineteen[:18], expected_samples=20)
+
+    assert sufficient.coverage.ratio == 0.95
+    assert sufficient.coverage.sufficient is True
+    assert sufficient.score == 0.0
+    assert insufficient.coverage.ratio == 0.9
+    assert insufficient.coverage.sufficient is False
+    assert insufficient.score is None
+    assert insufficient.partial_score == 0.0
 
 
 def test_inconsistent_repeat_metadata_is_rejected() -> None:

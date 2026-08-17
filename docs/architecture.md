@@ -1,13 +1,10 @@
 # Architecture specification
 
-ElaraBench is a standalone Python project for reproducible, provider-neutral model
-evaluation. It remains independent from Elara Core: neither package imports the other, and
-ElaraBench does not rely on Elara Core configuration, storage, services, or runtime state.
-
-## Approved data flow
+ElaraBench is standalone and independent from Elara Core. It imports no Elara Core package,
+configuration, service, or runtime state.
 
 ```text
-Benchmark definitions
+Versioned benchmark definitions
         ↓
 Runner → Provider adapter → Model/backend
         ↓
@@ -15,46 +12,59 @@ Immutable raw run artifacts
         ↓
 Deterministic evaluators
         ↓
-Derived summaries/comparisons
+Derived summaries and comparisons
 ```
 
-Each layer has one responsibility:
+The benchmark defines tasks and scoring policy. A provider translates provider-neutral requests
+and returns normalized responses while retaining raw provider evidence. Evaluators operate only
+on stored responses. The artifact store preserves evidence and contains no model execution.
+Aggregation derives metrics, and the CLI delegates to these library services. Providers never
+score, evaluators never generate, and benchmark definitions contain no provider behavior.
 
-- Benchmark definitions describe model inputs, fixtures, evaluation intent, and provenance.
-  They contain no provider-specific behavior.
-- The future runner will validate inputs, orchestrate requests, and preserve results. It will
-  not decide provider protocol details or scoring semantics.
-- Provider adapters will translate normalized requests to model backends and preserve raw
-  responses. They contain no evaluation logic.
-- Raw model responses are canonical run data. They are immutable once captured.
-- Evaluations, summaries, and comparisons are derived. Scoring must be repeatable over stored
-  responses without calling the model again.
+## M2 runner lifecycle
 
-## v1 constraints
+M2 execution is synchronous and strictly sequential. A new run validates and snapshots the
+suite, preflights the provider/model, discovers non-fatal environment metadata, resolves all
+case/repeat requests in stable order, computes hashes and the run fingerprint, then writes the
+manifest and complete benchmark snapshot before any generation. For every sample it writes the
+request before invoking the provider, persists every attempt immediately, writes one final
+canonical response or error, evaluates the stored response, and derives a summary.
 
-ElaraBench v1 deliberately uses ordinary versioned files for benchmark definitions and
-filesystem directories for run artifacts. It has no database and no general plugin framework.
-M1 implements narrow `ModelProvider` and `Evaluator` protocols, an explicit built-in evaluator
-mapping, and safe artifact-store primitives. These boundaries contain no scheduling logic.
+The runner depends only on `ModelProvider`. Ollama-specific translation and HTTP behavior live
+in `providers/ollama.py`. The provider owns one reusable synchronous HTTPX client and caches
+preflight metadata for its lifetime.
 
-The M1 fake provider exists only to make provider consumers deterministic and testable. It
-selects configured outputs or errors by canonical generation-request hash and never performs
-evaluation. No real model backend is connected in M1.
+Configuration, authentication/authorization, and internal adapter failures terminate a run
+after available evidence is persisted. Ordinary finalized provider/backend failures affect one
+sample, remain visible as evaluator errors, and never become zero scores. Conservative retries
+apply only to explicitly retryable connection, timeout, protocol, and transient HTTP failures.
 
-Deterministic evaluation is preferred. When a task cannot be scored deterministically, human
-or LLM-assisted evaluation must be recorded as a distinct evaluation mode with its own
-provenance. Such judgments must not be presented as deterministic results.
+`KeyboardInterrupt` is handled at the orchestration boundary. Completed artifacts remain valid,
+an in-flight attempt is recorded as interrupted when possible, no response is fabricated for
+incomplete generation, a partial summary is regenerated, and lifecycle becomes `interrupted`.
+Ollama client cancellation cannot guarantee that server-side generation has already stopped.
 
-Future executable coding or cybersecurity evaluation must run in a sandbox isolated from the
-host workspace and network according to the benchmark policy. Sandbox implementation is not
-part of M0.
+## Resume and offline derivation
 
-Reproducibility metadata is a first-class run output, not optional diagnostic information.
-The expected contract is defined in [reproducibility.md](reproducibility.md).
+Resume reads configuration only from stored canonical artifacts. Before lifecycle mutation it
+checks the manifest, self-contained snapshot, fingerprint, adapter/model/source identity,
+request plan, and all existing finalized JSON. Matching completed responses—including finalized
+provider errors—are never regenerated. Missing or stale evaluations are derived again. A
+matching request without a response continues, and a terminal attempt left just before response
+finalization can be recovered without another provider call. Request mismatch, fingerprint
+incompatibility, or corrupt finalized JSON aborts resume.
 
-## M2 boundary
+`score` dispatches evaluators over canonical stored responses and replaces only derived
+evaluations and summary. `summarize` reads evaluations and replaces only the summary. Neither
+service constructs a provider, reads the original suite directory, or uses the network.
 
-M2 will introduce real model execution, Ollama, and the production runner lifecycle. Retry,
-resume, timeout orchestration, and parallel scheduling are not implemented in M1. The artifact
-store contains persistence only; the CLI delegates validation to the benchmark loader and
-contains no benchmark or scoring rules.
+## Deliberate v1/M2 limits
+
+M2 uses a filesystem store, not a database, and an explicit provider factory, not a plugin
+framework. There is no parallelism or locking; `events.jsonl` has one writer. Events are useful
+diagnostics, not event-sourced recovery state—canonical sample files remain authoritative.
+
+Human/LLM-assisted judgment remains separate and unimplemented. Future executable coding or
+cybersecurity evaluators must use sandbox isolation; M2 never executes fixtures. OpenAI-compatible
+and llama.cpp-specific adapters, tool/agent benchmarks, distributed execution, Unsloth, Elara
+Core integration, dashboards, and leaderboards are outside M2.

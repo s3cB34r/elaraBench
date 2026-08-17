@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 from elarabench.models import (
     BenchmarkCase,
+    BenchmarkSnapshot,
     BenchmarkSuite,
     EvaluationSpecification,
     GenerationRequest,
@@ -56,6 +57,16 @@ def hash_evaluation_specification(specification: EvaluationSpecification) -> str
     return hash_canonical(specification)
 
 
+def hash_benchmark_snapshot(snapshot: BenchmarkSnapshot) -> str:
+    """Hash every snapshot field except the self-referential snapshot hash."""
+    return hash_canonical(snapshot.model_dump(mode="json", exclude={"snapshot_hash"}))
+
+
+def hash_run_fingerprint(payload: object) -> str:
+    """Hash a versioned logical execution identity payload."""
+    return hash_canonical(payload)
+
+
 def hash_suite(
     suite: BenchmarkSuite,
     fixture_files: Mapping[str, Path],
@@ -65,13 +76,19 @@ def hash_suite(
     Fixture keys are suite-relative POSIX paths. Absolute paths and filesystem metadata never
     participate in the identity.
     """
-    fixtures: list[dict[str, Any]] = []
-    for relative_path in sorted(fixture_files):
-        path = fixture_files[relative_path]
-        fixtures.append(
-            {
-                "path": relative_path,
-                "sha256": sha256_bytes(path.read_bytes()),
-            }
-        )
+    hashes = {
+        relative_path: sha256_bytes(path.read_bytes())
+        for relative_path, path in fixture_files.items()
+    }
+    return hash_suite_from_fixture_hashes(suite, hashes)
+
+
+def hash_suite_from_fixture_hashes(
+    suite: BenchmarkSuite,
+    fixture_hashes: Mapping[str, str],
+) -> str:
+    """Hash suite semantics and already-computed relative fixture identities."""
+    fixtures: list[dict[str, Any]] = [
+        {"path": path, "sha256": fixture_hashes[path]} for path in sorted(fixture_hashes)
+    ]
     return hash_canonical({"suite": suite.model_dump(mode="json"), "fixtures": fixtures})

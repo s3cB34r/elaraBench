@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from enum import StrEnum
 from typing import Annotated, Literal, Self
 
@@ -99,6 +100,23 @@ class TimingMetadata(DomainModel):
 
     latency_seconds: Annotated[float, Field(ge=0.0)] | None = None
     time_to_first_token_seconds: Annotated[float, Field(ge=0.0)] | None = None
+    provider_total_seconds: Annotated[float, Field(ge=0.0)] | None = None
+    provider_load_seconds: Annotated[float, Field(ge=0.0)] | None = None
+    provider_prompt_eval_seconds: Annotated[float, Field(ge=0.0)] | None = None
+    provider_eval_seconds: Annotated[float, Field(ge=0.0)] | None = None
+
+
+class GenerationErrorKind(StrEnum):
+    """Normalized generation failure categories."""
+
+    CONFIGURATION = "configuration"
+    CONNECTION = "connection"
+    TIMEOUT = "timeout"
+    HTTP = "http"
+    PROVIDER = "provider"
+    MALFORMED_RESPONSE = "malformed_response"
+    INTERRUPTED = "interrupted"
+    INTERNAL = "internal"
 
 
 class GenerationError(DomainModel):
@@ -106,7 +124,11 @@ class GenerationError(DomainModel):
 
     code: str
     message: str
+    kind: GenerationErrorKind = GenerationErrorKind.PROVIDER
     retryable: bool = False
+    http_status: Annotated[int, Field(ge=100, le=599)] | None = None
+    provider_code: str | None = None
+    provider_message: str | None = None
 
 
 class GenerationResponse(DomainModel):
@@ -117,6 +139,7 @@ class GenerationResponse(DomainModel):
     usage: UsageInformation | None = None
     timing: TimingMetadata | None = None
     error: GenerationError | None = None
+    raw_request_payload: JsonValue | None = None
     raw_payload: JsonValue | None = None
 
 
@@ -131,6 +154,12 @@ class ModelIdentity(DomainModel):
     backend_version: str | None = None
     tokenizer: str | None = None
     chat_template: str | None = None
+    format: str | None = None
+    family: str | None = None
+    parameter_size: str | None = None
+    capabilities: tuple[str, ...] = ()
+    parameters_hash: Sha256Digest | None = None
+    template_hash: Sha256Digest | None = None
 
 
 class ProviderCapabilities(DomainModel):
@@ -203,6 +232,7 @@ class AggregationConfiguration(DomainModel):
 
     method: Literal["weighted_macro"] = "weighted_macro"
     unscored_policy: Literal["exclude"] = "exclude"
+    minimum_scored_coverage: Score = 0.95
 
 
 class BenchmarkCase(DomainModel):
@@ -213,6 +243,7 @@ class BenchmarkCase(DomainModel):
     tags: tuple[Identifier, ...] = ()
     difficulty: str | None = None
     messages: Annotated[tuple[ChatMessage, ...], Field(min_length=1)]
+    response_format: ResponseFormatConstraint | None = None
     evaluation: EvaluationSpecification
     weight: Annotated[float, Field(gt=0.0)] = 1.0
     seed: int | None = None
@@ -277,25 +308,223 @@ class SampleIdentity(DomainModel):
 
 
 class RunConfiguration(DomainModel):
-    """Provider-neutral M1 run configuration primitives."""
+    """Resolved provider-neutral execution configuration."""
 
     suite_path: str
+    provider: Identifier = "fake"
+    model: str = "elarabench-fake-v1"
+    endpoint: str | None = None
     repeats: Annotated[int, Field(gt=0)] = 1
     generation_parameters: GenerationParameters = Field(default_factory=GenerationParameters)
     seed: int | None = None
     timeout_seconds: Annotated[float, Field(gt=0.0)] = 120.0
+    retry_policy: RetryPolicy = Field(default_factory=lambda: RetryPolicy())
+    concurrency: Literal[1] = 1
+    minimum_scored_coverage: Score = 0.95
+
+
+class RetryPolicy(DomainModel):
+    """Conservative deterministic retry policy."""
+
+    max_retries: Annotated[int, Field(ge=0)] = 2
+    initial_backoff_seconds: Annotated[float, Field(ge=0.0)] = 0.5
+    backoff_multiplier: Annotated[float, Field(ge=1.0)] = 2.0
+    maximum_backoff_seconds: Annotated[float, Field(ge=0.0)] = 5.0
+
+
+RunConfiguration.model_rebuild()
+
+
+class EndpointMetadata(DomainModel):
+    """Credential-free endpoint identity."""
+
+    scheme: str
+    host: str
+    port: Annotated[int, Field(ge=1, le=65535)] | None = None
+    path: str
+    is_local: bool
+
+
+class ProviderMetadata(DomainModel):
+    """Provider adapter identity and declared capabilities."""
+
+    type: Identifier
+    adapter_version: SemanticVersion
+    endpoint: EndpointMetadata
+    capabilities: ProviderCapabilities
+
+
+class SourceIdentity(DomainModel):
+    """ElaraBench source revision identity."""
+
+    git_commit: str | None = None
+    git_dirty: bool | None = None
+    source_state_hash: Sha256Digest | None = None
+
+
+class FrameworkMetadata(DomainModel):
+    """Framework version and source identity."""
+
+    version: str
+    source: SourceIdentity = Field(default_factory=SourceIdentity)
+
+
+class GPUInfo(DomainModel):
+    """Best-effort non-personal GPU runtime identity."""
+
+    name: str
+    driver_version: str | None = None
+
+
+class EnvironmentMetadata(DomainModel):
+    """Execution environment metadata kept separate from run fingerprint identity."""
+
+    python_version: str
+    python_implementation: str
+    operating_system: str
+    os_release: str
+    architecture: str
+    cpu: str | None = None
+    gpus: tuple[GPUInfo, ...] = ()
+    gpu_driver: str | None = None
+    runtime_versions: dict[str, str] = Field(default_factory=dict)
+    diagnostics: tuple[str, ...] = ()
+
+
+class SeedControlMetadata(DomainModel):
+    """Honest seed request/support/application status."""
+
+    requested: bool
+    supported: bool
+    applied: bool
+    deterministic_output_guaranteed: Literal[False] = False
+
+
+class RunLifecycleStatus(StrEnum):
+    """Guarded run lifecycle states."""
+
+    INITIALIZING = "initializing"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    COMPLETED_WITH_ERRORS = "completed_with_errors"
+    INTERRUPTED = "interrupted"
+    FAILED = "failed"
+
+
+class RunLifecycle(DomainModel):
+    """The only mutable section of a run manifest."""
+
+    status: RunLifecycleStatus
+    created_at: datetime
+    started_at: datetime | None = None
+    updated_at: datetime
+    completed_at: datetime | None = None
+    resume_count: Annotated[int, Field(ge=0)] = 0
+
+
+class RequestPlanEntry(DomainModel):
+    """Expected sample request identity in stable execution order."""
+
+    identity: SampleIdentity
+    request_hash: Sha256Digest
 
 
 class RunManifest(DomainModel):
-    """Foundational run identity stored before future orchestration exists."""
+    """Result schema v2 identity/configuration plus guarded lifecycle state."""
 
-    schema_version: Literal[1] = 1
+    schema_version: Literal[2] = 2
     run_id: Identifier
+    run_fingerprint: Sha256Digest
+    framework: FrameworkMetadata
     suite_id: Identifier
     suite_version: SemanticVersion
     suite_hash: Sha256Digest
+    benchmark_snapshot_hash: Sha256Digest
     configuration: RunConfiguration
-    model: ModelIdentity | None = None
+    provider: ProviderMetadata
+    model: ModelIdentity
+    seed_control: SeedControlMetadata
+    environment: EnvironmentMetadata
+    request_plan: tuple[RequestPlanEntry, ...]
+    lifecycle: RunLifecycle
+
+
+class SnapshotFixture(DomainModel):
+    """Immutable fixture bytes embedded as base64 for later offline evaluation."""
+
+    path: str
+    content_hash: Sha256Digest
+    content_base64: str
+
+
+class BenchmarkSnapshot(DomainModel):
+    """Complete self-contained benchmark and evaluation snapshot."""
+
+    schema_version: Literal[1] = 1
+    suite: BenchmarkSuite
+    fixtures: tuple[SnapshotFixture, ...] = ()
+    minimum_scored_coverage: Score = 0.95
+    benchmark_content_hash: Sha256Digest
+    snapshot_hash: Sha256Digest
+
+
+class AttemptOutcome(StrEnum):
+    """Durable provider attempt outcome."""
+
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    INTERRUPTED = "interrupted"
+
+
+class AttemptRecord(DomainModel):
+    """One immutable provider invocation, including failed retry history."""
+
+    identity: SampleIdentity
+    attempt_index: Annotated[int, Field(ge=0)]
+    retry_number: Annotated[int, Field(ge=0)]
+    request_hash: Sha256Digest
+    started_at: datetime
+    completed_at: datetime
+    duration_seconds: Annotated[float, Field(ge=0.0)]
+    outcome: AttemptOutcome
+    response: GenerationResponse
+
+
+class RunEventType(StrEnum):
+    """Small fixed vocabulary for diagnostic lifecycle events."""
+
+    RUN_CREATED = "run_created"
+    RUN_STARTED = "run_started"
+    RUN_RESUMED = "run_resumed"
+    REQUEST_STORED = "request_stored"
+    ATTEMPT_STARTED = "attempt_started"
+    ATTEMPT_FAILED = "attempt_failed"
+    RETRY_SCHEDULED = "retry_scheduled"
+    ATTEMPT_SUCCEEDED = "attempt_succeeded"
+    ATTEMPT_INTERRUPTED = "attempt_interrupted"
+    RESPONSE_STORED = "response_stored"
+    SAMPLE_EVALUATED = "sample_evaluated"
+    SUMMARY_WRITTEN = "summary_written"
+    RUN_INTERRUPTED = "run_interrupted"
+    RUN_COMPLETED = "run_completed"
+    RUN_FAILED = "run_failed"
+    SCORING_STARTED = "scoring_started"
+    SCORING_COMPLETED = "scoring_completed"
+    SUMMARIZATION_COMPLETED = "summarization_completed"
+
+
+class RunEvent(DomainModel):
+    """Validated append-only diagnostic event."""
+
+    schema_version: Literal[1] = 1
+    sequence: Annotated[int, Field(ge=0)]
+    timestamp: datetime
+    run_id: Identifier
+    invocation_id: Identifier
+    type: RunEventType
+    sample: SampleIdentity | None = None
+    attempt_index: Annotated[int, Field(ge=0)] | None = None
+    data: dict[str, JsonValue] = Field(default_factory=dict)
 
 
 class EvaluationContext(DomainModel):
@@ -355,10 +584,23 @@ class BreakdownSummary(DomainModel):
     score: Score | None
 
 
+class CoverageSummary(DomainModel):
+    """Expected-sample scored coverage and headline validity."""
+
+    expected_samples: Annotated[int, Field(gt=0)]
+    scored_samples: Annotated[int, Field(ge=0)]
+    ratio: Score
+    minimum_required: Score
+    sufficient: bool
+
+
 class AggregationSummary(DomainModel):
     """Derived deterministic score summary."""
 
+    schema_version: Literal[2] = 2
     score: Score | None
+    partial_score: Score | None
+    coverage: CoverageSummary
     case_count: Annotated[int, Field(ge=0)]
     scored_case_count: Annotated[int, Field(ge=0)]
     sample_status_counts: StatusCounts

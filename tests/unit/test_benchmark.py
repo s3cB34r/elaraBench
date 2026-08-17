@@ -9,7 +9,13 @@ from pathlib import Path
 
 import pytest
 
-from elarabench.benchmark import BenchmarkLoadError, load_benchmark_suite
+from elarabench.benchmark import (
+    BenchmarkLoadError,
+    create_benchmark_snapshot,
+    load_benchmark_suite,
+    validate_benchmark_snapshot,
+)
+from elarabench.hashing import hash_benchmark_snapshot
 
 TINY_SUITE = Path(__file__).parents[1] / "fixtures" / "tiny_suite"
 
@@ -126,3 +132,22 @@ def test_fixture_content_changes_hash_but_mtime_does_not(tmp_path: Path) -> None
 
     fixture.write_text("changed fixture bytes\n", encoding="utf-8")
     assert load_benchmark_suite(suite).content_hash != first
+
+
+def test_snapshot_is_self_contained_and_fixture_corruption_is_rejected() -> None:
+    snapshot = create_benchmark_snapshot(load_benchmark_suite(TINY_SUITE))
+
+    validate_benchmark_snapshot(snapshot)
+    assert snapshot.benchmark_content_hash
+    assert snapshot.snapshot_hash
+    assert snapshot.fixtures[0].content_base64
+
+    changed_fixture = snapshot.fixtures[0].model_copy(update={"content_base64": "Y2hhbmdlZA=="})
+    provisional = snapshot.model_copy(
+        update={"fixtures": (changed_fixture,), "snapshot_hash": "0" * 64}
+    )
+    corrupted = provisional.model_copy(
+        update={"snapshot_hash": hash_benchmark_snapshot(provisional)}
+    )
+    with pytest.raises(BenchmarkLoadError, match="fixture content hash mismatch"):
+        validate_benchmark_snapshot(corrupted)

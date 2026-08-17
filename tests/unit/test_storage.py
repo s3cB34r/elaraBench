@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -9,23 +10,61 @@ import pytest
 from elarabench.aggregation import aggregate
 from elarabench.models import (
     AggregationSample,
+    EndpointMetadata,
+    EnvironmentMetadata,
     EvaluationResult,
+    EvaluationStatus,
+    FrameworkMetadata,
     GenerationRequest,
     GenerationResponse,
+    ModelIdentity,
+    ProviderCapabilities,
+    ProviderMetadata,
     RunConfiguration,
+    RunEventType,
+    RunLifecycle,
+    RunLifecycleStatus,
     RunManifest,
     SampleIdentity,
+    SeedControlMetadata,
 )
 from elarabench.storage import ArtifactExistsError, ArtifactStore, ArtifactStoreError
 
 
 def manifest(run_id: str) -> RunManifest:
+    timestamp = datetime(2026, 1, 1, tzinfo=UTC)
     return RunManifest(
         run_id=run_id,
+        run_fingerprint="f" * 64,
+        framework=FrameworkMetadata(version="0.0.0"),
         suite_id="synthetic.tiny",
         suite_version="1.0.0",
         suite_hash="a" * 64,
+        benchmark_snapshot_hash="c" * 64,
         configuration=RunConfiguration(suite_path="tests/fixtures/tiny_suite"),
+        provider=ProviderMetadata(
+            type="fake",
+            adapter_version="1.0.0",
+            endpoint=EndpointMetadata(
+                scheme="fake", host="local", path="/", is_local=True
+            ),
+            capabilities=ProviderCapabilities(seed=True),
+        ),
+        model=ModelIdentity(provider="fake", backend="fake", model="elarabench-fake-v1"),
+        seed_control=SeedControlMetadata(requested=False, supported=True, applied=False),
+        environment=EnvironmentMetadata(
+            python_version="3.12",
+            python_implementation="CPython",
+            operating_system="Linux",
+            os_release="test",
+            architecture="x86_64",
+        ),
+        request_plan=(),
+        lifecycle=RunLifecycle(
+            status=RunLifecycleStatus.INITIALIZING,
+            created_at=timestamp,
+            updated_at=timestamp,
+        ),
     )
 
 
@@ -37,7 +76,7 @@ def request() -> GenerationRequest:
 
 def evaluation(score: float) -> EvaluationResult:
     return EvaluationResult(
-        status="scored",
+        status=EvaluationStatus.SCORED,
         score=score,
         passed=score == 1.0,
         explanation="synthetic",
@@ -147,10 +186,32 @@ def test_run_path_traversal_is_rejected(tmp_path: Path, run_id: str) -> None:
 def test_event_and_artifacts_paths_are_deterministic(tmp_path: Path) -> None:
     run = ArtifactStore(tmp_path).run("run")
     identity = SampleIdentity(case_id="case", repeat_index=2)
-    run.append_event({"event": "created", "sequence": 1})
+    event = run.record_event(
+        timestamp=datetime(2026, 1, 1, tzinfo=UTC),
+        invocation_id="test-invocation",
+        event_type=RunEventType.RUN_CREATED,
+    )
 
     assert run.artifacts_directory(identity) == run.path / "samples/case/repeat-002/artifacts"
-    assert (run.path / "events.jsonl").read_text() == '{"event": "created", "sequence": 1}\n'
+    assert event.sequence == 0
+    assert run.read_events() == (event,)
+
+
+def test_incomplete_event_tail_can_be_repaired_without_losing_valid_events(
+    tmp_path: Path,
+) -> None:
+    run = ArtifactStore(tmp_path).run("run")
+    event = run.record_event(
+        timestamp=datetime(2026, 1, 1, tzinfo=UTC),
+        invocation_id="test-invocation",
+        event_type=RunEventType.RUN_CREATED,
+    )
+    with (run.path / "events.jsonl").open("ab") as handle:
+        handle.write(b'{"incomplete"')
+
+    assert run.repair_event_log_tail() is True
+    assert run.read_events() == (event,)
+    assert run.repair_event_log_tail() is False
 
 
 def test_run_symlink_redirection_is_rejected(tmp_path: Path) -> None:

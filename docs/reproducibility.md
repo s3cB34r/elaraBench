@@ -1,73 +1,75 @@
 # Reproducibility contract
 
-ElaraBench treats reproducibility metadata as part of every benchmark result. A run is not
-fully interpretable without the benchmark, request, model, inference, environment, and scoring
-identities that produced it.
+ElaraBench separates physical execution identity, logical reproducibility identity, and observed
+execution environment.
 
-## Required identity and controls
+## Run ID
 
-The planned v1 run format will record, where applicable:
+A run ID names one physical execution. The generated form is a UTC, human-sortable timestamp plus
+the first twelve run-fingerprint characters. A user may provide another safe unique identifier.
+The timestamp and run ID never participate in deterministic identity.
 
-- ElaraBench version, source revision, and dirty-worktree state.
-- Benchmark schema version, suite ID and version, and a content hash covering cases and
-  fixtures.
-- Exact ordered and materialized model requests.
-- Provider type, backend version, and non-secret endpoint identity.
-- Model name, immutable digest or file hash, quantization, tokenizer, and chat template.
-- All resolved generation parameters, seed, and whether the backend supports each requested
-  determinism control.
-- Stable case ordering, repeat count, concurrency, timeout, and retry policy.
-- Python, dependency, operating-system, architecture, CPU, GPU, driver, and relevant runtime
-  versions.
-- Evaluator type, version, configuration, fixture hash, and sandbox identity for executable
-  evaluation.
-- Raw outputs, attempt history, errors, timestamps, and monotonic durations.
+## Run fingerprint
 
-Secret values are excluded or redacted. Missing or undiscoverable metadata must be reported as
-unknown rather than guessed.
+Fingerprint schema version 1 is SHA-256 over canonical JSON containing:
 
-Identical settings do not guarantee bit-for-bit model output across every backend or GPU. Runs
-with stochastic or nondeterministic components should use repeats and report observed variance.
+- Benchmark snapshot/content hashes, ordered case IDs, evaluator configuration hashes, and the
+  ordered sample/request-hash plan.
+- Provider type and adapter version, sanitized endpoint identity, declared capabilities, model
+  name/digest, quantization, backend version, tokenizer/family/format/size, model capabilities,
+  and hashes of model parameters/template metadata when discoverable.
+- Resolved generation parameters and global seed, provider seed requested/supported/applied
+  state, repeats, timeout, deterministic retry policy, concurrency (exactly one), and minimum
+  scored coverage.
+- ElaraBench version and Git/source identity, including dirty source-state hash when available.
+
+The fingerprint excludes run timestamps and ID, absolute suite/run paths, host name, CPU/GPU
+model, driver, OS, architecture, and general runtime environment. Endpoint data is included only
+after credential rejection/sanitization because endpoint/backend identity can affect execution
+semantics. Specific backend and model-runtime versions belong in provider/model identity when
+they can change inference; the general machine description remains separate.
+
+## Execution environment
+
+The manifest separately records Python version/implementation, OS/release, architecture, CPU,
+GPU list, NVIDIA driver when available, relevant package/runtime versions, and discovery
+diagnostics. No host name or broad environment-variable capture occurs. Optional probes are
+bounded and best effort; absent or broken `nvidia-smi` never prevents a run.
+
+Environment differences can later qualify comparability and explain performance without making
+otherwise equivalent logical configurations impossible to group by fingerprint. Supplying a
+seed records intent and backend capability/application status; it is never represented as a
+guarantee of deterministic model output. Repeats report observed variance.
+
+## Canonical hashing
+
+All identities use deterministic UTF-8 JSON with sorted object keys, fixed separators, preserved
+array order, explicit null/default values, and rejection of non-finite numbers. Suite content
+hashes include validated execution/scoring metadata, ordered cases, relative fixture paths, and
+fixture-byte SHA-256 hashes. Snapshot self-hashes include embedded fixture bytes and effective
+coverage policy. Request hashes include ordered messages, generation parameters, resolved seed,
+timeout, and response constraint. Modification times, inodes, YAML formatting, dictionary
+insertion order, and absolute paths do not participate.
 
 ## Comparison classes
 
+Comparison classification remains a future derived feature, but stored M2 evidence supports the
+approved contract:
+
 ### Strictly comparable
 
-The benchmark content, materialized prompts, evaluator definitions, model identity,
-quantization, inference settings, repeat policy, and material execution conditions match.
-Differences are limited to fields that cannot affect model output or scoring, such as run ID or
-wall-clock start time.
+Benchmark/snapshot, materialized requests, evaluator definitions, provider/model identity,
+quantization, inference settings, and relevant execution semantics match. Run ID/time may differ.
 
 ### Qualified comparison
 
-The runs are useful to compare, but one or more known differences may affect output or scoring.
-Examples include a backend version, quantization, generation parameter, hardware/runtime,
-prompt template, or evaluator revision. A comparison must enumerate these differences rather
-than silently treating the runs as equivalent.
+Results remain useful but a known difference may affect output, score, or performance—for
+example hardware/runtime, backend version, quantization, generation setting, template, or
+evaluator revision. The difference must be disclosed.
 
 ### Not directly comparable
 
-Canonical inputs, raw outputs, model identity, benchmark identity, evaluator provenance, or
-other material metadata is missing or incompatible enough that a direct score comparison would
-be misleading. Results may still be inspected independently.
+Canonical evidence or material identity is missing, corrupt, or incompatible enough that a
+direct score claim would mislead. Results can still be inspected independently.
 
-Comparison classification is itself derived. It must be reproducible from stored run metadata
-and must never modify canonical run artifacts.
-
-## M1 canonical hashing contract
-
-M1 identities use SHA-256 over deterministic UTF-8 JSON. Object keys are sorted, separators are
-fixed, non-ASCII text is preserved, non-finite numbers are rejected, and semantically meaningful
-array order is retained. Dictionary insertion order, whitespace in YAML/JSONL, absolute suite
-paths, modification times, inode numbers, and other filesystem metadata do not participate.
-
-- A case hash includes every validated case field, including ordered messages and evaluator
-  specification.
-- A generation-request hash includes ordered messages, provider-neutral generation parameters,
-  seed, timeout, and optional response format.
-- An evaluator hash includes its type, configuration, ordered composite children, and weights.
-- A suite hash includes validated execution/scoring metadata, ordered validated cases, fixture
-  relative paths, and SHA-256 digests of every referenced fixture's bytes.
-
-Changing a prompt, evaluator configuration, case order, fixture path, or fixture contents changes
-the relevant identity. Touching a file without changing its contents does not.
+Classification must remain derived and never rewrite canonical run artifacts.

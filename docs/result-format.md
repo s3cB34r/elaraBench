@@ -1,58 +1,87 @@
-# Result format specification
+# Result format: schema version 2
 
-ElaraBench v1 will store each run as an inspectable filesystem artifact:
+M2 produces inspectable filesystem runs:
 
 ```text
 runs/<run-id>/
 ├── manifest.json
+├── benchmark.json
 ├── events.jsonl
 ├── samples/
 │   └── <case-id>/
-│       └── <repeat-id>/
+│       └── repeat-000/
 │           ├── request.json
+│           ├── attempts/
+│           │   ├── attempt-000.json
+│           │   └── attempt-001.json
 │           ├── response.json
 │           ├── evaluation.json
 │           └── artifacts/
 └── summary.json
 ```
 
-M1 implements validated foundational models and an `ArtifactStore` API for this shape. It does
-not implement the runner that will populate complete production runs.
+Unsupported production result schemas fail validation rather than being reinterpreted.
 
-## Artifact roles
+## Canonical and derived artifacts
 
-- `manifest.json` records run identity, resolved configuration, benchmark identity and hash,
-  model/backend identity, environment, reproducibility controls, and run status.
-- `events.jsonl` is an append-oriented lifecycle and diagnostic record suitable for recovering
-  the history of interrupted or retried work.
-- `samples/` preserves the exact materialized request, canonical raw response, attempt or error
-  metadata, and derived evaluation for every case and repeat.
-- `summary.json` contains regenerated aggregate scores and comparison-oriented statistics.
+`benchmark.json`, requests, attempt records, and final responses are canonical. They are written
+atomically and cannot be silently overwritten. An interrupted provider call has an interrupted
+attempt but no fabricated `response.json`. A finalized provider failure is itself a canonical
+response and is not retried during normal resume.
 
-Raw provider responses are canonical. They must be preserved without requiring scores or
-reports to reconstruct them. Evaluations are derived from the canonical request, response,
-fixtures, and evaluator configuration and may be regenerated without invoking a model.
+Evaluations and `summary.json` are derived. Evaluation replacement must be explicit; summaries
+are atomically replaceable. `summary.json` must never hold the only copy of a response, error,
+individual evaluation, benchmark definition, or identity field.
 
-`summary.json` is always derived and disposable. It must never contain the only copy of a raw
-response, individual score, error, model identity, or other canonical run data.
+All JSON is UTF-8, sorted, indented, and newline-terminated where practical. Atomic-write
+temporary files have a reserved name prefix. Resume safely removes only those leftovers and
+aborts on corrupt finalized JSON.
 
-Manifest, request, and response files are canonical and use atomic create-without-overwrite
-writes. An existing canonical file raises an error. Evaluations are derived but also refuse
-replacement unless the caller explicitly requests it. Summaries are derived, atomically
-replaceable, and expected to be regenerated. JSON is UTF-8, sorted, indented, and terminated by
-a newline for inspection.
+## Manifest
 
-Credentials, authorization headers, and secret environment values must never be stored in run
-artifacts. Redaction must preserve enough non-secret endpoint and configuration identity for
-comparison.
+The manifest has immutable identity/configuration sections and one guarded mutable `lifecycle`
+section. It records result schema version, physical run ID, deterministic run fingerprint,
+ElaraBench/Git source identity, suite and snapshot hashes, resolved run configuration, sanitized
+provider endpoint and capabilities, model digest/quantization/backend/template metadata,
+seed support/application status, ordered request hashes, execution environment, timestamps,
+status, and resume count. Hardware lives in `environment`; it is not silently folded into the
+run fingerprint.
 
-## M1 aggregation
+Lifecycle states are `initializing`, `running`, `completed`, `completed_with_errors`,
+`interrupted`, and `failed`. Lifecycle updates cannot alter identity/configuration or move time
+backwards.
 
-Aggregation first averages scored repeats within each case. It then applies positive case
-weights to a macro score over cases that have at least one scored repeat. Category and tag
-breakdowns use the same case-based weighting. Repeat statistics include count, mean, minimum,
-maximum, and population variance/standard deviation when at least two scores exist.
+## Benchmark snapshot
 
-Counts for `scored`, `invalid`, `error`, and `pending_review` are preserved independently.
-Unscored states are excluded under the only M1 policy and never silently converted to zero.
-No confidence interval is manufactured.
+`benchmark.json` is complete enough for later scoring without the source suite. It stores its
+schema version, complete ordered validated suite/cases/messages/evaluation specifications,
+weights, aggregation settings, effective minimum coverage, fixture references, fixture hashes,
+base64 fixture bytes, benchmark content hash, and snapshot self-hash. M2 does not execute fixture
+contents.
+
+## Attempts, events, and responses
+
+Every provider invocation gets an immutable `attempt-NNN.json` containing sample identity,
+retry number, request hash, start/end timestamps, monotonic duration, outcome, and the normalized
+response/error plus raw provider evidence. Successful retry never erases earlier failures.
+
+`events.jsonl` uses a fixed typed event vocabulary, UTC timestamp, run and invocation IDs,
+zero-based monotonic sequence, optional sample/attempt identity, and small structured data. It
+has one writer and no M2 locks. An incomplete final event fragment from a hard kill can be
+discarded on resume; valid canonical artifacts determine recovery.
+
+Ollama responses preserve normalized text, finish reason, token usage, client latency, provider
+timings, normalized error details, translated request payload, and raw JSON response. Credentials
+or authorization values are never accepted into endpoint identity or persisted.
+
+## Summary and coverage
+
+Repeats are averaged per case, then positive case weights form a macro average. Category and tag
+breakdowns use the same case weighting. Repeat statistics include count, mean, min, max, and
+population variance/standard deviation for at least two scores.
+
+Coverage is `scored samples / (cases × repeats)`. A valid score of zero is covered; provider
+errors, invalid output, pending review, and missing results are not. The default minimum is 0.95.
+At or above it, `score` is the headline aggregate. Below it, `score` is null and `partial_score`
+retains the available aggregate. Status counts remain separate; unscored samples never silently
+become zero.

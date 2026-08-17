@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 import json
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
@@ -13,8 +15,19 @@ from pydantic import ValidationError
 
 from elarabench.evaluators.base import EvaluatorConfigurationError
 from elarabench.evaluators.registry import validate_specification
-from elarabench.hashing import hash_suite
-from elarabench.models import BenchmarkCase, BenchmarkSuite, BenchmarkSuiteManifest
+from elarabench.hashing import (
+    hash_benchmark_snapshot,
+    hash_suite,
+    hash_suite_from_fixture_hashes,
+    sha256_bytes,
+)
+from elarabench.models import (
+    BenchmarkCase,
+    BenchmarkSnapshot,
+    BenchmarkSuite,
+    BenchmarkSuiteManifest,
+    SnapshotFixture,
+)
 
 
 class BenchmarkLoadError(ValueError):
@@ -42,7 +55,7 @@ def _format_validation_error(path: Path, error: ValidationError) -> BenchmarkLoa
 def _load_yaml_mapping(path: Path) -> dict[str, object]:
     try:
         loaded = yaml.safe_load(path.read_text(encoding="utf-8"))
-    except OSError as error:
+    except (OSError, UnicodeError) as error:
         raise BenchmarkLoadError(f"cannot read suite manifest {path}: {error}") from error
     except yaml.YAMLError as error:
         raise BenchmarkLoadError(f"malformed YAML in {path}: {error}") from error
@@ -80,7 +93,7 @@ def _load_cases(path: Path) -> tuple[BenchmarkCase, ...]:
     seen: dict[str, int] = {}
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
-    except OSError as error:
+    except (OSError, UnicodeError) as error:
         raise BenchmarkLoadError(f"cannot read case file {path}: {error}") from error
 
     for line_number, line in enumerate(lines, start=1):
@@ -164,3 +177,70 @@ def load_benchmark_suite(path: str | Path) -> LoadedBenchmarkSuite:
         content_hash=hash_suite(suite, fixture_files),
         fixture_files=fixture_files,
     )
+
+
+def create_benchmark_snapshot(
+    loaded: LoadedBenchmarkSuite,
+    *,
+    minimum_scored_coverage: float | None = None,
+) -> BenchmarkSnapshot:
+    """Embed complete validated benchmark definitions and immutable fixture bytes."""
+    fixtures: list[SnapshotFixture] = []
+    for relative_path, path in sorted(loaded.fixture_files.items()):
+        try:
+            content = path.read_bytes()
+        except OSError as error:
+            raise BenchmarkLoadError(
+                f"cannot snapshot fixture {relative_path!r}: {error}"
+            ) from error
+        fixtures.append(
+            SnapshotFixture(
+                path=relative_path,
+                content_hash=sha256_bytes(content),
+                content_base64=base64.b64encode(content).decode("ascii"),
+            )
+        )
+    provisional = BenchmarkSnapshot(
+        suite=loaded.suite,
+        fixtures=tuple(fixtures),
+        minimum_scored_coverage=(
+            loaded.suite.aggregation.minimum_scored_coverage
+            if minimum_scored_coverage is None
+            else minimum_scored_coverage
+        ),
+        benchmark_content_hash=loaded.content_hash,
+        snapshot_hash="0" * 64,
+    )
+    return provisional.model_copy(update={"snapshot_hash": hash_benchmark_snapshot(provisional)})
+
+
+def validate_benchmark_snapshot(snapshot: BenchmarkSnapshot) -> None:
+    """Verify self-hash, fixture bytes, and benchmark content identity."""
+    if hash_benchmark_snapshot(snapshot) != snapshot.snapshot_hash:
+        raise BenchmarkLoadError("benchmark snapshot hash mismatch")
+    fixture_hashes: dict[str, str] = {}
+    for fixture in snapshot.fixtures:
+        relative = PurePosixPath(fixture.path)
+        if (
+            "\\" in fixture.path
+            or relative.is_absolute()
+            or not relative.parts
+            or ".." in relative.parts
+            or relative.parts[0] != "fixtures"
+        ):
+            raise BenchmarkLoadError(f"unsafe snapshot fixture path {fixture.path!r}")
+        if fixture.path in fixture_hashes:
+            raise BenchmarkLoadError(f"duplicate snapshot fixture {fixture.path!r}")
+        try:
+            content = base64.b64decode(fixture.content_base64, validate=True)
+        except (ValueError, binascii.Error) as error:
+            raise BenchmarkLoadError(f"invalid base64 fixture {fixture.path!r}") from error
+        if sha256_bytes(content) != fixture.content_hash:
+            raise BenchmarkLoadError(f"fixture content hash mismatch for {fixture.path!r}")
+        fixture_hashes[fixture.path] = fixture.content_hash
+    referenced = {reference for case in snapshot.suite.cases for reference in case.fixtures}
+    if set(fixture_hashes) != referenced:
+        raise BenchmarkLoadError("snapshot fixtures do not match benchmark references")
+    content_hash = hash_suite_from_fixture_hashes(snapshot.suite, fixture_hashes)
+    if content_hash != snapshot.benchmark_content_hash:
+        raise BenchmarkLoadError("benchmark snapshot content hash mismatch")

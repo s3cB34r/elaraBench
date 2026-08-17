@@ -1,6 +1,6 @@
 # Benchmark format specification
 
-This document describes the benchmark layout implemented by the ElaraBench M1 loader. All
+This document describes the benchmark layout implemented by the ElaraBench M2 loader. All
 manifests and cases are validated with strict Pydantic models; unknown fields are rejected.
 
 ## Suite layout
@@ -22,7 +22,7 @@ within the suite and must not depend on machine-specific absolute paths.
 
 ## Suite fields
 
-The M1 manifest supports:
+The M2 manifest supports:
 
 - `schema_version`, currently exactly `1`.
 - Stable `id`, semantic `version`, `title`, and optional `description`.
@@ -30,7 +30,8 @@ The M1 manifest supports:
 - `cases.path`, relative to the suite directory and normally `cases.jsonl`.
 - Optional suite `tags`.
 - `defaults.repeats` and `defaults.timeout_seconds`.
-- `aggregation.method`, currently `weighted_macro`, and `unscored_policy`, currently `exclude`.
+- `aggregation.method`, currently `weighted_macro`; `unscored_policy`, currently `exclude`; and
+  `minimum_scored_coverage`, default `0.95`.
 
 Defaults must be explicit in a resolved run manifest. A suite may not choose a provider or
 embed provider-specific request fields.
@@ -48,7 +49,7 @@ Each nonblank JSONL line contains one complete case with:
 - Optional deterministic case `seed`.
 
 Reference answers and evaluation parameters are benchmark data, not model request data. The
-future runner must send only the materialized request to the provider.
+runner sends only the materialized request to the provider.
 
 Executable fixtures will not be trusted merely because they are versioned. When executable
 evaluation is implemented, it must run inside a defined sandbox with captured output, resource
@@ -56,12 +57,12 @@ limits, and an explicit network policy.
 
 Fixture references must use `/` separators, stay beneath `fixtures/`, resolve to regular files,
 and remain inside the suite after symlinks are resolved. Missing files, absolute paths, `..`
-segments, and symlink escapes are rejected. M1 reads fixture bytes for hashing but never executes
-them.
+segments, and symlink escapes are rejected. M2 reads fixture bytes for hashing and snapshotting
+but never executes them.
 
 ## Evaluator specifications
 
-M1 supports these explicit evaluator types:
+M2 supports these explicit evaluator types:
 
 | Type | Configuration and semantics |
 | --- | --- |

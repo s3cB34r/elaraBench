@@ -12,6 +12,7 @@ from elarabench.models import (
     AggregationSummary,
     BreakdownSummary,
     CaseSummary,
+    CoverageSummary,
     EvaluationStatus,
     ScoreStatistics,
     StatusCounts,
@@ -68,8 +69,18 @@ def _breakdown(cases: Sequence[CaseSummary]) -> BreakdownSummary:
     )
 
 
-def aggregate(samples: Sequence[AggregationSample]) -> AggregationSummary:
+def aggregate(
+    samples: Sequence[AggregationSample],
+    *,
+    expected_samples: int | None = None,
+    minimum_scored_coverage: float = 0.95,
+) -> AggregationSummary:
     """Aggregate scored samples without converting other statuses into zeroes."""
+    expected = len(samples) if expected_samples is None else expected_samples
+    if expected <= 0:
+        raise AggregationError("expected sample count must be positive")
+    if len(samples) > expected:
+        raise AggregationError("more aggregation samples were supplied than expected")
     by_case: dict[str, list[AggregationSample]] = {}
     for sample in samples:
         by_case.setdefault(sample.identity.case_id, []).append(sample)
@@ -112,9 +123,22 @@ def aggregate(samples: Sequence[AggregationSample]) -> AggregationSummary:
         for tag in case.tags:
             tags[tag].append(case)
 
-    scored_case_count, score = _weighted_score(case_summaries)
+    scored_case_count, partial_score = _weighted_score(case_summaries)
+    scored_samples = sum(
+        sample.result.status is EvaluationStatus.SCORED for sample in samples
+    )
+    coverage_ratio = scored_samples / expected
+    coverage_sufficient = coverage_ratio >= minimum_scored_coverage
     return AggregationSummary(
-        score=score,
+        score=partial_score if coverage_sufficient else None,
+        partial_score=partial_score,
+        coverage=CoverageSummary(
+            expected_samples=expected,
+            scored_samples=scored_samples,
+            ratio=coverage_ratio,
+            minimum_required=minimum_scored_coverage,
+            sufficient=coverage_sufficient,
+        ),
         case_count=len(case_summaries),
         scored_case_count=scored_case_count,
         sample_status_counts=_counts(samples),
