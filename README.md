@@ -34,9 +34,10 @@ Derived summaries/comparisons
 - ElaraBench v1 will use filesystem artifacts, not a database or general plugin framework.
 - Executable benchmark evaluation will require sandbox isolation when it is introduced.
 
-See [Architecture](docs/architecture.md), [Benchmark format](docs/benchmark-format.md),
-[Result format](docs/result-format.md), and [Reproducibility](docs/reproducibility.md) for the
-approved v1 specifications.
+See [Architecture](docs/architecture.md), [Deterministic core](docs/deterministic-core.md),
+[Benchmark format](docs/benchmark-format.md), [Result format](docs/result-format.md), and
+[Reproducibility](docs/reproducibility.md) for the implemented M1 contracts and planned v1
+boundaries.
 
 ## Planned benchmark categories
 
@@ -65,6 +66,7 @@ Run the current CLI:
 ```bash
 elarabench --help
 elarabench --version
+elarabench validate tests/fixtures/tiny_suite
 ```
 
 Run the development checks:
@@ -77,9 +79,16 @@ python -m pytest
 
 ## Project status
 
-ElaraBench is unreleased and currently at M0: specification and project foundation. The CLI
-exposes only help and version information. Benchmark loading, model providers, execution,
-evaluation, and reporting have intentionally not been implemented yet.
+ElaraBench is unreleased and currently at M1: deterministic core. It implements validated
+provider-neutral domain models, safe benchmark loading, canonical SHA-256 identities, a
+deterministic fake provider, built-in deterministic evaluators, weighted aggregation, atomic
+filesystem artifact primitives, and suite validation through the CLI.
+
+Real model execution and full run orchestration remain intentionally absent. M2 will add the
+first real provider and runner lifecycle, including Ollama access, retries, resume behavior,
+timeouts, and complete run production. `score` and `summarize` CLI commands remain deferred
+until runner-produced artifacts contain the complete benchmark and evaluator context required
+to make those operations honest and reproducible.
 
 ## ElaraBench v1 scope
 

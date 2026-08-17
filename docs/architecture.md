@@ -34,8 +34,12 @@ Each layer has one responsibility:
 
 ElaraBench v1 deliberately uses ordinary versioned files for benchmark definitions and
 filesystem directories for run artifacts. It has no database and no general plugin framework.
-New provider and evaluator implementations will use explicit Python interfaces when their
-milestones begin; M0 defines neither interface speculatively.
+M1 implements narrow `ModelProvider` and `Evaluator` protocols, an explicit built-in evaluator
+mapping, and safe artifact-store primitives. These boundaries contain no scheduling logic.
+
+The M1 fake provider exists only to make provider consumers deterministic and testable. It
+selects configured outputs or errors by canonical generation-request hash and never performs
+evaluation. No real model backend is connected in M1.
 
 Deterministic evaluation is preferred. When a task cannot be scored deterministically, human
 or LLM-assisted evaluation must be recorded as a distinct evaluation mode with its own
@@ -47,3 +51,10 @@ part of M0.
 
 Reproducibility metadata is a first-class run output, not optional diagnostic information.
 The expected contract is defined in [reproducibility.md](reproducibility.md).
+
+## M2 boundary
+
+M2 will introduce real model execution, Ollama, and the production runner lifecycle. Retry,
+resume, timeout orchestration, and parallel scheduling are not implemented in M1. The artifact
+store contains persistence only; the CLI delegates validation to the benchmark loader and
+contains no benchmark or scoring rules.

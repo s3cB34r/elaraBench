@@ -1,0 +1,17 @@
+schema_version: 1
+id: synthetic.tiny
+version: 1.0.0
+title: Synthetic deterministic evaluator examples
+description: Small offline-only suite for ElaraBench tests and documentation.
+license: CC0-1.0
+provenance: Authored as synthetic ElaraBench test data; not sourced from model benchmarks.
+tags:
+  - synthetic
+cases:
+  path: cases.jsonl
+defaults:
+  repeats: 1
+  timeout_seconds: 30
+aggregation:
+  method: weighted_macro
+  unscored_policy: exclude

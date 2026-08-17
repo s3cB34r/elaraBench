@@ -53,3 +53,21 @@ be misleading. Results may still be inspected independently.
 
 Comparison classification is itself derived. It must be reproducible from stored run metadata
 and must never modify canonical run artifacts.
+
+## M1 canonical hashing contract
+
+M1 identities use SHA-256 over deterministic UTF-8 JSON. Object keys are sorted, separators are
+fixed, non-ASCII text is preserved, non-finite numbers are rejected, and semantically meaningful
+array order is retained. Dictionary insertion order, whitespace in YAML/JSONL, absolute suite
+paths, modification times, inode numbers, and other filesystem metadata do not participate.
+
+- A case hash includes every validated case field, including ordered messages and evaluator
+  specification.
+- A generation-request hash includes ordered messages, provider-neutral generation parameters,
+  seed, timeout, and optional response format.
+- An evaluator hash includes its type, configuration, ordered composite children, and weights.
+- A suite hash includes validated execution/scoring metadata, ordered validated cases, fixture
+  relative paths, and SHA-256 digests of every referenced fixture's bytes.
+
+Changing a prompt, evaluator configuration, case order, fixture path, or fixture contents changes
+the relevant identity. Touching a file without changing its contents does not.
