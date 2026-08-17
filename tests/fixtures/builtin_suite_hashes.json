@@ -1,0 +1,12 @@
+{
+  "reasoning.core": {
+    "version": "1.0.0",
+    "case_count": 18,
+    "content_hash": "76e8699add4c94921e40215b85b2b8870abf25023dff02bff92b0a51e6021b3c"
+  },
+  "instruction_following.core": {
+    "version": "1.0.0",
+    "case_count": 18,
+    "content_hash": "2dc75a0d7fa60c0503e1430cb797d35f7310cff1e325b8468b2d92bdaac10b39"
+  }
+}

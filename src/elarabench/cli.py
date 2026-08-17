@@ -11,6 +11,7 @@ from pydantic import ValidationError
 
 from elarabench import __version__
 from elarabench.benchmark import BenchmarkLoadError, load_benchmark_suite
+from elarabench.builtin import BuiltinSuiteError, resolve_suite_path
 from elarabench.models import (
     GenerationParameters,
     RetryPolicy,
@@ -48,7 +49,9 @@ def build_parser() -> argparse.ArgumentParser:
     validate_parser = commands.add_parser(
         "validate",
         help="validate and hash a benchmark suite",
-        description="Validate a benchmark suite and print its canonical identity.",
+        description=(
+            "Validate a benchmark suite path or bundled suite ID and print its canonical identity."
+        ),
     )
     validate_parser.add_argument("suite_path", type=Path, metavar="SUITE_PATH")
 
@@ -116,7 +119,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _validate_command(suite_path: Path) -> int:
-    loaded = load_benchmark_suite(suite_path)
+    loaded = load_benchmark_suite(resolve_suite_path(suite_path))
     print(f"Suite: {loaded.suite.id}")
     print(f"Version: {loaded.suite.version}")
     print(f"Cases: {len(loaded.suite.cases)}")
@@ -141,7 +144,7 @@ def _new_run_command(arguments: argparse.Namespace) -> int:
         raise RunnerError("SUITE_PATH is required unless --resume is used")
     if arguments.model is None:
         raise RunnerError("--model is required for a new run")
-    loaded = load_benchmark_suite(arguments.suite_path)
+    loaded = load_benchmark_suite(resolve_suite_path(arguments.suite_path))
     provider_type = arguments.provider or "ollama"
     repeats = (
         arguments.repeats
@@ -294,6 +297,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     except (
         ArtifactStoreError,
         BenchmarkLoadError,
+        BuiltinSuiteError,
         ProviderConfigurationError,
         RunIntegrityError,
         RunnerError,

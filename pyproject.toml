@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=68", "wheel>=0.42"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -29,8 +29,10 @@ dev = [
     "mypy>=1.11",
     "pytest>=8.0",
     "ruff>=0.6",
+    "setuptools>=68",
     "types-jsonschema>=4.23",
     "types-PyYAML>=6.0",
+    "wheel>=0.42",
 ]
 
 [project.scripts]
@@ -38,6 +40,14 @@ elarabench = "elarabench.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+elarabench = [
+    "py.typed",
+    "builtin_benchmarks/LICENSE",
+    "builtin_benchmarks/*/core-v1/*.yaml",
+    "builtin_benchmarks/*/core-v1/*.jsonl",
+]
 
 [tool.ruff]
 target-version = "py311"

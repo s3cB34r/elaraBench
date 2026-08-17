@@ -1,6 +1,6 @@
 # Benchmark format specification
 
-This document describes the benchmark layout implemented by the ElaraBench M2 loader. All
+This document describes the benchmark layout implemented by the ElaraBench loader. All
 manifests and cases are validated with strict Pydantic models; unknown fields are rejected.
 
 ## Suite layout
@@ -17,12 +17,15 @@ manifests and cases are validated with strict Pydantic models; unknown fields ar
 - `fixtures/` contains optional versioned inputs such as starter code, static samples, or test
   data. Benchmark definitions and fixtures remain trackable in Git.
 
+The directory is optional. The M3.1 reasoning and instruction-following suites are fully
+self-contained and deliberately do not create unused fixture directories.
+
 All suite files will contribute to a canonical content hash. File references must resolve
 within the suite and must not depend on machine-specific absolute paths.
 
 ## Suite fields
 
-The M2 manifest supports:
+The current manifest supports:
 
 - `schema_version`, currently exactly `1`.
 - Stable `id`, semantic `version`, `title`, and optional `description`.
@@ -64,12 +67,45 @@ limits, and an explicit network policy.
 
 Fixture references must use `/` separators, stay beneath `fixtures/`, resolve to regular files,
 and remain inside the suite after symlinks are resolved. Missing files, absolute paths, `..`
-segments, and symlink escapes are rejected. M2 reads fixture bytes for hashing and snapshotting
+segments, and symlink escapes are rejected. ElaraBench reads fixture bytes for hashing and snapshotting
 but never executes them.
+
+## First-party conventions
+
+Released first-party suites live as installable package data at
+`src/elarabench/builtin_benchmarks/<domain>/core-v<major>/`. Suite semantic versions remain in
+`suite.yaml`; the directory identifies the major line. CLI users address them by stable suite ID,
+such as `reasoning.core`, rather than relying on a repository path. M3 case IDs use
+`<domain>-<archetype>-<three-digit-number>`, lowercase kebab-case, and never encode an answer,
+difficulty, array position, or suite version.
+
+M3 cases use `easy`, `medium`, or `hard` plus one matching `difficulty-*` tag, weight 1.0, explicit
+`CC0-1.0` licensing, and consistent first-party provenance. Suite and case ordering are canonical
+benchmark content. Released IDs are never reassigned. See [Benchmark methodology](benchmark-methodology.md)
+and [Benchmark authoring](benchmark-authoring.md) for versioning and review rules.
+
+For example, a first-party manifest declares an explicit provider-neutral runtime policy while
+leaving provider-specific and run-level generation parameters outside the benchmark:
+
+```yaml
+schema_version: 1
+id: reasoning.core
+version: 1.0.0
+license: CC0-1.0
+defaults:
+  repeats: 1
+  timeout_seconds: 120
+  thinking: disabled
+```
+
+JSON tasks in the M3.1 instruction suite use ordinary textual requests rather than native
+provider `response_format` enforcement. JSON Schema `const` can require exact parsed values while
+allowing insignificant whitespace and object-key ordering. The raw response must still be valid
+JSON; Markdown fences are not repaired.
 
 ## Evaluator specifications
 
-M2 supports these explicit evaluator types:
+The current engine supports these explicit evaluator types:
 
 | Type | Configuration and semantics |
 | --- | --- |

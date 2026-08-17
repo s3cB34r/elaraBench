@@ -35,17 +35,56 @@ Derived summaries/comparisons
 - Executable benchmark evaluation will require sandbox isolation when it is introduced.
 
 See [Architecture](docs/architecture.md), [Deterministic core](docs/deterministic-core.md),
-[Benchmark format](docs/benchmark-format.md), [Result format](docs/result-format.md), and
-[Reproducibility](docs/reproducibility.md) for the implemented M2 contracts and planned v1
-boundaries.
+[Benchmark format](docs/benchmark-format.md), [Benchmark methodology](docs/benchmark-methodology.md),
+[Benchmark authoring](docs/benchmark-authoring.md), [Result format](docs/result-format.md), and
+[Reproducibility](docs/reproducibility.md) for the implemented contracts and v1 boundaries.
 
-## Planned benchmark categories
+## First-party benchmarks
 
-- Coding
-- Cybersecurity
-- Reasoning
-- Instruction following
-- Agentic and tool-use capabilities in a later milestone
+M3.1 includes two original, public, deterministic suites:
+
+| Suite | Version | Cases | Categories | Recommended output cap |
+| --- | --- | ---: | ---: | ---: |
+| `reasoning.core` | 1.0.0 | 18 | 6 | 64 tokens |
+| `instruction_following.core` | 1.0.0 | 18 | 6 | 128 tokens |
+
+Both use equal case weights, Thinking disabled as the canonical suite policy, a 120-second
+timeout, and self-contained prompts with no fixtures or network requirements. The benchmark data
+are dedicated under CC0-1.0 separately from the Python framework. Coding and cybersecurity suites
+are planned for M3.2; agentic and tool-use benchmarks remain later work.
+
+The suites are bundled in wheels and may be addressed by stable suite ID from any working
+directory. Run them with the canonical local profile:
+
+```bash
+elarabench run reasoning.core \
+  --provider ollama --model MODEL --temperature 0 --seed 42 \
+  --repeats 1 --no-think --timeout 120 --max-retries 0 --max-tokens 64
+
+elarabench run instruction_following.core \
+  --provider ollama --model MODEL --temperature 0 --seed 42 \
+  --repeats 1 --no-think --timeout 120 --max-retries 0 --max-tokens 128
+```
+
+Validation uses the same IDs:
+
+```bash
+elarabench validate reasoning.core
+elarabench validate instruction_following.core
+```
+
+Library callers can obtain the installed filesystem location without depending on the current
+working directory:
+
+```python
+from elarabench import get_builtin_suite_path
+
+reasoning_path = get_builtin_suite_path("reasoning.core")
+```
+
+The suites score final answers rather than reasoning traces. They are deliberately small and
+public: category scores are diagnostic, and the corpus cannot be claimed contamination-free. See
+the [benchmark catalog](benchmarks/README.md) for interpretation and licensing.
 
 Local models are the initial priority. Planned backends include Ollama, llama.cpp and
 llama-server, OpenAI-compatible APIs, and later Unsloth evaluation or fine-tuning workflows.
@@ -67,7 +106,7 @@ Run the current CLI:
 elarabench --help
 elarabench --version
 elarabench validate tests/fixtures/tiny_suite
-elarabench run path/to/suite --provider ollama --model gemma3
+elarabench run reasoning.core --provider ollama --model gemma3
 elarabench score runs/<run-id>
 elarabench summarize runs/<run-id>
 ```
@@ -139,17 +178,17 @@ python -m pytest
 
 ## Project status
 
-ElaraBench v0.2.1 is currently at M2: local model execution. It implements the M1
-deterministic core plus a synchronous concurrency-one runner, complete schema-v3 run artifacts,
-bounded retries, durable attempt history, Ctrl-C recovery, strict resume, environment discovery,
-coverage-aware summaries, offline rescoring, and a native Ollama provider. Historical M2
-schema-v2 runs remain available to offline `score` and `summarize`, but cannot resume under v3
-runtime semantics. A deterministic fake provider keeps the complete runner path testable without
-network or model hardware.
+ElaraBench v0.2.1 plus M3.1 includes local model execution and the first two real first-party
+benchmark suites. The engine provides the deterministic core, a synchronous concurrency-one
+runner, complete schema-v3 run artifacts, bounded retries, durable attempt history, Ctrl-C
+recovery, strict resume, environment discovery, coverage-aware summaries, offline rescoring, and
+a native Ollama provider. Historical M2 schema-v2 runs remain available to offline `score` and
+`summarize`, but cannot resume under v3 runtime semantics. A deterministic fake provider keeps the
+complete runner and first-party suite paths testable without network or model hardware.
 
-M2 does not include parallel or distributed execution, OpenAI-compatible or llama.cpp-specific
-providers, model downloading, executable benchmark sandboxes, LLM judges, a database, or a web
-interface.
+M3.1 does not include coding or cybersecurity corpus content, parallel or distributed execution,
+OpenAI-compatible or llama.cpp-specific providers, model downloading, executable benchmark
+sandboxes, LLM judges, a database, or a web interface.
 
 ## ElaraBench v1 scope
 

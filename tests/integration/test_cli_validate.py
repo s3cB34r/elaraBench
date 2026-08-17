@@ -6,6 +6,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 TINY_SUITE = Path(__file__).parents[1] / "fixtures" / "tiny_suite"
 
 
@@ -38,3 +40,18 @@ def test_validate_fails_cleanly_for_invalid_suite(tmp_path: Path) -> None:
     assert result.returncode != 0
     assert result.stdout == ""
     assert "unsupported benchmark schema_version 99" in result.stderr
+
+
+@pytest.mark.parametrize(
+    ("suite_id", "case_count"),
+    (("reasoning.core", 18), ("instruction_following.core", 18)),
+)
+def test_validate_resolves_bundled_suite_id(suite_id: str, case_count: int) -> None:
+    result = run_cli("validate", suite_id)
+
+    assert result.returncode == 0
+    assert f"Suite: {suite_id}" in result.stdout
+    assert "Version: 1.0.0" in result.stdout
+    assert f"Cases: {case_count}" in result.stdout
+    assert "Content hash:" in result.stdout
+    assert result.stderr == ""

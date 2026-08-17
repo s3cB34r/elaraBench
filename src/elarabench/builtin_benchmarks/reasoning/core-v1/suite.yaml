@@ -1,0 +1,22 @@
+schema_version: 1
+id: reasoning.core
+version: 1.0.0
+title: ElaraBench Reasoning Core
+description: Original, offline tasks measuring deterministic reasoning from supplied information.
+license: CC0-1.0
+provenance: ElaraBench first-party public corpus; LLM-assisted drafting with independent deterministic verification; created for the 1.0.0 release.
+tags:
+  - first-party
+  - offline
+  - deterministic
+  - reasoning
+cases:
+  path: cases.jsonl
+defaults:
+  repeats: 1
+  timeout_seconds: 120
+  thinking: disabled
+aggregation:
+  method: weighted_macro
+  unscored_policy: exclude
+  minimum_scored_coverage: 0.95
