@@ -1,0 +1,12 @@
+{"case_id":"coding-comprehension-001","correct_response":"10","incorrect_response":"8","malformed_response":"The result is 10."}
+{"case_id":"coding-comprehension-002","correct_response":"D","incorrect_response":"A","malformed_response":"Option D"}
+{"case_id":"coding-comprehension-003","correct_response":"B|2","incorrect_response":"A|1"}
+{"case_id":"coding-debugging-001","correct_response":"A","incorrect_response":"B","malformed_response":"A: the final value is skipped."}
+{"case_id":"coding-debugging-002","correct_response":"C","incorrect_response":"D","malformed_response":"Use option C."}
+{"case_id":"coding-debugging-003","correct_response":"B","incorrect_response":"C","malformed_response":"B because low must advance."}
+{"case_id":"coding-algorithm-analysis-001","correct_response":"D","incorrect_response":"C","malformed_response":"O(n)"}
+{"case_id":"coding-algorithm-analysis-002","correct_response":"C","incorrect_response":"D","malformed_response":"The answer is C."}
+{"case_id":"coding-algorithm-analysis-003","correct_response":"{\"time\":\"O(n log n)\",\"auxiliary_space\":\"O(log n)\"}","incorrect_response":"{\"time\":\"O(n)\",\"auxiliary_space\":\"O(log n)\"}","malformed_response":"```json\n{\"time\":\"O(n log n)\",\"auxiliary_space\":\"O(log n)\"}\n```"}
+{"case_id":"coding-patch-selection-001","correct_response":"B","incorrect_response":"C","malformed_response":"Option B"}
+{"case_id":"coding-patch-selection-002","correct_response":"A","incorrect_response":"B","malformed_response":"A is correct."}
+{"case_id":"coding-patch-selection-003","correct_response":"D","incorrect_response":"A","malformed_response":"Choose D."}

@@ -23,6 +23,14 @@ EXPECTED = {
         18,
         "2dc75a0d7fa60c0503e1430cb797d35f7310cff1e325b8468b2d92bdaac10b39",
     ),
+    "coding.core": (
+        12,
+        "0f1c5d78434ed711d7759eff8c5e727553a65364d2006b788f5710f5a91d7d94",
+    ),
+    "cybersecurity.core": (
+        12,
+        "61f0ce35f487ed1ad9c7cf10f7feaa5bd233ad5ceb0885b2bd1f940eb46d1ba3",
+    ),
 }
 
 
@@ -30,6 +38,8 @@ def test_available_builtin_suites_have_stable_order() -> None:
     assert available_builtin_suites() == (
         "reasoning.core",
         "instruction_following.core",
+        "coding.core",
+        "cybersecurity.core",
     )
 
 

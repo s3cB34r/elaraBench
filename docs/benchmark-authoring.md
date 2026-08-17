@@ -9,7 +9,7 @@ are never reused, and later recategorization does not rename them.
 
 M3 first-party cases use exactly one difficulty value (`easy`, `medium`, or `hard`) and exactly one
 matching `difficulty-*` tag. Every case has weight 1.0 and explicit `CC0-1.0` license and
-provenance. The M3.1 provenance record consistently identifies first-party origin, ElaraBench
+provenance. The M3 provenance record consistently identifies first-party origin, ElaraBench
 contributors, creation method and disclosed drafting assistance, lack of a derived source,
 independent expected-answer derivation, initial contamination risk, and introduction version.
 
@@ -65,11 +65,24 @@ Never update a pin merely to silence an unexplained failure.
 
 ## Fixtures and safety
 
-Reasoning and instruction-following core cases are self-contained and use no fixtures. A future
+All initial M3 core cases are self-contained and use no fixtures. A future
 fixture must be referenced by a case, have compatible provenance and licensing, remain beneath the
 suite's `fixtures/` directory, and participate in suite hashing and snapshots. Loading a fixture
 never authorizes its execution. Executable coding or cybersecurity evaluation requires a separate
 sandbox milestone.
+
+Coding v1 cases are static-analysis tasks. Authors may use trusted local calculations or execute a
+fixed author-controlled snippet while independently verifying ground truth, but runtime evaluators
+must never execute model output. Language version and any non-universal semantics belong in the
+prompt. Complexity questions name the input-size variable and patch-selection questions have one
+best option under explicit requirements.
+
+Cybersecurity v1 cases use synthetic defensive evidence only. Logs, identities, domains, network
+addresses, configurations, and incidents must not target real infrastructure; documentation
+address ranges are preferred where addresses are needed. A case may identify a flaw or select a
+remediation, but must not request exploitation, scanning, credential use, malware, persistence,
+evasion, destructive action, or operational attack steps. Incident priorities must be derived from
+a policy supplied in the prompt rather than an unstated SOC convention.
 
 ## Review scope
 

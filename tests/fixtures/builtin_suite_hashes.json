@@ -8,5 +8,15 @@
     "version": "1.0.0",
     "case_count": 18,
     "content_hash": "2dc75a0d7fa60c0503e1430cb797d35f7310cff1e325b8468b2d92bdaac10b39"
+  },
+  "coding.core": {
+    "version": "1.0.0",
+    "case_count": 12,
+    "content_hash": "0f1c5d78434ed711d7759eff8c5e727553a65364d2006b788f5710f5a91d7d94"
+  },
+  "cybersecurity.core": {
+    "version": "1.0.0",
+    "case_count": 12,
+    "content_hash": "61f0ce35f487ed1ad9c7cf10f7feaa5bd233ad5ceb0885b2bd1f940eb46d1ba3"
   }
 }

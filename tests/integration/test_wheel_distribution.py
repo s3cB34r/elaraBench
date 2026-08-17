@@ -17,11 +17,19 @@ EXPECTED_WHEEL_FILES = {
     "elarabench/builtin_benchmarks/reasoning/core-v1/cases.jsonl",
     "elarabench/builtin_benchmarks/instruction_following/core-v1/suite.yaml",
     "elarabench/builtin_benchmarks/instruction_following/core-v1/cases.jsonl",
+    "elarabench/builtin_benchmarks/coding/core-v1/suite.yaml",
+    "elarabench/builtin_benchmarks/coding/core-v1/cases.jsonl",
+    "elarabench/builtin_benchmarks/cybersecurity/core-v1/suite.yaml",
+    "elarabench/builtin_benchmarks/cybersecurity/core-v1/cases.jsonl",
 }
 EXPECTED_HASHES = {
     "reasoning.core": "76e8699add4c94921e40215b85b2b8870abf25023dff02bff92b0a51e6021b3c",
     "instruction_following.core": (
         "2dc75a0d7fa60c0503e1430cb797d35f7310cff1e325b8468b2d92bdaac10b39"
+    ),
+    "coding.core": "0f1c5d78434ed711d7759eff8c5e727553a65364d2006b788f5710f5a91d7d94",
+    "cybersecurity.core": (
+        "61f0ce35f487ed1ad9c7cf10f7feaa5bd233ad5ceb0885b2bd1f940eb46d1ba3"
     ),
 }
 
@@ -121,7 +129,12 @@ from elarabench.builtin import get_builtin_suite_path
 
 assert pathlib.Path(elarabench.__file__).resolve().is_relative_to(installed)
 result = {}
-for suite_id in ("reasoning.core", "instruction_following.core"):
+for suite_id in (
+    "reasoning.core",
+    "instruction_following.core",
+    "coding.core",
+    "cybersecurity.core",
+):
     path = get_builtin_suite_path(suite_id)
     assert path.is_relative_to(installed)
     loaded = load_benchmark_suite(path)
@@ -140,6 +153,8 @@ print(json.dumps(result, sort_keys=True))
     result = cast(dict[str, dict[str, object]], json.loads(probe.stdout))
     assert result["reasoning.core"]["case_count"] == 18
     assert result["instruction_following.core"]["case_count"] == 18
+    assert result["coding.core"]["case_count"] == 12
+    assert result["cybersecurity.core"]["case_count"] == 12
     assert {
         suite_id: data["hash"] for suite_id, data in result.items()
     } == EXPECTED_HASHES

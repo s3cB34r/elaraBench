@@ -17,8 +17,8 @@ manifests and cases are validated with strict Pydantic models; unknown fields ar
 - `fixtures/` contains optional versioned inputs such as starter code, static samples, or test
   data. Benchmark definitions and fixtures remain trackable in Git.
 
-The directory is optional. The M3.1 reasoning and instruction-following suites are fully
-self-contained and deliberately do not create unused fixture directories.
+The directory is optional. All four initial M3 suites are fully self-contained and deliberately do
+not create unused fixture directories.
 
 All suite files will contribute to a canonical content hash. File references must resolve
 within the suite and must not depend on machine-specific absolute paths.
@@ -98,7 +98,7 @@ defaults:
   thinking: disabled
 ```
 
-JSON tasks in the M3.1 instruction suite use ordinary textual requests rather than native
+JSON tasks in the M3 suites use ordinary textual requests rather than native
 provider `response_format` enforcement. JSON Schema `const` can require exact parsed values while
 allowing insignificant whitespace and object-key ordering. The raw response must still be valid
 JSON; Markdown fences are not repaired.

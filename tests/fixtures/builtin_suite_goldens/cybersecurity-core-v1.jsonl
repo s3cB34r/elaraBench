@@ -1,0 +1,12 @@
+{"case_id":"cyber-log-analysis-001","correct_response":"B","incorrect_response":"A","malformed_response":"The account is bo."}
+{"case_id":"cyber-log-analysis-002","correct_response":"D","incorrect_response":"A","malformed_response":"app-2"}
+{"case_id":"cyber-log-analysis-003","correct_response":"A","incorrect_response":"B","malformed_response":"198.51.100.81"}
+{"case_id":"cyber-secure-code-review-001","correct_response":"C","incorrect_response":"A","malformed_response":"Use C."}
+{"case_id":"cyber-secure-code-review-002","correct_response":"A","incorrect_response":"B","malformed_response":"Option A enforces ownership."}
+{"case_id":"cyber-secure-code-review-003","correct_response":"D","incorrect_response":"C","malformed_response":"D is the complete redesign."}
+{"case_id":"cyber-configuration-review-001","correct_response":"B","incorrect_response":"D","malformed_response":"0600"}
+{"case_id":"cyber-configuration-review-002","correct_response":"C","incorrect_response":"B","malformed_response":"Configuration C"}
+{"case_id":"cyber-configuration-review-003","correct_response":"A","incorrect_response":"D","malformed_response":"A uses least privilege."}
+{"case_id":"cyber-incident-triage-001","correct_response":"high","incorrect_response":"medium"}
+{"case_id":"cyber-incident-triage-002","correct_response":"B","incorrect_response":"A","malformed_response":"Isolate lab-14."}
+{"case_id":"cyber-incident-triage-003","correct_response":"{\"severity\":\"critical\",\"first_action\":\"disable-service-token\",\"affected_asset\":\"unknown\"}","incorrect_response":"{\"severity\":\"critical\",\"first_action\":\"isolate-build-07\",\"affected_asset\":\"build-07\"}","malformed_response":"```json\n{\"severity\":\"critical\",\"first_action\":\"disable-service-token\",\"affected_asset\":\"unknown\"}\n```"}

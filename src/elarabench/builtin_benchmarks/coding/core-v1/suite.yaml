@@ -1,0 +1,23 @@
+schema_version: 1
+id: coding.core
+version: 1.0.0
+title: ElaraBench Coding Core
+description: Original, offline tasks measuring static code comprehension, debugging, algorithm analysis, and patch selection.
+license: CC0-1.0
+provenance: ElaraBench first-party public corpus; LLM-assisted drafting with independent deterministic verification; created for the 1.0.0 release.
+tags:
+  - first-party
+  - offline
+  - deterministic
+  - coding
+  - static-analysis
+cases:
+  path: cases.jsonl
+defaults:
+  repeats: 1
+  timeout_seconds: 120
+  thinking: disabled
+aggregation:
+  method: weighted_macro
+  unscored_policy: exclude
+  minimum_scored_coverage: 0.95

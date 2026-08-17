@@ -40,12 +40,28 @@ SUITE_PROFILES = (
         get_builtin_suite_path("reasoning.core"),
         GOLDEN_ROOT / "reasoning-core-v1.jsonl",
         64,
+        18,
     ),
     (
         "instruction_following.core",
         get_builtin_suite_path("instruction_following.core"),
         GOLDEN_ROOT / "instruction-following-core-v1.jsonl",
         128,
+        18,
+    ),
+    (
+        "coding.core",
+        get_builtin_suite_path("coding.core"),
+        GOLDEN_ROOT / "coding-core-v1.jsonl",
+        128,
+        12,
+    ),
+    (
+        "cybersecurity.core",
+        get_builtin_suite_path("cybersecurity.core"),
+        GOLDEN_ROOT / "cybersecurity-core-v1.jsonl",
+        192,
+        12,
     ),
 )
 
@@ -135,7 +151,7 @@ def run_with_responses(
 
 
 @pytest.mark.parametrize(
-    ("suite_id", "suite_path", "golden_path", "max_tokens"),
+    ("suite_id", "suite_path", "golden_path", "max_tokens", "expected_count"),
     SUITE_PROFILES,
 )
 def test_all_correct_fake_provider_run_scores_one(
@@ -144,6 +160,7 @@ def test_all_correct_fake_provider_run_scores_one(
     suite_path: Path,
     golden_path: Path,
     max_tokens: int,
+    expected_count: int,
 ) -> None:
     loaded = load_benchmark_suite(suite_path)
     goldens = load_goldens(golden_path)
@@ -158,11 +175,11 @@ def test_all_correct_fake_provider_run_scores_one(
     assert result.summary.score == 1.0
     assert result.summary.partial_score == 1.0
     assert result.summary.coverage.ratio == 1.0
-    assert result.summary.coverage.scored_samples == 18
+    assert result.summary.coverage.scored_samples == expected_count
 
 
 @pytest.mark.parametrize(
-    ("suite_id", "suite_path", "golden_path", "max_tokens"),
+    ("suite_id", "suite_path", "golden_path", "max_tokens", "expected_count"),
     SUITE_PROFILES,
 )
 def test_mixed_fake_provider_run_keeps_coverage_and_reduces_score(
@@ -171,6 +188,7 @@ def test_mixed_fake_provider_run_keeps_coverage_and_reduces_score(
     suite_path: Path,
     golden_path: Path,
     max_tokens: int,
+    expected_count: int,
 ) -> None:
     loaded = load_benchmark_suite(suite_path)
     goldens = load_goldens(golden_path)
@@ -193,6 +211,6 @@ def test_mixed_fake_provider_run_keeps_coverage_and_reduces_score(
     assert result.summary.score == 0.5
     assert result.summary.partial_score == 0.5
     assert result.summary.coverage.ratio == 1.0
-    assert result.summary.coverage.scored_samples == 18
-    assert result.summary.sample_status_counts.scored == 18
+    assert result.summary.coverage.scored_samples == expected_count
+    assert result.summary.sample_status_counts.scored == expected_count
     assert result.summary.sample_status_counts.error == 0

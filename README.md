@@ -41,17 +41,21 @@ See [Architecture](docs/architecture.md), [Deterministic core](docs/deterministi
 
 ## First-party benchmarks
 
-M3.1 includes two original, public, deterministic suites:
+M3 includes four original, public, deterministic suites:
 
 | Suite | Version | Cases | Categories | Recommended output cap |
 | --- | --- | ---: | ---: | ---: |
 | `reasoning.core` | 1.0.0 | 18 | 6 | 64 tokens |
 | `instruction_following.core` | 1.0.0 | 18 | 6 | 128 tokens |
+| `coding.core` | 1.0.0 | 12 | 4 | 128 tokens |
+| `cybersecurity.core` | 1.0.0 | 12 | 4 | 192 tokens |
 
-Both use equal case weights, Thinking disabled as the canonical suite policy, a 120-second
+All four use equal case weights, Thinking disabled as the canonical suite policy, a 120-second
 timeout, and self-contained prompts with no fixtures or network requirements. The benchmark data
-are dedicated under CC0-1.0 separately from the Python framework. Coding and cybersecurity suites
-are planned for M3.2; agentic and tool-use benchmarks remain later work.
+are dedicated under CC0-1.0 separately from the Python framework. `coding.core` measures static
+code analysis and never executes model-generated code. `cybersecurity.core` uses synthetic,
+defensive static evidence and performs no scanning, exploitation, or live-system interaction.
+Agentic, tool-use, and sandboxed execution benchmarks remain later work.
 
 The suites are bundled in wheels and may be addressed by stable suite ID from any working
 directory. Run them with the canonical local profile:
@@ -64,6 +68,14 @@ elarabench run reasoning.core \
 elarabench run instruction_following.core \
   --provider ollama --model MODEL --temperature 0 --seed 42 \
   --repeats 1 --no-think --timeout 120 --max-retries 0 --max-tokens 128
+
+elarabench run coding.core \
+  --provider ollama --model MODEL --temperature 0 --seed 42 \
+  --repeats 1 --no-think --timeout 120 --max-retries 0 --max-tokens 128
+
+elarabench run cybersecurity.core \
+  --provider ollama --model MODEL --temperature 0 --seed 42 \
+  --repeats 1 --no-think --timeout 120 --max-retries 0 --max-tokens 192
 ```
 
 Validation uses the same IDs:
@@ -71,6 +83,8 @@ Validation uses the same IDs:
 ```bash
 elarabench validate reasoning.core
 elarabench validate instruction_following.core
+elarabench validate coding.core
+elarabench validate cybersecurity.core
 ```
 
 Library callers can obtain the installed filesystem location without depending on the current
@@ -178,17 +192,18 @@ python -m pytest
 
 ## Project status
 
-ElaraBench v0.2.1 plus M3.1 includes local model execution and the first two real first-party
-benchmark suites. The engine provides the deterministic core, a synchronous concurrency-one
+ElaraBench v0.2.1 plus M3 includes local model execution and four real first-party benchmark
+suites totaling 60 cases. The engine provides the deterministic core, a synchronous concurrency-one
 runner, complete schema-v3 run artifacts, bounded retries, durable attempt history, Ctrl-C
 recovery, strict resume, environment discovery, coverage-aware summaries, offline rescoring, and
 a native Ollama provider. Historical M2 schema-v2 runs remain available to offline `score` and
 `summarize`, but cannot resume under v3 runtime semantics. A deterministic fake provider keeps the
 complete runner and first-party suite paths testable without network or model hardware.
 
-M3.1 does not include coding or cybersecurity corpus content, parallel or distributed execution,
-OpenAI-compatible or llama.cpp-specific providers, model downloading, executable benchmark
-sandboxes, LLM judges, a database, or a web interface.
+M3 coding and cybersecurity coverage is intentionally static. It does not include executable
+benchmark sandboxes, arbitrary model-generated execution, live security targets, parallel or
+distributed execution, OpenAI-compatible or llama.cpp-specific providers, model downloading,
+LLM judges, a database, or a web interface.
 
 ## ElaraBench v1 scope
 

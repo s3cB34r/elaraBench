@@ -35,7 +35,7 @@ Provider failures, evaluator errors, invalid benchmark configurations, pending r
 missing samples do not become zero. The core suites require 95% scored coverage for a headline
 score and still expose a partial score and status counts below that threshold.
 
-Category and tag breakdowns are diagnostics. Each M3.1 category has only three cases, so its score
+Category and tag breakdowns are diagnostics. Each M3 category has only three cases, so its score
 is a coarse signal rather than a statistically precise estimate. ElaraBench does not manufacture
 confidence intervals from these small samples.
 
@@ -68,11 +68,12 @@ Each suite is an independent measurement. M3 defines no cross-suite grand score.
 
 ## Reproducibility and Thinking
 
-The primary M3.1 profile uses temperature 0, seed 42 when supported, one repeat, Thinking disabled,
+The primary M3 profile uses temperature 0, seed 42 when supported, one repeat, Thinking disabled,
 a 120-second timeout, no retries, and concurrency one. Top-p, top-k, and stop remain unset. The
-recommended output cap is 64 tokens for `reasoning.core` and 128 for
-`instruction_following.core`. Output caps are run-level recommendations because the current suite
-schema does not contain general generation parameters.
+recommended output caps are 64 tokens for `reasoning.core`, 128 for
+`instruction_following.core` and `coding.core`, and 192 for `cybersecurity.core`. Output caps are
+run-level recommendations because the current suite schema does not contain general generation
+parameters.
 
 The manifest and request artifacts, not the recommendation, record what actually ran. A seed does
 not guarantee identical GPU inference. Thinking-enabled evaluation deliberately reuses the same
@@ -82,7 +83,7 @@ change independently of benchmark files.
 
 ## Provenance and contamination
 
-M3.1 cases are original ElaraBench first-party synthetic tasks released publicly under CC0-1.0.
+M3 cases are original ElaraBench first-party synthetic tasks released publicly under CC0-1.0.
 Their wording, values, and structures were created for ElaraBench rather than copied from public
 benchmark corpora or online puzzles. Drafting used LLM assistance under manual direction; every
 expected answer and evaluator outcome is independently checked by deterministic calculation,
@@ -101,3 +102,20 @@ instruction-following skill, and performance can be affected by model templates,
 runtime policies, and constrained output ability. Results should be compared only with compatible
 suite hashes and documented run settings. Broader conclusions require additional suites and model
 evidence.
+
+## Static coding and cybersecurity scope
+
+`coding.core` v1 measures static code comprehension, debugging, algorithm analysis, and selection
+among supplied patches. It does not measure unrestricted program synthesis or repository-level
+software engineering. Model output is never run, compiled, interpreted, applied as a patch, or
+passed to a shell.
+
+`cybersecurity.core` v1 measures defensive analysis of synthetic logs, supplied source code,
+configuration fragments, and incident facts. It does not measure operational penetration testing
+and contains no live target, scanning, exploit execution, credential use, persistence, evasion, or
+malware execution. Any organizational response rule needed for an objective answer appears in the
+prompt.
+
+Execution-based coding and cybersecurity scoring is deliberately deferred until a trusted sandbox
+can provide resource limits, filesystem isolation, and an explicit network policy. Merely loading a
+benchmark or evaluating a response never grants execution authority.
