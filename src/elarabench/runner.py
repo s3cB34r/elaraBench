@@ -18,6 +18,7 @@ from elarabench.benchmark import (
 )
 from elarabench.environment import discover_environment, discover_framework_metadata
 from elarabench.evaluators.registry import evaluate
+from elarabench.evidence import validate_physical_run_evidence
 from elarabench.hashing import hash_evaluation_specification, hash_generation_request
 from elarabench.legacy_v2 import LegacyV2RunManifest
 from elarabench.models import (
@@ -265,7 +266,7 @@ class Runner:
         invocation_id = f"resume-{uuid4().hex}"
         execution_started = False
         try:
-            manifest, snapshot = validate_stored_run(store)
+            manifest, snapshot = validate_stored_run(store, validate_samples=False)
             if isinstance(manifest, LegacyV2RunManifest):
                 raise RunnerError(
                     "result schema v2 predates explicit Thinking-policy identity; "
@@ -300,6 +301,7 @@ class Runner:
             if expected_plan != manifest.request_plan:
                 raise RunnerError("resolved request identity changed; resume rejected")
             self._validate_existing_samples(store, requests)
+            validate_physical_run_evidence(store, manifest)
             fingerprint = compute_run_fingerprint(
                 snapshot=snapshot,
                 configuration=manifest.configuration,

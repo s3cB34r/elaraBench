@@ -52,6 +52,15 @@ def validate_specification(specification: EvaluationSpecification) -> None:
     _evaluator(specification).validate_specification(specification)
 
 
+def resolve_evaluator_identity(
+    specification: EvaluationSpecification,
+) -> tuple[str, str]:
+    """Validate and return deterministic current-registry evaluator identity."""
+    evaluator = _evaluator(specification)
+    evaluator.validate_specification(specification)
+    return evaluator.name, evaluator.version
+
+
 def evaluate(context: EvaluationContext) -> EvaluationResult:
     """Dispatch evaluation and classify model, benchmark, and technical failures."""
     try:

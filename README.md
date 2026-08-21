@@ -37,7 +37,8 @@ Derived summaries/comparisons
 See [Architecture](docs/architecture.md), [Deterministic core](docs/deterministic-core.md),
 [Benchmark format](docs/benchmark-format.md), [Benchmark methodology](docs/benchmark-methodology.md),
 [Benchmark authoring](docs/benchmark-authoring.md), [Result format](docs/result-format.md), and
-[Reproducibility](docs/reproducibility.md) for the implemented contracts and v1 boundaries.
+[Reproducibility](docs/reproducibility.md), and [Comparison](docs/comparison.md) for the
+implemented contracts and v1 boundaries.
 
 ## First-party benchmarks
 
@@ -123,12 +124,22 @@ elarabench validate tests/fixtures/tiny_suite
 elarabench run reasoning.core --provider ollama --model gemma3
 elarabench score runs/<run-id>
 elarabench summarize runs/<run-id>
+elarabench compare runs/<baseline-id> runs/<candidate-id> --intent model
 ```
 
 `run` uses Ollama's native API and defaults to `http://127.0.0.1:11434`. The service and named
 model must already be available; ElaraBench never downloads models. `score` re-evaluates stored
 responses, while `summarize` only aggregates stored evaluations. Neither command contacts a
 provider.
+
+`compare` validates both source runs read-only and applies current evaluators symmetrically in
+memory before reporting `candidate - baseline`. It separates strict, qualified, and
+not-directly-comparable quality evidence from performance comparability. Full-suite deltas require
+identical benchmark content and complete scored populations; `--json` and `--output PATH` expose
+the versioned machine-readable result. In M4.1, compare exit status reflects quality only: 0 for
+strict/qualified quality, 1 for quality that is not directly comparable, and 2 for input or
+operational failure. Performance comparability remains independently reported. See
+[Same-benchmark comparison](docs/comparison.md).
 
 ## Runtime policy
 
@@ -192,7 +203,8 @@ python -m pytest
 
 ## Project status
 
-ElaraBench v0.2.1 plus M3 includes local model execution and four real first-party benchmark
+ElaraBench v0.2.1 plus M3 and M4.1 includes local model execution, trustworthy same-benchmark
+comparison, and four real first-party benchmark
 suites totaling 60 cases. The engine provides the deterministic core, a synchronous concurrency-one
 runner, complete schema-v3 run artifacts, bounded retries, durable attempt history, Ctrl-C
 recovery, strict resume, environment discovery, coverage-aware summaries, offline rescoring, and

@@ -154,3 +154,17 @@ when evaluator semantics change, but canonical response text remains untouched a
 evaluators never repair it. Regenerated evaluations and summaries record the physical run's
 source result schema, so a current rescore of v2 evidence is not presented as its historical
 original score.
+
+## Comparison schema 1
+
+Comparison JSON is an independent derived artifact; it does not change result schema v3 or live
+inside either source run. Output paths inside source runs are rejected. Schema 1 records
+comparison policy `1.0.0`, ordered baseline/candidate run and evidence identities, intent,
+benchmark/model/profile evidence, separate quality and performance assessments, current in-memory
+evaluator provenance, coverage/population mode, and available full-suite or matched-case partial
+case/category/tag deltas. `generated_at` is descriptive and excluded from the deterministic
+comparison fingerprint.
+
+Stored `summary.json` and `evaluation.json` files are not used as asymmetric score authorities.
+Comparison evaluates both canonical response sets in memory and writes nothing back. See
+[Same-benchmark comparison](comparison.md) for the full contract.

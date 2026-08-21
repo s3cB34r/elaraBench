@@ -100,6 +100,20 @@ schema-v2 manifests, snapshots, request hashes, and fingerprint schema v1 withou
 defaults. Those runs can be scored and summarized, but cannot resume because doing so would mix
 pre-Thinking and explicit-Thinking execution semantics. Canonical v2 evidence remains immutable.
 
+## Read-only comparison
+
+M4.1 extracts manifest, snapshot, request, response, provider/model, and environment evidence
+through the same version-aware validator used by offline scoring. Comparison deliberately skips
+the validator's eager evaluator check so an unavailable current evaluator becomes typed
+comparison evidence rather than corrupting otherwise valid physical input. It then validates the
+stored evaluator specifications and evaluates both canonical response sets in memory. No scoring,
+summary, event, manifest, or source artifact write occurs.
+
+The comparison domain is independent of result schema v3: comparison schema 1 and policy version
+`1.0.0` represent intent, field evidence, separate quality/performance classifications, complete
+or matched-case population, and case/category/tag deltas. Optional JSON export is the only write
+and targets a caller-selected path outside the source-run protocol.
+
 ## Evaluation outcome boundaries
 
 An evaluator returns `scored` whenever generation succeeded, its configuration and ground truth

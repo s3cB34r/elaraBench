@@ -12,6 +12,18 @@ from pydantic import ValidationError
 from elarabench import __version__
 from elarabench.benchmark import BenchmarkLoadError, load_benchmark_suite
 from elarabench.builtin import BuiltinSuiteError, resolve_suite_path
+from elarabench.comparison import (
+    ComparisonError,
+    compare_runs,
+    comparison_json,
+    write_comparison,
+)
+from elarabench.comparison_models import (
+    ComparabilityClassification,
+    ComparisonIntent,
+    ComparisonResult,
+    EvidenceState,
+)
 from elarabench.models import (
     GenerationParameters,
     RetryPolicy,
@@ -115,6 +127,28 @@ def build_parser() -> argparse.ArgumentParser:
         help="regenerate a summary from stored evaluations",
     )
     summarize_parser.add_argument("run_path", type=Path, metavar="RUN_PATH")
+
+    compare_parser = commands.add_parser(
+        "compare",
+        help="compare baseline and candidate run evidence",
+        description=(
+            "Compare the candidate (second path) against the baseline (first path) "
+            "after checking methodological comparability. Exit status reflects quality "
+            "comparability only: 0 for strict/qualified, 1 for quality not directly "
+            "comparable, and 2 for input or operational failure."
+        ),
+    )
+    compare_parser.add_argument("baseline_run", type=Path, metavar="BASELINE_RUN")
+    compare_parser.add_argument("candidate_run", type=Path, metavar="CANDIDATE_RUN")
+    compare_parser.add_argument(
+        "--intent",
+        choices=tuple(intent.value for intent in ComparisonIntent),
+        default=ComparisonIntent.MODEL.value,
+    )
+    compare_parser.add_argument(
+        "--json", action="store_true", dest="json_output", help="print complete JSON"
+    )
+    compare_parser.add_argument("--output", type=Path, metavar="PATH")
     return parser
 
 
@@ -146,11 +180,7 @@ def _new_run_command(arguments: argparse.Namespace) -> int:
         raise RunnerError("--model is required for a new run")
     loaded = load_benchmark_suite(resolve_suite_path(arguments.suite_path))
     provider_type = arguments.provider or "ollama"
-    repeats = (
-        arguments.repeats
-        if arguments.repeats is not None
-        else loaded.suite.defaults.repeats
-    )
+    repeats = arguments.repeats if arguments.repeats is not None else loaded.suite.defaults.repeats
     timeout = (
         arguments.timeout
         if arguments.timeout is not None
@@ -275,6 +305,124 @@ def _summarize_command(path: Path) -> int:
     return 0 if summary.coverage.sufficient else 1
 
 
+def _print_comparison(result: ComparisonResult) -> None:
+    baseline_benchmark = result.baseline.benchmark
+    candidate_benchmark = result.candidate.benchmark
+    if baseline_benchmark == candidate_benchmark:
+        print(
+            f"Benchmark: {baseline_benchmark.suite_id} "
+            f"v{baseline_benchmark.version}"
+        )
+    else:
+        print(
+            f"Baseline benchmark: {baseline_benchmark.suite_id} "
+            f"v{baseline_benchmark.version} "
+            f"({baseline_benchmark.content_hash})"
+        )
+        print(
+            f"Candidate benchmark: {candidate_benchmark.suite_id} "
+            f"v{candidate_benchmark.version} "
+            f"({candidate_benchmark.content_hash})"
+        )
+    print(f"Intent: {result.intent.value}")
+    print(f"Quality comparability: {result.quality_comparability.classification.value.upper()}")
+    print(
+        "Performance comparability: "
+        f"{result.performance_comparability.classification.value.upper()}"
+    )
+    quality_reasons = result.quality_comparability.reason_codes
+    if quality_reasons:
+        print("Quality reasons: " + ", ".join(reason.value for reason in quality_reasons))
+    performance_reasons = result.performance_comparability.reason_codes
+    if performance_reasons:
+        print(
+            "Performance reasons: "
+            + ", ".join(reason.value for reason in performance_reasons)
+        )
+    print(
+        "Coverage: "
+        f"baseline {result.coverage.baseline_scored_samples}/"
+        f"{result.coverage.baseline_expected_samples} "
+        f"({result.coverage.baseline_ratio:.2%}), "
+        f"candidate {result.coverage.candidate_scored_samples}/"
+        f"{result.coverage.candidate_expected_samples} "
+        f"({result.coverage.candidate_ratio:.2%})"
+    )
+    population_evidence = next(
+        (
+            item
+            for item in result.evidence
+            if item.field_path == "coverage.scored_sample_population"
+        ),
+        None,
+    )
+    completeness_evidence = next(
+        (
+            item
+            for item in result.evidence
+            if item.field_path == "coverage.population_completeness"
+        ),
+        None,
+    )
+    if population_evidence is not None and completeness_evidence is not None:
+        populations_match = population_evidence.state is EvidenceState.MATCH
+        population_complete = completeness_evidence.state is EvidenceState.MATCH
+        if populations_match and not population_complete:
+            print("Population: matching but incomplete")
+        else:
+            relationship = "matching" if populations_match else "different"
+            completeness = "complete" if population_complete else "incomplete"
+            print(f"Population: {relationship} and {completeness}")
+    score = result.full_suite_score_comparison
+    if score is not None:
+        print(f"Baseline score: {score.baseline_score:.6f}")
+        print(f"Candidate score: {score.candidate_score:.6f}")
+        print(
+            f"Delta (candidate - baseline): {score.delta:+.6f} "
+            f"({score.percentage_points:+.2f} percentage points)"
+        )
+    elif result.matched_case_score_comparison is not None:
+        partial = result.matched_case_score_comparison
+        print(f"Full-suite delta: withheld; matched-case partial over {partial.case_count} cases")
+        print(
+            f"Matched delta (candidate - baseline): {partial.delta:+.6f} "
+            f"({partial.percentage_points:+.2f} percentage points)"
+        )
+    else:
+        print("Full-suite delta: unavailable")
+    if result.categories:
+        print("Categories:")
+        for category in result.categories:
+            print(
+                f"  {category.name}: {category.baseline_score:.4f} -> "
+                f"{category.candidate_score:.4f} ({category.delta:+.4f})"
+            )
+
+
+def _compare_command(arguments: argparse.Namespace) -> int:
+    result = compare_runs(
+        arguments.baseline_run,
+        arguments.candidate_run,
+        intent=ComparisonIntent(arguments.intent),
+    )
+    if arguments.output is not None:
+        write_comparison(
+            arguments.output,
+            result,
+            source_runs=(arguments.baseline_run, arguments.candidate_run),
+        )
+    if arguments.json_output:
+        print(comparison_json(result), end="")
+    else:
+        _print_comparison(result)
+    return (
+        1
+        if result.quality_comparability.classification
+        is ComparabilityClassification.NOT_DIRECTLY_COMPARABLE
+        else 0
+    )
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the ElaraBench command-line interface."""
     arguments = build_parser().parse_args(argv)
@@ -287,6 +435,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return _score_command(arguments.run_path)
         if arguments.command == "summarize":
             return _summarize_command(arguments.run_path)
+        if arguments.command == "compare":
+            return _compare_command(arguments)
         return 0
     except RunInterrupted as error:
         print(f"interrupted: resumable run preserved at {error.path}", file=sys.stderr)
@@ -298,6 +448,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         ArtifactStoreError,
         BenchmarkLoadError,
         BuiltinSuiteError,
+        ComparisonError,
         ProviderConfigurationError,
         RunIntegrityError,
         RunnerError,

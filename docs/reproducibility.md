@@ -96,16 +96,23 @@ where a numeric-only answer was required or Markdown fences around required raw 
 zero without extraction or repair. Evaluator versions and configuration hashes make a later
 semantic change visible, while rescoring always retains the original raw response.
 
-## Comparison classes
+## Comparison identity and classes
 
-Comparison classification remains a future derived feature, but stored M2 evidence supports the
-approved contract:
+M4.1 derives comparison schema 1 results under policy `1.0.0`. It hashes the ordered baseline and
+candidate evidence identities and benchmark identities, declared intent, selected case
+population, canonical comparison evidence, current evaluator resolution/availability, and
+evaluator provenance. Generated time, output path, and CLI formatting are excluded; direction is
+material. The evidence hash uses validated run fingerprint/snapshot/request-plan and canonical
+response hashes, never filesystem location or mutable summary data. A canonical response is
+accepted only when it exactly matches the final attempt response and its success/error state
+agrees with that terminal outcome; contradictory attempt/response artifacts are corrupt input.
 
 ### Strictly comparable
 
 Benchmark/snapshot, materialized requests, evaluator definitions, provider/model identity,
-quantization, inference settings, and relevant execution semantics match. Run ID/time may differ.
-Evaluator versions and status semantics must also match.
+quantization, tokenizer, inference settings, and relevant execution semantics match. Run ID/time
+may differ. Evaluator versions and status semantics must also match. For model intent, tokenizer
+and template differences may instead be expected parts of the complete differing artifacts.
 
 ### Qualified comparison
 
@@ -118,4 +125,8 @@ evaluator revision. The difference must be disclosed.
 Canonical evidence or material identity is missing, corrupt, or incompatible enough that a
 direct score claim would mislead. Results can still be inspected independently.
 
-Classification must remain derived and never rewrite canonical run artifacts.
+Classification remains derived and never rewrites canonical run artifacts. Physical framework or
+result-schema version differences do not independently prevent strict quality comparison; actual
+semantic gaps do. In particular, historical schema-v2 evidence lacks explicit Thinking identity
+and is qualified rather than silently assigned v3 defaults. See [Same-benchmark
+comparison](comparison.md) for intent, population, and exit-status policy.
