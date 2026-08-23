@@ -47,6 +47,7 @@ class EvidenceImpact(StrEnum):
     QUALITY = "quality"
     PERFORMANCE = "performance"
     BOTH = "both"
+    DIAGNOSTIC = "diagnostic"
 
 
 class ComparisonReasonCode(StrEnum):
@@ -54,6 +55,16 @@ class ComparisonReasonCode(StrEnum):
     SUITE_IDENTITY_CONFLICT = "suite_identity_conflict"
     CASE_SET_DIFFERENCE = "case_set_difference"
     CASE_DEFINITION_MISMATCH = "case_definition_mismatch"
+    CASE_WEIGHT_MISMATCH = "case_weight_mismatch"
+    CASE_CATEGORY_MISMATCH = "case_category_mismatch"
+    CASE_TAGS_MISMATCH = "case_tags_mismatch"
+    CASE_FIXTURE_MISMATCH = "case_fixture_mismatch"
+    SUITE_NAMESPACE_DIFFERENCE = "suite_namespace_difference"
+    SUITE_VERSION_DIFFERENCE = "suite_version_difference"
+    VERIFIED_INTERSECTION_COMPARISON = "verified_intersection_comparison"
+    NO_VERIFIED_CASE_INTERSECTION = "no_verified_case_intersection"
+    EMPTY_MATCHED_SCORED_POPULATION = "empty_matched_scored_population"
+    AGGREGATION_SEMANTICS_MISMATCH = "aggregation_semantics_mismatch"
     EVALUATOR_SPECIFICATION_MISMATCH = "evaluator_specification_mismatch"
     EVALUATOR_UNAVAILABLE = "evaluator_unavailable"
     MODEL_DIGEST_UNKNOWN = "model_digest_unknown"
@@ -140,6 +151,8 @@ class CaseEvidenceStatus(StrEnum):
 class CasePopulationMode(StrEnum):
     FULL_SUITE = "full_suite"
     MATCHED_CASE_PARTIAL = "matched_case_partial"
+    VERIFIED_INTERSECTION = "verified_intersection"
+    VERIFIED_INTERSECTION_MATCHED_PARTIAL = "verified_intersection_matched_partial"
     NONE = "none"
 
 
@@ -210,6 +223,59 @@ class ScoreComparison(DomainModel):
 
 class BreakdownComparison(ScoreComparison):
     name: str
+    population_mode: CasePopulationMode | None = None
+    baseline_total_case_count: int | None = Field(default=None, ge=1)
+    candidate_total_case_count: int | None = Field(default=None, ge=1)
+
+
+class SourceRunScore(DomainModel):
+    score: Score
+    case_count: int = Field(ge=1)
+
+
+class VerifiedCaseIdentity(DomainModel):
+    case_id: str
+    canonical_case_hash: Sha256Digest
+    weight: float = Field(gt=0.0)
+
+
+class CaseDefinitionMismatch(DomainModel):
+    case_id: str
+    baseline_case_hash: Sha256Digest
+    candidate_case_hash: Sha256Digest
+    reason_codes: tuple[ComparisonReasonCode, ...]
+
+
+class IntersectionCoverage(DomainModel):
+    baseline_expected_samples: int = Field(ge=0)
+    candidate_expected_samples: int = Field(ge=0)
+    baseline_scored_samples: int = Field(ge=0)
+    candidate_scored_samples: int = Field(ge=0)
+    baseline_ratio: Score | None = None
+    candidate_ratio: Score | None = None
+    baseline_minimum_required: Score
+    candidate_minimum_required: Score
+    sufficient: bool
+
+
+class VerifiedIntersectionEvidence(DomainModel):
+    baseline_total_case_count: int = Field(ge=1)
+    candidate_total_case_count: int = Field(ge=1)
+    ordered_shared_case_ids: tuple[str, ...]
+    verified_cases: tuple[VerifiedCaseIdentity, ...]
+    definition_mismatches: tuple[CaseDefinitionMismatch, ...]
+    baseline_only_case_ids: tuple[str, ...]
+    candidate_only_case_ids: tuple[str, ...]
+    evaluator_unavailable_case_ids: tuple[str, ...]
+    incomplete_scoring_case_ids: tuple[str, ...]
+    baseline_expected_repeats: int = Field(ge=1)
+    candidate_expected_repeats: int = Field(ge=1)
+    selected_scoring_case_ids: tuple[str, ...]
+    selected_total_case_weight: float = Field(ge=0.0)
+    weighting_semantic: Literal[
+        "weighted_macro_over_selected_verified_cases_v1"
+    ] = "weighted_macro_over_selected_verified_cases_v1"
+    coverage: IntersectionCoverage
 
 
 class CaseComparison(DomainModel):
@@ -240,7 +306,7 @@ class EvaluatorResolutionEvidence(DomainModel):
 
 class ComparisonResult(DomainModel):
     schema_version: Literal[1] = 1
-    comparison_policy_version: SemanticVersion = "1.0.0"
+    comparison_policy_version: SemanticVersion = "1.1.0"
     comparison_fingerprint: Sha256Digest
     generated_at: datetime
     evaluation_mode: Literal["current_in_memory"] = "current_in_memory"
@@ -255,8 +321,12 @@ class ComparisonResult(DomainModel):
     evaluator_provenance: tuple[EvaluatorProvenance, ...]
     coverage: CoverageComparison
     case_population_mode: CasePopulationMode
+    baseline_source_run_score: SourceRunScore | None = None
+    candidate_source_run_score: SourceRunScore | None = None
+    verified_intersection: VerifiedIntersectionEvidence | None = None
     full_suite_score_comparison: ScoreComparison | None = None
     matched_case_score_comparison: ScoreComparison | None = None
+    verified_intersection_score_comparison: ScoreComparison | None = None
     categories: tuple[BreakdownComparison, ...] = ()
     tags: tuple[BreakdownComparison, ...] = ()
     cases: tuple[CaseComparison, ...] = ()

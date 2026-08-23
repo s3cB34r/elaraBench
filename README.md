@@ -135,8 +135,10 @@ provider.
 `compare` validates both source runs read-only and applies current evaluators symmetrically in
 memory before reporting `candidate - baseline`. It separates strict, qualified, and
 not-directly-comparable quality evidence from performance comparability. Full-suite deltas require
-identical benchmark content and complete scored populations; `--json` and `--output PATH` expose
-the versioned machine-readable result. In M4.1, compare exit status reflects quality only: 0 for
+identical benchmark content and complete scored populations. Different versions of the same suite
+may instead produce a clearly labeled, snapshot-fixture-verified case-intersection delta; different
+suite IDs and same-version identity conflicts never intersect. `--json` and `--output PATH` expose
+the versioned machine-readable result. Compare exit status reflects quality only: 0 for
 strict/qualified quality, 1 for quality that is not directly comparable, and 2 for input or
 operational failure. Performance comparability remains independently reported. See
 [Same-benchmark comparison](docs/comparison.md).
@@ -203,8 +205,8 @@ python -m pytest
 
 ## Project status
 
-ElaraBench v0.2.1 plus M3 and M4.1 includes local model execution, trustworthy same-benchmark
-comparison, and four real first-party benchmark
+ElaraBench v0.2.1 plus M3, M4.1, and M4.2a includes local model execution, trustworthy
+same-benchmark and verified cross-version intersection comparison, and four real first-party benchmark
 suites totaling 60 cases. The engine provides the deterministic core, a synchronous concurrency-one
 runner, complete schema-v3 run artifacts, bounded retries, durable attempt history, Ctrl-C
 recovery, strict resume, environment discovery, coverage-aware summaries, offline rescoring, and

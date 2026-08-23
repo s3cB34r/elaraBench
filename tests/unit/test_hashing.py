@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import pytest
+
 from elarabench.hashing import (
     hash_canonical,
     hash_case,
+    hash_case_with_fixture_hashes,
     hash_evaluation_specification,
     hash_generation_request,
 )
@@ -43,6 +46,30 @@ def test_changed_prompt_or_evaluator_changes_case_hash() -> None:
     baseline = hash_case(case())
     assert hash_case(case(prompt="different")) != baseline
     assert hash_case(case(expected="different")) != baseline
+
+
+def test_snapshot_fixture_hash_participates_in_canonical_case_identity() -> None:
+    fixture_case = case().model_copy(update={"fixtures": ("fixtures/context.txt",)})
+
+    baseline = hash_case_with_fixture_hashes(
+        fixture_case, {"fixtures/context.txt": "a" * 64}
+    )
+    candidate = hash_case_with_fixture_hashes(
+        fixture_case, {"fixtures/context.txt": "b" * 64}
+    )
+
+    assert baseline != candidate
+    assert baseline == hash_case_with_fixture_hashes(
+        fixture_case,
+        {"fixtures/context.txt": "a" * 64, "fixtures/unrelated.txt": "c" * 64},
+    )
+
+
+def test_fixture_aware_case_hash_requires_snapshot_identity() -> None:
+    fixture_case = case().model_copy(update={"fixtures": ("fixtures/context.txt",)})
+
+    with pytest.raises(ValueError, match="snapshot fixture identity is unavailable"):
+        hash_case_with_fixture_hashes(fixture_case, {})
 
 
 def test_generation_request_hash_preserves_message_order() -> None:

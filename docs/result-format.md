@@ -159,11 +159,51 @@ original score.
 
 Comparison JSON is an independent derived artifact; it does not change result schema v3 or live
 inside either source run. Output paths inside source runs are rejected. Schema 1 records
-comparison policy `1.0.0`, ordered baseline/candidate run and evidence identities, intent,
+comparison policy `1.1.0`, ordered baseline/candidate run and evidence identities, intent,
 benchmark/model/profile evidence, separate quality and performance assessments, current in-memory
-evaluator provenance, coverage/population mode, and available full-suite or matched-case partial
-case/category/tag deltas. `generated_at` is descriptive and excluded from the deterministic
+evaluator provenance, coverage/population mode, and available full-suite, matched-case partial, or
+verified cross-version intersection case/category/tag deltas. Intersection evidence records both
+suite case counts, shared/verified/mismatched/one-sided IDs, snapshot-fixture-aware case hashes,
+evaluator-unavailable and incomplete cases, expected repeats, selected weight, weighting semantic,
+and intersection coverage. `generated_at` is descriptive and excluded from the deterministic
 comparison fingerprint.
+
+Policy-`1.0.0` schema-1 comparison artifacts remain valid. Historical category/tag breakdowns
+may omit `population_mode`, `baseline_total_case_count`, and `candidate_total_case_count`; readers
+treat those absent additive fields as unknown (`null`) and do not infer intersection semantics.
+Policy-`1.1.0` writers populate all three fields on every emitted breakdown. A suite version
+difference is reported independently and does not emit `verified_intersection_comparison` unless
+an intersection population is actually selected.
+
+`evaluator_resolution` retains availability for every case on each side. Run-global registry
+failures are diagnostic; `evaluator_unavailable` enters quality comparability only when an
+unavailable evaluator affects the identical-benchmark population or an identity-verified common
+intersection case. One-sided and definition-mismatched failures therefore remain auditable
+without changing the selected intersection's quality reasons.
+
+Timeout and retry settings remain structured profile evidence. For verified intersections their
+quality impact is determined from completeness of evaluator-available verified common cases,
+while whole-source completeness remains diagnostic. `benchmark.case_definitions` is
+`not_applicable`, not `match`, when the runs have no shared case IDs.
+
+An intersection may meet its sample coverage threshold while selecting no fully scored common
+case. In that situation `quality.verified_intersection.selected_population` is `incomplete`, uses
+reason `empty_matched_scored_population`, and records verified/evaluator-available counts,
+per-case scored repeat indexes, expected repeats, observed/required coverage, and selected count
+zero. The ordinary coverage evidence may simultaneously remain `match`, because coverage and
+case-level selectability are separate claims.
+
+The default comparison text labels top-level `coverage` as `Source coverage` whenever
+`verified_intersection` exists, then renders `verified_intersection.coverage` separately as
+`Intersection coverage`. Insufficient intersection coverage also displays both configured
+minimums. Full-suite output retains its single `Coverage` line; JSON fields are unchanged.
+
+Intersection comparisons additionally emit quality evidence at
+`coverage.verified_intersection.minimum_required`. Its directional values are the effective
+per-run thresholds applied to the selected intersection; a difference produces
+`coverage_threshold_difference` independently of observed source coverage or
+`coverage_insufficient`. The `coverage.verified_intersection` evidence values also include each
+side's ratio, threshold, and sufficiency so the acceptance decision is self-describing.
 
 Stored `summary.json` and `evaluation.json` files are not used as asymmetric score authorities.
 Comparison evaluates both canonical response sets in memory and writes nothing back. See

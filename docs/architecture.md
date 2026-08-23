@@ -102,7 +102,7 @@ pre-Thinking and explicit-Thinking execution semantics. Canonical v2 evidence re
 
 ## Read-only comparison
 
-M4.1 extracts manifest, snapshot, request, response, provider/model, and environment evidence
+Comparison extracts manifest, snapshot, request, response, provider/model, and environment evidence
 through the same version-aware validator used by offline scoring. Comparison deliberately skips
 the validator's eager evaluator check so an unavailable current evaluator becomes typed
 comparison evidence rather than corrupting otherwise valid physical input. It then validates the
@@ -110,9 +110,12 @@ stored evaluator specifications and evaluates both canonical response sets in me
 summary, event, manifest, or source artifact write occurs.
 
 The comparison domain is independent of result schema v3: comparison schema 1 and policy version
-`1.0.0` represent intent, field evidence, separate quality/performance classifications, complete
-or matched-case population, and case/category/tag deltas. Optional JSON export is the only write
-and targets a caller-selected path outside the source-run protocol.
+`1.1.0` represent intent, field evidence, separate quality/performance classifications, complete,
+matched-case, or verified-intersection populations, and case/category/tag deltas. Snapshot fixture
+hashes extend individual case identity without consulting live suite files. Same-suite different-
+version runs may select exact verified cases; different suite namespaces and same-version content
+conflicts cannot. Optional JSON export is the only write and targets a caller-selected path
+outside the source-run protocol.
 
 ## Evaluation outcome boundaries
 

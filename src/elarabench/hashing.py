@@ -47,6 +47,28 @@ def hash_case(case: BenchmarkCase) -> str:
     return hash_canonical(case)
 
 
+def hash_case_with_fixture_hashes(
+    case: BenchmarkCase,
+    fixture_hashes: Mapping[str, str],
+) -> str:
+    """Hash one complete case plus its immutable snapshot fixture identities.
+
+    ``fixture_hashes`` must come from an already validated benchmark snapshot. Live suite
+    files are deliberately not accepted here: comparison identity must describe the physical
+    run evidence, not the current checkout.
+    """
+    missing = [reference for reference in case.fixtures if reference not in fixture_hashes]
+    if missing:
+        raise ValueError(
+            f"snapshot fixture identity is unavailable for case {case.id!r}: {missing!r}"
+        )
+    fixtures = [
+        {"path": reference, "sha256": fixture_hashes[reference]}
+        for reference in case.fixtures
+    ]
+    return hash_canonical({"case": case.model_dump(mode="json"), "fixtures": fixtures})
+
+
 def hash_generation_request(request: GenerationRequest) -> str:
     """Hash the complete provider-neutral request, preserving message order."""
     return hash_canonical(request)

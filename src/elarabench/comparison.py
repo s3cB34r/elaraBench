@@ -7,6 +7,7 @@ import math
 import os
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Mapping, Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
@@ -19,6 +20,7 @@ from elarabench.comparison_models import (
     BenchmarkIdentityEvidence,
     BreakdownComparison,
     CaseComparison,
+    CaseDefinitionMismatch,
     CaseDirection,
     CaseEvidenceStatus,
     CasePopulationMode,
@@ -34,10 +36,14 @@ from elarabench.comparison_models import (
     EvidenceImpact,
     EvidenceState,
     FieldEvidence,
+    IntersectionCoverage,
     ModelIdentityAssessment,
     ModelIdentityConfidence,
     RunComparisonReference,
     ScoreComparison,
+    SourceRunScore,
+    VerifiedCaseIdentity,
+    VerifiedIntersectionEvidence,
 )
 from elarabench.evaluators.registry import evaluate, resolve_evaluator_identity
 from elarabench.evidence import (
@@ -52,7 +58,11 @@ from elarabench.evidence import (
     verify_stored_request,
     verify_terminal_attempt_response,
 )
-from elarabench.hashing import hash_canonical, hash_case, hash_evaluation_specification
+from elarabench.hashing import (
+    hash_canonical,
+    hash_case_with_fixture_hashes,
+    hash_evaluation_specification,
+)
 from elarabench.legacy_v2 import LegacyV2RunManifest
 from elarabench.models import (
     BenchmarkCase,
@@ -67,7 +77,7 @@ from elarabench.models import (
 )
 from elarabench.storage import ArtifactStoreError, RunArtifactStore
 
-COMPARISON_POLICY_VERSION = "1.0.0"
+COMPARISON_POLICY_VERSION = "1.1.0"
 Clock = Callable[[], datetime]
 ModelIdentityFieldRole = Literal[
     "material_identity",
@@ -204,6 +214,14 @@ class _RunEvidence:
         )
 
 
+@dataclass(frozen=True)
+class _IntersectionSelection:
+    evidence: VerifiedIntersectionEvidence
+    evaluable_case_ids: tuple[str, ...]
+    selected_case_ids: tuple[str, ...]
+    complete: bool
+
+
 def utc_now() -> datetime:
     return datetime.now(UTC)
 
@@ -333,6 +351,183 @@ def _load_evidence(
         )
     except (ArtifactStoreError, RunIntegrityError, ValueError) as error:
         raise ComparisonError(str(error)) from error
+
+
+def _snapshot_fixture_hashes(snapshot: StoredSnapshot) -> dict[str, str]:
+    """Return identities from validated immutable snapshot evidence only."""
+    return {fixture.path: fixture.content_hash for fixture in snapshot.fixtures}
+
+
+def _snapshot_case_hashes(run: _RunEvidence) -> dict[str, str]:
+    fixture_hashes = _snapshot_fixture_hashes(run.snapshot)
+    return {
+        case.id: hash_case_with_fixture_hashes(case, fixture_hashes)
+        for case in run.snapshot.suite.cases
+    }
+
+
+def _case_fixture_identity(
+    case: BenchmarkCase, fixture_hashes: Mapping[str, str]
+) -> tuple[tuple[str, str], ...]:
+    return tuple((reference, fixture_hashes[reference]) for reference in case.fixtures)
+
+
+def _mismatch_reason_codes(
+    baseline_case: BenchmarkCase,
+    candidate_case: BenchmarkCase,
+    *,
+    baseline_fixture_hashes: Mapping[str, str],
+    candidate_fixture_hashes: Mapping[str, str],
+) -> tuple[ComparisonReasonCode, ...]:
+    reasons = [ComparisonReasonCode.CASE_DEFINITION_MISMATCH]
+    if baseline_case.weight != candidate_case.weight:
+        reasons.append(ComparisonReasonCode.CASE_WEIGHT_MISMATCH)
+    if baseline_case.category != candidate_case.category:
+        reasons.append(ComparisonReasonCode.CASE_CATEGORY_MISMATCH)
+    if baseline_case.tags != candidate_case.tags:
+        reasons.append(ComparisonReasonCode.CASE_TAGS_MISMATCH)
+    if baseline_case.evaluation != candidate_case.evaluation:
+        reasons.append(ComparisonReasonCode.EVALUATOR_SPECIFICATION_MISMATCH)
+    if _case_fixture_identity(
+        baseline_case, baseline_fixture_hashes
+    ) != _case_fixture_identity(candidate_case, candidate_fixture_hashes):
+        reasons.append(ComparisonReasonCode.CASE_FIXTURE_MISMATCH)
+    return tuple(reasons)
+
+
+def _intersection_selection(
+    baseline: _RunEvidence,
+    candidate: _RunEvidence,
+    *,
+    baseline_case_hashes: Mapping[str, str],
+    candidate_case_hashes: Mapping[str, str],
+) -> _IntersectionSelection:
+    left_cases = {case.id: case for case in baseline.snapshot.suite.cases}
+    right_cases = {case.id: case for case in candidate.snapshot.suite.cases}
+    left_ids = tuple(left_cases)
+    right_ids = tuple(right_cases)
+    shared_ids = tuple(case_id for case_id in left_ids if case_id in right_cases)
+    baseline_fixture_hashes = _snapshot_fixture_hashes(baseline.snapshot)
+    candidate_fixture_hashes = _snapshot_fixture_hashes(candidate.snapshot)
+    verified: list[VerifiedCaseIdentity] = []
+    mismatches: list[CaseDefinitionMismatch] = []
+    for case_id in shared_ids:
+        baseline_hash = baseline_case_hashes[case_id]
+        candidate_hash = candidate_case_hashes[case_id]
+        if baseline_hash == candidate_hash:
+            verified.append(
+                VerifiedCaseIdentity(
+                    case_id=case_id,
+                    canonical_case_hash=baseline_hash,
+                    weight=left_cases[case_id].weight,
+                )
+            )
+        else:
+            mismatches.append(
+                CaseDefinitionMismatch(
+                    case_id=case_id,
+                    baseline_case_hash=baseline_hash,
+                    candidate_case_hash=candidate_hash,
+                    reason_codes=_mismatch_reason_codes(
+                        left_cases[case_id],
+                        right_cases[case_id],
+                        baseline_fixture_hashes=baseline_fixture_hashes,
+                        candidate_fixture_hashes=candidate_fixture_hashes,
+                    ),
+                )
+            )
+
+    baseline_available = {
+        item.case_id
+        for item in baseline.evaluator_resolution
+        if item.status == "available"
+    }
+    candidate_available = {
+        item.case_id
+        for item in candidate.evaluator_resolution
+        if item.status == "available"
+    }
+    verified_ids = tuple(item.case_id for item in verified)
+    unavailable_ids = tuple(
+        case_id
+        for case_id in verified_ids
+        if case_id not in baseline_available or case_id not in candidate_available
+    )
+    evaluable_ids = tuple(
+        case_id for case_id in verified_ids if case_id not in unavailable_ids
+    )
+    selected_ids = tuple(
+        case_id
+        for case_id in evaluable_ids
+        if baseline.cases[case_id].fully_scored
+        and candidate.cases[case_id].fully_scored
+    )
+    incomplete_ids = tuple(
+        case_id for case_id in evaluable_ids if case_id not in selected_ids
+    )
+    baseline_expected = len(evaluable_ids) * baseline.manifest.configuration.repeats
+    candidate_expected = len(evaluable_ids) * candidate.manifest.configuration.repeats
+    baseline_scored = sum(baseline.cases[case_id].scored_repeats for case_id in evaluable_ids)
+    candidate_scored = sum(candidate.cases[case_id].scored_repeats for case_id in evaluable_ids)
+    baseline_ratio = baseline_scored / baseline_expected if baseline_expected else None
+    candidate_ratio = candidate_scored / candidate_expected if candidate_expected else None
+    baseline_minimum = baseline.manifest.configuration.minimum_scored_coverage
+    candidate_minimum = candidate.manifest.configuration.minimum_scored_coverage
+    sufficient = bool(
+        baseline_ratio is not None
+        and candidate_ratio is not None
+        and baseline_ratio >= baseline_minimum
+        and candidate_ratio >= candidate_minimum
+    )
+    repeats_equal = (
+        baseline.manifest.configuration.repeats
+        == candidate.manifest.configuration.repeats
+    )
+    complete = bool(
+        evaluable_ids
+        and repeats_equal
+        and not unavailable_ids
+        and not incomplete_ids
+        and len(selected_ids) == len(verified_ids)
+    )
+    evidence = VerifiedIntersectionEvidence(
+        baseline_total_case_count=len(left_ids),
+        candidate_total_case_count=len(right_ids),
+        ordered_shared_case_ids=shared_ids,
+        verified_cases=tuple(verified),
+        definition_mismatches=tuple(mismatches),
+        baseline_only_case_ids=tuple(
+            case_id for case_id in left_ids if case_id not in right_cases
+        ),
+        candidate_only_case_ids=tuple(
+            case_id for case_id in right_ids if case_id not in left_cases
+        ),
+        evaluator_unavailable_case_ids=unavailable_ids,
+        incomplete_scoring_case_ids=incomplete_ids,
+        baseline_expected_repeats=baseline.manifest.configuration.repeats,
+        candidate_expected_repeats=candidate.manifest.configuration.repeats,
+        selected_scoring_case_ids=selected_ids,
+        selected_total_case_weight=math.fsum(
+            left_cases[case_id].weight for case_id in selected_ids
+        ),
+        coverage=IntersectionCoverage(
+            baseline_expected_samples=baseline_expected,
+            candidate_expected_samples=candidate_expected,
+            baseline_scored_samples=baseline_scored,
+            candidate_scored_samples=candidate_scored,
+            baseline_ratio=baseline_ratio,
+            candidate_ratio=candidate_ratio,
+            baseline_minimum_required=baseline_minimum,
+            candidate_minimum_required=candidate_minimum,
+            sufficient=sufficient,
+        ),
+    )
+    return _IntersectionSelection(
+        evidence=evidence,
+        evaluable_case_ids=evaluable_ids,
+        selected_case_ids=selected_ids,
+        complete=complete,
+    )
 
 
 def _confidence(model: object) -> ModelIdentityConfidence:
@@ -619,6 +814,8 @@ def _profile_evidence(
     candidate: _RunEvidence,
     intent: ComparisonIntent,
     evidence: list[FieldEvidence],
+    *,
+    conditional_controls_quality_relevant: bool,
 ) -> None:
     left = baseline.manifest
     right = candidate.manifest
@@ -805,10 +1002,6 @@ def _profile_evidence(
                     reason_code=ComparisonReasonCode.THINKING_CONTROL_UNKNOWN,
                 )
             )
-    all_complete = (
-        baseline.scored_samples == baseline.expected_samples
-        and candidate.scored_samples == candidate.expected_samples
-    )
     conditional_settings: tuple[tuple[str, object, object, ComparisonReasonCode], ...] = (
         (
             "timeout_seconds",
@@ -828,7 +1021,11 @@ def _profile_evidence(
             evidence,
             path=f"configuration.{name}",
             dimension=ComparabilityDimension.INFERENCE_PROFILE,
-            impact=EvidenceImpact.PERFORMANCE if all_complete else EvidenceImpact.BOTH,
+            impact=(
+                EvidenceImpact.BOTH
+                if conditional_controls_quality_relevant
+                else EvidenceImpact.PERFORMANCE
+            ),
             baseline=baseline_setting,
             candidate=candidate_setting,
             reason=reason,
@@ -993,8 +1190,21 @@ def _score_comparison(
     )
 
 
+def _source_run_score(run: _RunEvidence) -> SourceRunScore | None:
+    ordered = [run.cases[case.id] for case in run.snapshot.suite.cases]
+    if not ordered or not all(case.fully_scored for case in ordered):
+        return None
+    return SourceRunScore(score=_weighted(ordered), case_count=len(ordered))
+
+
 def _breakdowns(
-    left: Sequence[_CaseEvidence], right: Sequence[_CaseEvidence], *, tags: bool
+    left: Sequence[_CaseEvidence],
+    right: Sequence[_CaseEvidence],
+    *,
+    tags: bool,
+    population_mode: CasePopulationMode,
+    baseline_all_cases: Sequence[BenchmarkCase],
+    candidate_all_cases: Sequence[BenchmarkCase],
 ) -> tuple[BreakdownComparison, ...]:
     left_groups: dict[str, list[_CaseEvidence]] = defaultdict(list)
     right_groups: dict[str, list[_CaseEvidence]] = defaultdict(list)
@@ -1007,7 +1217,23 @@ def _breakdowns(
     results: list[BreakdownComparison] = []
     for name in sorted(set(left_groups) & set(right_groups)):
         score = _score_comparison(left_groups[name], right_groups[name])
-        results.append(BreakdownComparison(name=name, **score.model_dump()))
+        baseline_total = sum(
+            name in case.tags if tags else case.category == name
+            for case in baseline_all_cases
+        )
+        candidate_total = sum(
+            name in case.tags if tags else case.category == name
+            for case in candidate_all_cases
+        )
+        results.append(
+            BreakdownComparison(
+                name=name,
+                population_mode=population_mode,
+                baseline_total_case_count=baseline_total,
+                candidate_total_case_count=candidate_total,
+                **score.model_dump(),
+            )
+        )
     return tuple(results)
 
 
@@ -1076,14 +1302,33 @@ def compare_runs(
     same_content = (
         baseline.snapshot.benchmark_content_hash == candidate.snapshot.benchmark_content_hash
     )
-    same_identity_label = (
-        baseline.snapshot.suite.id == candidate.snapshot.suite.id
-        and baseline.snapshot.suite.version == candidate.snapshot.suite.version
+    same_suite_id = baseline.snapshot.suite.id == candidate.snapshot.suite.id
+    same_suite_version = (
+        baseline.snapshot.suite.version == candidate.snapshot.suite.version
     )
+    same_identity_label = same_suite_id and same_suite_version
     benchmark_reason = (
         ComparisonReasonCode.SUITE_IDENTITY_CONFLICT
         if same_identity_label and not same_content
         else ComparisonReasonCode.BENCHMARK_CONTENT_MISMATCH
+    )
+    _add_evidence(
+        evidence,
+        path="benchmark.suite_id",
+        dimension=ComparabilityDimension.BENCHMARK,
+        impact=EvidenceImpact.BOTH,
+        baseline=baseline.snapshot.suite.id,
+        candidate=candidate.snapshot.suite.id,
+        reason=ComparisonReasonCode.SUITE_NAMESPACE_DIFFERENCE,
+    )
+    _add_evidence(
+        evidence,
+        path="benchmark.suite_version",
+        dimension=ComparabilityDimension.BENCHMARK,
+        impact=EvidenceImpact.BOTH,
+        baseline=baseline.snapshot.suite.version,
+        candidate=candidate.snapshot.suite.version,
+        reason=ComparisonReasonCode.SUITE_VERSION_DIFFERENCE,
     )
     _add_evidence(
         evidence,
@@ -1096,6 +1341,10 @@ def compare_runs(
     )
     left_ids = tuple(case.id for case in baseline.snapshot.suite.cases)
     right_ids = tuple(case.id for case in candidate.snapshot.suite.cases)
+    right_id_set = set(right_ids)
+    shared_case_ids = tuple(case_id for case_id in left_ids if case_id in right_id_set)
+    baseline_case_hashes = _snapshot_case_hashes(baseline)
+    candidate_case_hashes = _snapshot_case_hashes(candidate)
     _add_evidence(
         evidence,
         path="benchmark.ordered_case_ids",
@@ -1109,7 +1358,8 @@ def compare_runs(
         (
             len(left_ids) == len(right_ids)
             and all(
-                left.id == right.id and hash_case(left) == hash_case(right)
+                left.id == right.id
+                and baseline_case_hashes[left.id] == candidate_case_hashes[right.id]
                 for left, right in zip(
                     baseline.snapshot.suite.cases, candidate.snapshot.suite.cases, strict=True
                 )
@@ -1118,29 +1368,37 @@ def compare_runs(
         if len(left_ids) == len(right_ids)
         else False
     )
-    _add_evidence(
-        evidence,
-        path="benchmark.case_definitions",
-        dimension=ComparabilityDimension.BENCHMARK,
-        impact=EvidenceImpact.BOTH,
-        baseline=True,
-        candidate=case_hashes_equal,
-        reason=ComparisonReasonCode.CASE_DEFINITION_MISMATCH,
+    shared_case_hashes_equal = bool(shared_case_ids) and all(
+        baseline_case_hashes[case_id] == candidate_case_hashes[case_id]
+        for case_id in shared_case_ids
     )
-    if baseline_eval_error or candidate_eval_error:
+    case_definition_evidence_equal = (
+        shared_case_hashes_equal
+        if same_suite_id and not same_suite_version
+        else case_hashes_equal
+    )
+    if shared_case_ids:
+        _add_evidence(
+            evidence,
+            path="benchmark.case_definitions",
+            dimension=ComparabilityDimension.BENCHMARK,
+            impact=EvidenceImpact.BOTH,
+            baseline=True,
+            candidate=case_definition_evidence_equal,
+            reason=ComparisonReasonCode.CASE_DEFINITION_MISMATCH,
+        )
+    else:
         evidence.append(
             FieldEvidence(
-                field_path="evaluation.current_registry",
-                dimension=ComparabilityDimension.EVALUATION,
-                impact=EvidenceImpact.QUALITY,
-                state=EvidenceState.UNKNOWN,
-                baseline_value=baseline_eval_error is None,
-                candidate_value=candidate_eval_error is None,
-                reason_code=ComparisonReasonCode.EVALUATOR_UNAVAILABLE,
+                field_path="benchmark.case_definitions",
+                dimension=ComparabilityDimension.BENCHMARK,
+                impact=EvidenceImpact.DIAGNOSTIC,
+                state=EvidenceState.NOT_APPLICABLE,
+                baseline_value=list(left_ids),
+                candidate_value=list(right_ids),
             )
         )
     model_identity = _model_evidence(baseline, candidate, intent, evidence)
-    _profile_evidence(baseline, candidate, intent, evidence)
     _environment_evidence(baseline, candidate, evidence)
     if (
         baseline.manifest.framework.version != candidate.manifest.framework.version
@@ -1253,6 +1511,237 @@ def compare_runs(
         and candidate_population_complete
         and len(common_ids) == len(left_ids) == len(right_ids)
     )
+    aggregation_compatible = (
+        baseline.snapshot.suite.aggregation.method
+        == candidate.snapshot.suite.aggregation.method
+        and baseline.snapshot.suite.aggregation.unscored_policy
+        == candidate.snapshot.suite.aggregation.unscored_policy
+    )
+    _add_evidence(
+        evidence,
+        path="benchmark.aggregation_semantics",
+        dimension=ComparabilityDimension.BENCHMARK,
+        impact=EvidenceImpact.QUALITY,
+        baseline={
+            "method": baseline.snapshot.suite.aggregation.method,
+            "unscored_policy": baseline.snapshot.suite.aggregation.unscored_policy,
+        },
+        candidate={
+            "method": candidate.snapshot.suite.aggregation.method,
+            "unscored_policy": candidate.snapshot.suite.aggregation.unscored_policy,
+        },
+        reason=ComparisonReasonCode.AGGREGATION_SEMANTICS_MISMATCH,
+    )
+    intersection_allowed = (
+        same_suite_id and not same_suite_version and not same_content
+    )
+    intersection_selection = (
+        _intersection_selection(
+            baseline,
+            candidate,
+            baseline_case_hashes=baseline_case_hashes,
+            candidate_case_hashes=candidate_case_hashes,
+        )
+        if intersection_allowed and aggregation_compatible
+        else None
+    )
+    if intersection_selection is not None:
+        conditional_controls_quality_relevant = bool(
+            intersection_selection.evaluable_case_ids
+        ) and bool(intersection_selection.evidence.incomplete_scoring_case_ids)
+    else:
+        conditional_controls_quality_relevant = not (
+            baseline_population_complete and candidate_population_complete
+        )
+    _profile_evidence(
+        baseline,
+        candidate,
+        intent,
+        evidence,
+        conditional_controls_quality_relevant=conditional_controls_quality_relevant,
+    )
+    if baseline_eval_error or candidate_eval_error:
+        evidence.append(
+            FieldEvidence(
+                field_path="evaluation.current_registry",
+                dimension=ComparabilityDimension.EVALUATION,
+                impact=EvidenceImpact.DIAGNOSTIC,
+                state=EvidenceState.UNKNOWN,
+                baseline_value=baseline_eval_error is None,
+                candidate_value=candidate_eval_error is None,
+                reason_code=ComparisonReasonCode.EVALUATOR_UNAVAILABLE,
+            )
+        )
+        if same_content and case_hashes_equal:
+            quality_case_ids = set(left_ids)
+        elif intersection_selection is not None:
+            quality_case_ids = {
+                item.case_id for item in intersection_selection.evidence.verified_cases
+            }
+        else:
+            quality_case_ids = set()
+        baseline_quality_unavailable = tuple(
+            item.case_id
+            for item in baseline.evaluator_resolution
+            if item.status == "unavailable" and item.case_id in quality_case_ids
+        )
+        candidate_quality_unavailable = tuple(
+            item.case_id
+            for item in candidate.evaluator_resolution
+            if item.status == "unavailable" and item.case_id in quality_case_ids
+        )
+        if baseline_quality_unavailable or candidate_quality_unavailable:
+            evidence.append(
+                FieldEvidence(
+                    field_path="evaluation.quality_population.current_registry",
+                    dimension=ComparabilityDimension.EVALUATION,
+                    impact=EvidenceImpact.QUALITY,
+                    state=EvidenceState.UNKNOWN,
+                    baseline_value=list(baseline_quality_unavailable),
+                    candidate_value=list(candidate_quality_unavailable),
+                    reason_code=ComparisonReasonCode.EVALUATOR_UNAVAILABLE,
+                )
+            )
+    if intersection_selection is not None:
+        for mismatch in intersection_selection.evidence.definition_mismatches:
+            for reason in mismatch.reason_codes:
+                evidence.append(
+                    FieldEvidence(
+                        field_path=f"benchmark.cases.{mismatch.case_id}.identity",
+                        dimension=(
+                            ComparabilityDimension.EVALUATION
+                            if reason
+                            is ComparisonReasonCode.EVALUATOR_SPECIFICATION_MISMATCH
+                            else ComparabilityDimension.BENCHMARK
+                        ),
+                        impact=EvidenceImpact.QUALITY,
+                        state=EvidenceState.DIFFERENCE,
+                        baseline_value=mismatch.baseline_case_hash,
+                        candidate_value=mismatch.candidate_case_hash,
+                        reason_code=reason,
+                    )
+                )
+        if not intersection_selection.evidence.verified_cases:
+            evidence.append(
+                FieldEvidence(
+                    field_path="quality.verified_intersection.population",
+                    dimension=ComparabilityDimension.BENCHMARK,
+                    impact=EvidenceImpact.QUALITY,
+                    state=EvidenceState.UNKNOWN,
+                    baseline_value=0,
+                    candidate_value=0,
+                    reason_code=ComparisonReasonCode.NO_VERIFIED_CASE_INTERSECTION,
+                )
+            )
+        elif (
+            intersection_selection.evaluable_case_ids
+            and not intersection_selection.selected_case_ids
+        ):
+            intersection_population = intersection_selection.evidence
+            intersection_coverage = intersection_population.coverage
+            evidence.append(
+                FieldEvidence(
+                    field_path="quality.verified_intersection.selected_population",
+                    dimension=ComparabilityDimension.COVERAGE,
+                    impact=EvidenceImpact.QUALITY,
+                    state=EvidenceState.INCOMPLETE,
+                    baseline_value={
+                        "verified_case_count": len(intersection_population.verified_cases),
+                        "evaluator_available_case_count": len(
+                            intersection_selection.evaluable_case_ids
+                        ),
+                        "expected_repeats": intersection_population.baseline_expected_repeats,
+                        "scored_repeat_indexes": {
+                            case_id: list(baseline.cases[case_id].scored_repeat_indexes)
+                            for case_id in intersection_selection.evaluable_case_ids
+                        },
+                        "scored_samples": intersection_coverage.baseline_scored_samples,
+                        "expected_samples": intersection_coverage.baseline_expected_samples,
+                        "coverage_ratio": intersection_coverage.baseline_ratio,
+                        "minimum_required": intersection_coverage.baseline_minimum_required,
+                        "coverage_sufficient": bool(
+                            intersection_coverage.baseline_ratio is not None
+                            and intersection_coverage.baseline_ratio
+                            >= intersection_coverage.baseline_minimum_required
+                        ),
+                        "selected_case_count": 0,
+                    },
+                    candidate_value={
+                        "verified_case_count": len(intersection_population.verified_cases),
+                        "evaluator_available_case_count": len(
+                            intersection_selection.evaluable_case_ids
+                        ),
+                        "expected_repeats": intersection_population.candidate_expected_repeats,
+                        "scored_repeat_indexes": {
+                            case_id: list(candidate.cases[case_id].scored_repeat_indexes)
+                            for case_id in intersection_selection.evaluable_case_ids
+                        },
+                        "scored_samples": intersection_coverage.candidate_scored_samples,
+                        "expected_samples": intersection_coverage.candidate_expected_samples,
+                        "coverage_ratio": intersection_coverage.candidate_ratio,
+                        "minimum_required": intersection_coverage.candidate_minimum_required,
+                        "coverage_sufficient": bool(
+                            intersection_coverage.candidate_ratio is not None
+                            and intersection_coverage.candidate_ratio
+                            >= intersection_coverage.candidate_minimum_required
+                        ),
+                        "selected_case_count": 0,
+                    },
+                    reason_code=ComparisonReasonCode.EMPTY_MATCHED_SCORED_POPULATION,
+                )
+            )
+        intersection_coverage = intersection_selection.evidence.coverage
+        baseline_intersection_sufficient = bool(
+            intersection_coverage.baseline_ratio is not None
+            and intersection_coverage.baseline_ratio
+            >= intersection_coverage.baseline_minimum_required
+        )
+        candidate_intersection_sufficient = bool(
+            intersection_coverage.candidate_ratio is not None
+            and intersection_coverage.candidate_ratio
+            >= intersection_coverage.candidate_minimum_required
+        )
+        evidence.append(
+            FieldEvidence(
+                field_path="coverage.verified_intersection",
+                dimension=ComparabilityDimension.COVERAGE,
+                impact=EvidenceImpact.QUALITY,
+                state=(
+                    EvidenceState.MATCH
+                    if intersection_coverage.sufficient
+                    else EvidenceState.INCOMPLETE
+                ),
+                baseline_value={
+                    "scored": intersection_coverage.baseline_scored_samples,
+                    "expected": intersection_coverage.baseline_expected_samples,
+                    "ratio": intersection_coverage.baseline_ratio,
+                    "minimum_required": intersection_coverage.baseline_minimum_required,
+                    "sufficient": baseline_intersection_sufficient,
+                },
+                candidate_value={
+                    "scored": intersection_coverage.candidate_scored_samples,
+                    "expected": intersection_coverage.candidate_expected_samples,
+                    "ratio": intersection_coverage.candidate_ratio,
+                    "minimum_required": intersection_coverage.candidate_minimum_required,
+                    "sufficient": candidate_intersection_sufficient,
+                },
+                reason_code=(
+                    None
+                    if intersection_coverage.sufficient
+                    else ComparisonReasonCode.COVERAGE_INSUFFICIENT
+                ),
+            )
+        )
+        if intersection_selection.evidence.verified_cases:
+            _add_evidence(
+                evidence,
+                path="coverage.verified_intersection.minimum_required",
+                dimension=ComparabilityDimension.COVERAGE,
+                impact=EvidenceImpact.QUALITY,
+                baseline=intersection_coverage.baseline_minimum_required,
+                candidate=intersection_coverage.candidate_minimum_required,
+                reason=ComparisonReasonCode.COVERAGE_THRESHOLD_DIFFERENCE,
+            )
     baseline_population = {
         case_id: list(baseline.cases[case_id].scored_repeat_indexes)
         for case_id in left_ids
@@ -1261,11 +1750,16 @@ def compare_runs(
         case_id: list(candidate.cases[case_id].scored_repeat_indexes)
         for case_id in right_ids
     }
+    source_coverage_impact = (
+        EvidenceImpact.DIAGNOSTIC
+        if intersection_selection is not None
+        else EvidenceImpact.QUALITY
+    )
     _add_evidence(
         evidence,
         path="coverage.scored_sample_population",
         dimension=ComparabilityDimension.COVERAGE,
-        impact=EvidenceImpact.QUALITY,
+        impact=source_coverage_impact,
         baseline=baseline_population,
         candidate=candidate_population,
         reason=ComparisonReasonCode.SCORED_CASE_SET_DIFFERENCE,
@@ -1277,7 +1771,7 @@ def compare_runs(
         FieldEvidence(
             field_path="coverage.population_completeness",
             dimension=ComparabilityDimension.COVERAGE,
-            impact=EvidenceImpact.QUALITY,
+            impact=source_coverage_impact,
             state=(
                 EvidenceState.INCOMPLETE if population_incomplete else EvidenceState.MATCH
             ),
@@ -1302,7 +1796,7 @@ def compare_runs(
         evidence,
         path="coverage.sample_statuses",
         dimension=ComparabilityDimension.COVERAGE,
-        impact=EvidenceImpact.QUALITY,
+        impact=source_coverage_impact,
         baseline=baseline_statuses,
         candidate=candidate_statuses,
         reason=ComparisonReasonCode.SAMPLE_STATUS_DIFFERENCE,
@@ -1318,7 +1812,7 @@ def compare_runs(
         evidence,
         path="coverage.ratio",
         dimension=ComparabilityDimension.COVERAGE,
-        impact=EvidenceImpact.QUALITY,
+        impact=source_coverage_impact,
         baseline=baseline_ratio,
         candidate=candidate_ratio,
         reason=None,
@@ -1327,7 +1821,7 @@ def compare_runs(
         evidence,
         path="coverage.minimum_required",
         dimension=ComparabilityDimension.COVERAGE,
-        impact=EvidenceImpact.QUALITY,
+        impact=source_coverage_impact,
         baseline=baseline_minimum,
         candidate=candidate_minimum,
         reason=ComparisonReasonCode.COVERAGE_THRESHOLD_DIFFERENCE,
@@ -1336,7 +1830,7 @@ def compare_runs(
         FieldEvidence(
             field_path="coverage.sufficient",
             dimension=ComparabilityDimension.COVERAGE,
-            impact=EvidenceImpact.QUALITY,
+            impact=source_coverage_impact,
             state=(
                 EvidenceState.MATCH
                 if baseline_sufficient == candidate_sufficient
@@ -1352,16 +1846,33 @@ def compare_runs(
         )
     )
 
-    eligible = (
+    same_benchmark_eligible = (
         same_content and case_hashes_equal and not baseline_eval_error and not candidate_eval_error
     )
-    selected_ids = (common_ids if complete else matched_ids) if eligible else []
+    verified_intersection = (
+        intersection_selection.evidence if intersection_selection is not None else None
+    )
+    if same_benchmark_eligible:
+        selected_ids = list(common_ids if complete else matched_ids)
+    elif intersection_selection is not None:
+        selected_ids = list(intersection_selection.selected_case_ids)
+    else:
+        selected_ids = []
     left_selected = [baseline.cases[case_id] for case_id in selected_ids]
     right_selected = [candidate.cases[case_id] for case_id in selected_ids]
-    full_score = _score_comparison(left_selected, right_selected) if complete else None
+    full_score = (
+        _score_comparison(left_selected, right_selected)
+        if same_benchmark_eligible and complete
+        else None
+    )
     partial_score = (
         _score_comparison(left_selected, right_selected)
-        if eligible and not complete and selected_ids
+        if same_benchmark_eligible and not complete and selected_ids
+        else None
+    )
+    intersection_score = (
+        _score_comparison(left_selected, right_selected)
+        if intersection_selection is not None and selected_ids
         else None
     )
     population_mode = (
@@ -1369,11 +1880,40 @@ def compare_runs(
         if full_score
         else CasePopulationMode.MATCHED_CASE_PARTIAL
         if partial_score
+        else (
+            CasePopulationMode.VERIFIED_INTERSECTION
+            if intersection_selection is not None and intersection_selection.complete
+            else CasePopulationMode.VERIFIED_INTERSECTION_MATCHED_PARTIAL
+        )
+        if intersection_score
         else CasePopulationMode.NONE
     )
+    if population_mode in {
+        CasePopulationMode.VERIFIED_INTERSECTION,
+        CasePopulationMode.VERIFIED_INTERSECTION_MATCHED_PARTIAL,
+    }:
+        evidence.append(
+            FieldEvidence(
+                field_path="quality.verified_intersection",
+                dimension=ComparabilityDimension.BENCHMARK,
+                impact=EvidenceImpact.QUALITY,
+                state=EvidenceState.DIFFERENCE,
+                baseline_value=baseline.snapshot.suite.version,
+                candidate_value=candidate.snapshot.suite.version,
+                reason_code=ComparisonReasonCode.VERIFIED_INTERSECTION_COMPARISON,
+            )
+        )
+    intersection_coverage_sufficient = bool(
+        intersection_selection is not None
+        and intersection_selection.evidence.coverage.sufficient
+    )
     hard_failure = (
-        not eligible
-        or coverage_insufficient
+        (not same_benchmark_eligible and intersection_selection is None)
+        or (
+            coverage_insufficient
+            if same_benchmark_eligible
+            else not intersection_coverage_sufficient
+        )
         or not selected_ids
         or model_identity.relationship == "conflict"
     )
@@ -1382,7 +1922,15 @@ def compare_runs(
     )
     performance = _classify_performance(evidence)
     cases: list[CaseComparison] = []
-    for case_id in common_ids if eligible else ():
+    if same_benchmark_eligible:
+        displayed_case_ids: Sequence[str] = common_ids
+    elif intersection_selection is not None:
+        displayed_case_ids = tuple(
+            item.case_id for item in intersection_selection.evidence.verified_cases
+        )
+    else:
+        displayed_case_ids = ()
+    for case_id in displayed_case_ids:
         left_case = baseline.cases[case_id]
         right_case = candidate.cases[case_id]
         if left_case.score is None or right_case.score is None:
@@ -1424,8 +1972,14 @@ def compare_runs(
         for item in candidate.evaluator_provenance
     }
     shared_provenance = set(baseline_semantics) & set(candidate_semantics)
+    provenance_scope = (
+        shared_provenance
+        if same_benchmark_eligible
+        else shared_provenance & set(selected_ids)
+    )
     if any(
-        baseline_semantics[case_id] != candidate_semantics[case_id] for case_id in shared_provenance
+        baseline_semantics[case_id] != candidate_semantics[case_id]
+        for case_id in provenance_scope
     ):
         evidence.append(
             FieldEvidence(
@@ -1450,7 +2004,13 @@ def compare_runs(
         candidate_scored_samples=candidate.scored_samples,
         baseline_ratio=baseline_ratio,
         candidate_ratio=candidate_ratio,
-        matched_case_count=len(matched_ids) if eligible else 0,
+        matched_case_count=(
+            len(matched_ids)
+            if same_benchmark_eligible
+            else len(selected_ids)
+            if intersection_selection is not None
+            else 0
+        ),
         benchmark_case_count=len(left_ids),
     )
     baseline_benchmark = BenchmarkIdentityEvidence(
@@ -1490,6 +2050,19 @@ def compare_runs(
             "comparison_policy_version": COMPARISON_POLICY_VERSION,
             "case_population_mode": population_mode,
             "selected_case_ids": list(selected_ids),
+            "selected_case_identities": [
+                {
+                    "case_id": case_id,
+                    "canonical_case_hash": baseline_case_hashes[case_id],
+                    "weight": baseline.cases[case_id].case.weight,
+                }
+                for case_id in selected_ids
+            ],
+            "verified_intersection": (
+                verified_intersection.model_dump(mode="json")
+                if verified_intersection is not None
+                else None
+            ),
             "evaluator_resolution": canonical_resolution,
             "evaluator_provenance": canonical_provenance,
             "semantic_evidence": canonical_evidence,
@@ -1522,10 +2095,36 @@ def compare_runs(
         evaluator_provenance=evaluator_provenance,
         coverage=coverage,
         case_population_mode=population_mode,
+        baseline_source_run_score=_source_run_score(baseline),
+        candidate_source_run_score=_source_run_score(candidate),
+        verified_intersection=verified_intersection,
         full_suite_score_comparison=full_score,
         matched_case_score_comparison=partial_score,
-        categories=_breakdowns(left_selected, right_selected, tags=False) if selected_ids else (),
-        tags=_breakdowns(left_selected, right_selected, tags=True) if selected_ids else (),
+        verified_intersection_score_comparison=intersection_score,
+        categories=(
+            _breakdowns(
+                left_selected,
+                right_selected,
+                tags=False,
+                population_mode=population_mode,
+                baseline_all_cases=baseline.snapshot.suite.cases,
+                candidate_all_cases=candidate.snapshot.suite.cases,
+            )
+            if selected_ids
+            else ()
+        ),
+        tags=(
+            _breakdowns(
+                left_selected,
+                right_selected,
+                tags=True,
+                population_mode=population_mode,
+                baseline_all_cases=baseline.snapshot.suite.cases,
+                candidate_all_cases=candidate.snapshot.suite.cases,
+            )
+            if selected_ids
+            else ()
+        ),
         cases=tuple(cases),
     )
 

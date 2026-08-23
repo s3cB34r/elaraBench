@@ -98,14 +98,21 @@ semantic change visible, while rescoring always retains the original raw respons
 
 ## Comparison identity and classes
 
-M4.1 derives comparison schema 1 results under policy `1.0.0`. It hashes the ordered baseline and
+M4.2a derives comparison schema 1 results under policy `1.1.0`. It hashes the ordered baseline and
 candidate evidence identities and benchmark identities, declared intent, selected case
 population, canonical comparison evidence, current evaluator resolution/availability, and
-evaluator provenance. Generated time, output path, and CLI formatting are excluded; direction is
-material. The evidence hash uses validated run fingerprint/snapshot/request-plan and canonical
+evaluator provenance. For verified intersections it also hashes exact fixture-aware case
+identities, mismatches, one-sided cases, expected repeats, common weights, weighting semantics,
+and intersection coverage. Generated time, output path, and CLI formatting are excluded;
+direction is material. The evidence hash uses validated run fingerprint/snapshot/request-plan and canonical
 response hashes, never filesystem location or mutable summary data. A canonical response is
 accepted only when it exactly matches the final attempt response and its success/error state
 agrees with that terminal outcome; contradictory attempt/response artifacts are corrupt input.
+
+Fixture-aware case hashes use fixture content hashes embedded in and validated from each physical
+run snapshot. A later edit to a source suite or fixture cannot change comparison identity. Valid
+schema-v2 snapshots may participate when they contain the same provable evidence; missing or
+changed identity is never synthesized.
 
 ### Strictly comparable
 

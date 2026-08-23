@@ -339,8 +339,11 @@ def _print_comparison(result: ComparisonResult) -> None:
             "Performance reasons: "
             + ", ".join(reason.value for reason in performance_reasons)
         )
+    source_coverage_label = (
+        "Source coverage" if result.verified_intersection is not None else "Coverage"
+    )
     print(
-        "Coverage: "
+        f"{source_coverage_label}: "
         f"baseline {result.coverage.baseline_scored_samples}/"
         f"{result.coverage.baseline_expected_samples} "
         f"({result.coverage.baseline_ratio:.2%}), "
@@ -348,31 +351,73 @@ def _print_comparison(result: ComparisonResult) -> None:
         f"{result.coverage.candidate_expected_samples} "
         f"({result.coverage.candidate_ratio:.2%})"
     )
-    population_evidence = next(
-        (
-            item
-            for item in result.evidence
-            if item.field_path == "coverage.scored_sample_population"
-        ),
-        None,
-    )
-    completeness_evidence = next(
-        (
-            item
-            for item in result.evidence
-            if item.field_path == "coverage.population_completeness"
-        ),
-        None,
-    )
-    if population_evidence is not None and completeness_evidence is not None:
-        populations_match = population_evidence.state is EvidenceState.MATCH
-        population_complete = completeness_evidence.state is EvidenceState.MATCH
-        if populations_match and not population_complete:
-            print("Population: matching but incomplete")
-        else:
-            relationship = "matching" if populations_match else "different"
-            completeness = "complete" if population_complete else "incomplete"
-            print(f"Population: {relationship} and {completeness}")
+    if result.verified_intersection is not None:
+        intersection = result.verified_intersection
+        intersection_coverage = intersection.coverage
+        baseline_intersection_ratio = (
+            f"{intersection_coverage.baseline_ratio:.2%}"
+            if intersection_coverage.baseline_ratio is not None
+            else "not available"
+        )
+        candidate_intersection_ratio = (
+            f"{intersection_coverage.candidate_ratio:.2%}"
+            if intersection_coverage.candidate_ratio is not None
+            else "not available"
+        )
+        print(
+            "Intersection coverage: "
+            f"baseline {intersection_coverage.baseline_scored_samples}/"
+            f"{intersection_coverage.baseline_expected_samples} "
+            f"({baseline_intersection_ratio}), "
+            f"candidate {intersection_coverage.candidate_scored_samples}/"
+            f"{intersection_coverage.candidate_expected_samples} "
+            f"({candidate_intersection_ratio})"
+        )
+        if not intersection_coverage.sufficient:
+            print(
+                "Intersection minimum required: "
+                f"baseline {intersection_coverage.baseline_minimum_required:.2%}, "
+                f"candidate {intersection_coverage.candidate_minimum_required:.2%}"
+            )
+        print(f"Population: {result.case_population_mode.value.upper()}")
+        print(
+            "Cases: "
+            f"baseline {intersection.baseline_total_case_count}, "
+            f"candidate {intersection.candidate_total_case_count}, "
+            f"verified {len(intersection.verified_cases)}, "
+            f"definition mismatches {len(intersection.definition_mismatches)}"
+        )
+        print(
+            "One-sided cases: "
+            f"baseline-only {len(intersection.baseline_only_case_ids)}, "
+            f"candidate-only {len(intersection.candidate_only_case_ids)}"
+        )
+    else:
+        population_evidence = next(
+            (
+                item
+                for item in result.evidence
+                if item.field_path == "coverage.scored_sample_population"
+            ),
+            None,
+        )
+        completeness_evidence = next(
+            (
+                item
+                for item in result.evidence
+                if item.field_path == "coverage.population_completeness"
+            ),
+            None,
+        )
+        if population_evidence is not None and completeness_evidence is not None:
+            populations_match = population_evidence.state is EvidenceState.MATCH
+            population_complete = completeness_evidence.state is EvidenceState.MATCH
+            if populations_match and not population_complete:
+                print("Population: matching but incomplete")
+            else:
+                relationship = "matching" if populations_match else "different"
+                completeness = "complete" if population_complete else "incomplete"
+                print(f"Population: {relationship} and {completeness}")
     score = result.full_suite_score_comparison
     if score is not None:
         print(f"Baseline score: {score.baseline_score:.6f}")
@@ -388,14 +433,37 @@ def _print_comparison(result: ComparisonResult) -> None:
             f"Matched delta (candidate - baseline): {partial.delta:+.6f} "
             f"({partial.percentage_points:+.2f} percentage points)"
         )
+    elif result.verified_intersection_score_comparison is not None:
+        intersection_score = result.verified_intersection_score_comparison
+        print(
+            "Full-suite delta: withheld; verified intersection over "
+            f"{intersection_score.case_count} cases"
+        )
+        print(
+            "Intersection score: "
+            f"{intersection_score.baseline_score:.6f} -> "
+            f"{intersection_score.candidate_score:.6f}"
+        )
+        print(
+            "Intersection delta (candidate - baseline): "
+            f"{intersection_score.delta:+.6f} "
+            f"({intersection_score.percentage_points:+.2f} percentage points)"
+        )
     else:
         print("Full-suite delta: unavailable")
     if result.categories:
         print("Categories:")
         for category in result.categories:
+            denominator = ""
+            if result.verified_intersection is not None:
+                denominator = (
+                    f" [{category.case_count}/{category.baseline_total_case_count} baseline, "
+                    f"{category.case_count}/{category.candidate_total_case_count} candidate]"
+                )
             print(
                 f"  {category.name}: {category.baseline_score:.4f} -> "
                 f"{category.candidate_score:.4f} ({category.delta:+.4f})"
+                f"{denominator}"
             )
 
 
