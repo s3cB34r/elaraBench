@@ -39,11 +39,17 @@ from elarabench.comparison_models import (
     IntersectionCoverage,
     ModelIdentityAssessment,
     ModelIdentityConfidence,
+    PerformanceAnalysis,
     RunComparisonReference,
     ScoreComparison,
     SourceRunScore,
     VerifiedCaseIdentity,
     VerifiedIntersectionEvidence,
+)
+from elarabench.comparison_performance import (
+    PerformanceComparabilityContext,
+    SamplePerformanceEvidence,
+    analyze_performance,
 )
 from elarabench.evaluators.registry import evaluate, resolve_evaluator_identity
 from elarabench.evidence import (
@@ -77,7 +83,7 @@ from elarabench.models import (
 )
 from elarabench.storage import ArtifactStoreError, RunArtifactStore
 
-COMPARISON_POLICY_VERSION = "1.1.0"
+COMPARISON_POLICY_VERSION = "1.2.0"
 Clock = Callable[[], datetime]
 ModelIdentityFieldRole = Literal[
     "material_identity",
@@ -185,6 +191,7 @@ class _RunEvidence:
         evaluator_provenance: tuple[EvaluatorProvenance, ...],
         response_hashes: tuple[str | None, ...],
         attempt_hashes: tuple[tuple[str, ...], ...],
+        performance_samples: dict[SampleIdentity, SamplePerformanceEvidence],
     ) -> None:
         self.store = store
         self.manifest = manifest
@@ -192,6 +199,7 @@ class _RunEvidence:
         self.cases = cases
         self.evaluator_resolution = evaluator_resolution
         self.evaluator_provenance = evaluator_provenance
+        self.performance_samples = performance_samples
         self.attempt_counts = tuple(len(items) for items in attempt_hashes)
         self.expected_samples = len(snapshot.suite.cases) * manifest.configuration.repeats
         self.scored_samples = sum(
@@ -238,6 +246,7 @@ def _load_evidence(
         provenance: list[EvaluatorProvenance] = []
         response_hashes: list[str | None] = []
         attempt_hashes: list[tuple[str, ...]] = []
+        performance_samples: dict[SampleIdentity, SamplePerformanceEvidence] = {}
         evaluator_unavailable = False
         for case in snapshot.suite.cases:
             case_evaluator_unavailable = False
@@ -277,6 +286,12 @@ def _load_evidence(
                 identity = SampleIdentity(case_id=case.id, repeat_index=repeat_index)
                 entry = plan[(case.id, repeat_index)]
                 attempts = store.read_attempts(identity)
+                performance_samples[identity] = SamplePerformanceEvidence(
+                    identity=identity,
+                    attempts=attempts,
+                    response=None,
+                    source_result_schema_version=manifest.schema_version,
+                )
                 response_exists = store.response_exists(identity)
                 request_exists = store.request_exists(identity)
                 verify_sample_artifact_dependencies(store, identity, attempts)
@@ -308,6 +323,12 @@ def _load_evidence(
                     continue
                 response = store.read_response(identity)
                 verify_terminal_attempt_response(attempts, response, identity)
+                performance_samples[identity] = SamplePerformanceEvidence(
+                    identity=identity,
+                    attempts=attempts,
+                    response=response,
+                    source_result_schema_version=manifest.schema_version,
+                )
                 response_hashes.append(hash_canonical(response))
                 if case_evaluator_unavailable:
                     continue
@@ -346,6 +367,7 @@ def _load_evidence(
                 tuple(provenance),
                 tuple(response_hashes),
                 tuple(attempt_hashes),
+                performance_samples,
             ),
             ComparisonReasonCode.EVALUATOR_UNAVAILABLE if evaluator_unavailable else None,
         )
@@ -1921,6 +1943,80 @@ def compare_runs(
         evidence, hard_failure=hard_failure, has_population=bool(selected_ids)
     )
     performance = _classify_performance(evidence)
+    if same_content and case_hashes_equal and (
+        baseline_eval_error or candidate_eval_error
+    ):
+        performance_case_ids = tuple(common_ids)
+    elif intersection_selection is not None and selected_ids:
+        selected_or_evaluator_unavailable = set(selected_ids) | set(
+            intersection_selection.evidence.evaluator_unavailable_case_ids
+        )
+        performance_case_ids = tuple(
+            item.case_id
+            for item in intersection_selection.evidence.verified_cases
+            if item.case_id in selected_or_evaluator_unavailable
+        )
+    elif selected_ids:
+        performance_case_ids = tuple(selected_ids)
+    elif same_content and case_hashes_equal:
+        performance_case_ids = tuple(common_ids)
+    elif intersection_selection is not None:
+        performance_case_ids = tuple(
+            item.case_id for item in intersection_selection.evidence.verified_cases
+        )
+    else:
+        performance_case_ids = ()
+    paired_repeat_count = min(
+        baseline.manifest.configuration.repeats,
+        candidate.manifest.configuration.repeats,
+    )
+    performance_sample_identities = tuple(
+        SampleIdentity(case_id=case_id, repeat_index=repeat_index)
+        for case_id in performance_case_ids
+        for repeat_index in range(paired_repeat_count)
+    )
+    if same_content and case_hashes_equal:
+        performance_execution_case_ids = tuple(common_ids)
+    elif intersection_selection is not None:
+        performance_execution_case_ids = tuple(
+            item.case_id for item in intersection_selection.evidence.verified_cases
+        )
+    else:
+        performance_execution_case_ids = ()
+    performance_execution_sample_identities = tuple(
+        SampleIdentity(case_id=case_id, repeat_index=repeat_index)
+        for case_id in performance_execution_case_ids
+        for repeat_index in range(paired_repeat_count)
+    )
+    metric_performance_reasons = _reason_codes(
+        item
+        for item in evidence
+        if item.impact in {EvidenceImpact.PERFORMANCE, EvidenceImpact.BOTH}
+        and item.dimension
+        in {
+            ComparabilityDimension.MODEL_IDENTITY,
+            ComparabilityDimension.INFERENCE_PROFILE,
+            ComparabilityDimension.PERFORMANCE_ENVIRONMENT,
+        }
+    )
+    performance_analysis: PerformanceAnalysis = analyze_performance(
+        baseline.performance_samples,
+        candidate.performance_samples,
+        performance_sample_identities,
+        execution_cost_sample_identities=performance_execution_sample_identities,
+        context=PerformanceComparabilityContext(
+            intent=intent,
+            baseline_tokenizer=baseline.manifest.model.tokenizer,
+            candidate_tokenizer=candidate.manifest.model.tokenizer,
+            baseline_provider=baseline.manifest.provider.type,
+            candidate_provider=candidate.manifest.provider.type,
+            baseline_backend=baseline.manifest.model.backend,
+            candidate_backend=candidate.manifest.model.backend,
+            baseline_result_schema_version=baseline.manifest.schema_version,
+            candidate_result_schema_version=candidate.manifest.schema_version,
+            performance_reason_codes=metric_performance_reasons,
+        ),
+    )
     cases: list[CaseComparison] = []
     if same_benchmark_eligible:
         displayed_case_ids: Sequence[str] = common_ids
@@ -2066,6 +2162,7 @@ def compare_runs(
             "evaluator_resolution": canonical_resolution,
             "evaluator_provenance": canonical_provenance,
             "semantic_evidence": canonical_evidence,
+            "performance_analysis": performance_analysis.model_dump(mode="json"),
         }
     )
     return ComparisonResult(
@@ -2090,6 +2187,7 @@ def compare_runs(
         model_identity=model_identity,
         quality_comparability=quality,
         performance_comparability=performance,
+        performance_analysis=performance_analysis,
         evidence=tuple(evidence),
         evaluator_resolution=evaluator_resolution,
         evaluator_provenance=evaluator_provenance,

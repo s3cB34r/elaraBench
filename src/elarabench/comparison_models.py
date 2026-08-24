@@ -8,7 +8,13 @@ from typing import Literal
 
 from pydantic import Field, JsonValue
 
-from elarabench.models import DomainModel, Score, SemanticVersion, Sha256Digest
+from elarabench.models import (
+    DomainModel,
+    SampleIdentity,
+    Score,
+    SemanticVersion,
+    Sha256Digest,
+)
 
 
 class ComparisonIntent(StrEnum):
@@ -120,6 +126,10 @@ class ComparisonReasonCode(StrEnum):
     ENVIRONMENT_DRIVER_DIFFERENCE = "environment_driver_difference"
     ENVIRONMENT_RUNTIME_DIFFERENCE = "environment_runtime_difference"
     PERFORMANCE_METRIC_MISSING = "performance_metric_missing"
+    ZERO_BASELINE_RELATIVE_DELTA_UNAVAILABLE = (
+        "zero_baseline_relative_delta_unavailable"
+    )
+    RELATIVE_DELTA_UNREPRESENTABLE = "relative_delta_unrepresentable"
     WARM_STATE_UNKNOWN = "warm_state_unknown"
     INTENDED_VARIABLE_NOT_DIFFERENT = "intended_variable_not_different"
 
@@ -136,6 +146,43 @@ class CaseDirection(StrEnum):
     LOWER = "lower"
     UNCHANGED = "unchanged"
     UNAVAILABLE = "unavailable"
+
+
+class MetricAvailability(StrEnum):
+    AVAILABLE = "available"
+    PARTIAL = "partial"
+    UNAVAILABLE = "unavailable"
+
+
+class PerformanceMetricName(StrEnum):
+    CLIENT_REQUEST_DURATION_SECONDS = "client_request_duration_seconds"
+    PROVIDER_TOTAL_DURATION_SECONDS = "provider_total_duration_seconds"
+    PROVIDER_LOAD_DURATION_SECONDS = "provider_load_duration_seconds"
+    PROVIDER_PROMPT_EVAL_DURATION_SECONDS = "provider_prompt_eval_duration_seconds"
+    PROVIDER_GENERATION_DURATION_SECONDS = "provider_generation_duration_seconds"
+    TERMINAL_ATTEMPT_ACTIVE_DURATION_SECONDS = (
+        "terminal_attempt_active_duration_seconds"
+    )
+    PROMPT_TOKENS = "prompt_tokens"
+    GENERATED_TOKENS = "generated_tokens"
+    TOTAL_TOKENS = "total_tokens"
+    GENERATION_TOKENS_PER_SECOND = "generation_tokens_per_second"
+    ATTEMPT_COUNT = "attempt_count"
+    FAILED_ATTEMPT_COUNT = "failed_attempt_count"
+    ALL_ATTEMPTS_ACTIVE_DURATION_SECONDS = "all_attempts_active_duration_seconds"
+
+
+class PerformanceMetricUnit(StrEnum):
+    SECONDS = "seconds"
+    TOKENS = "tokens"
+    TOKENS_PER_SECOND = "tokens_per_second"
+    COUNT = "count"
+
+
+class MetricDirection(StrEnum):
+    HIGHER = "higher"
+    LOWER = "lower"
+    UNCHANGED = "unchanged"
 
 
 class CaseEvidenceStatus(StrEnum):
@@ -169,6 +216,62 @@ class FieldEvidence(DomainModel):
 class ComparabilityAssessment(DomainModel):
     classification: ComparabilityClassification
     reason_codes: tuple[ComparisonReasonCode, ...] = ()
+
+
+class MetricSummary(DomainModel):
+    count: int = Field(ge=1)
+    mean: float = Field(allow_inf_nan=False)
+    median: float = Field(allow_inf_nan=False)
+    minimum: float = Field(allow_inf_nan=False)
+    maximum: float = Field(allow_inf_nan=False)
+
+
+class MetricMissingness(DomainModel):
+    expected_paired_sample_count: int = Field(ge=0)
+    baseline_available_count: int = Field(ge=0)
+    candidate_available_count: int = Field(ge=0)
+    paired_available_count: int = Field(ge=0)
+    baseline_missing_count: int = Field(ge=0)
+    candidate_missing_count: int = Field(ge=0)
+    unpaired_available_count: int = Field(ge=0)
+
+
+class PerformanceMetricComparison(DomainModel):
+    metric_name: PerformanceMetricName
+    unit: PerformanceMetricUnit
+    selected_sample_identities: tuple[SampleIdentity, ...] = ()
+    availability: MetricAvailability
+    baseline_summary: MetricSummary | None = None
+    candidate_summary: MetricSummary | None = None
+    missingness: MetricMissingness
+    comparability: ComparabilityAssessment
+    absolute_delta: float | None = Field(default=None, allow_inf_nan=False)
+    relative_delta: float | None = Field(default=None, allow_inf_nan=False)
+    direction: MetricDirection | None = None
+    semantic_version: Literal["performance_metrics_v1"] = "performance_metrics_v1"
+
+
+class FinishReasonCount(DomainModel):
+    finish_reason: str | None
+    count: int = Field(ge=1)
+
+
+class FinishReasonDiagnostics(DomainModel):
+    baseline_counts: tuple[FinishReasonCount, ...] = ()
+    candidate_counts: tuple[FinishReasonCount, ...] = ()
+
+
+class PerformanceAnalysis(DomainModel):
+    semantic_version: Literal["performance_metrics_v1"] = "performance_metrics_v1"
+    aggregation_semantic: Literal[
+        "paired_sample_median_v1"
+    ] = "paired_sample_median_v1"
+    baseline_evidence_hash: Sha256Digest
+    candidate_evidence_hash: Sha256Digest
+    selected_sample_identities: tuple[SampleIdentity, ...]
+    execution_cost_sample_identities: tuple[SampleIdentity, ...] = ()
+    metrics: tuple[PerformanceMetricComparison, ...]
+    finish_reasons: FinishReasonDiagnostics
 
 
 class BenchmarkIdentityEvidence(DomainModel):
@@ -306,7 +409,7 @@ class EvaluatorResolutionEvidence(DomainModel):
 
 class ComparisonResult(DomainModel):
     schema_version: Literal[1] = 1
-    comparison_policy_version: SemanticVersion = "1.1.0"
+    comparison_policy_version: SemanticVersion = "1.2.0"
     comparison_fingerprint: Sha256Digest
     generated_at: datetime
     evaluation_mode: Literal["current_in_memory"] = "current_in_memory"
@@ -316,6 +419,7 @@ class ComparisonResult(DomainModel):
     model_identity: ModelIdentityAssessment
     quality_comparability: ComparabilityAssessment
     performance_comparability: ComparabilityAssessment
+    performance_analysis: PerformanceAnalysis | None = None
     evidence: tuple[FieldEvidence, ...]
     evaluator_resolution: tuple[EvaluatorResolutionEvidence, ...]
     evaluator_provenance: tuple[EvaluatorProvenance, ...]

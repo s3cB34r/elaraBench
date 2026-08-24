@@ -93,15 +93,73 @@ versions differ. `verified_intersection_comparison` appears only when the select
 `verified_intersection` or `verified_intersection_matched_partial`; a version difference alone
 does not claim verified overlap or comparability.
 
-M4.1 only classifies performance comparability; it does not calculate latency, throughput, token,
-or memory deltas. Performance is conservatively qualified even on matching environments because
-warm/cold state and system load are uncontrolled. Recorded architecture, operating system and
+M4.2b adds observed paired latency, token, throughput, and attempt-cost summaries without
+turning them into causal claims. Performance is conservatively qualified even on matching
+environments because warm/cold state and system load are uncontrolled. Recorded architecture, operating system and
 release, Python implementation and version, CPU, GPU/driver, and runtime-version differences are
 structured performance evidence. These fields do not automatically degrade quality. Backend or
 environment differences are made explicit and may make direct performance claims invalid.
 Timing availability means every expected canonical response has at least one non-null field in
 its `TimingMetadata`; an absent or all-null timing object is missing performance evidence. Numeric
-zero is a recorded value. M4.1 only classifies timing support and does not calculate timing deltas.
+zero is a recorded value.
+
+### Observed performance metrics
+
+Policy `1.2.0` defines `performance_metrics_v1` over paired `(case_id, repeat_index)` samples and
+aggregates them with `paired_sample_median_v1`. Every metric records expected, side-available,
+paired, missing, and unpaired counts. Its baseline and candidate count/mean/median/minimum/maximum
+are calculated from the same joint paired subset; median is the headline. Absolute delta is
+candidate median minus baseline median. Relative delta divides by the baseline median and is
+withheld, with `zero_baseline_relative_delta_unavailable`, when that median is zero. No p95/p99,
+confidence interval, significance test, or causal direction label is produced.
+
+| Metric | Immutable physical source | Unit |
+| --- | --- | --- |
+| `client_request_duration_seconds` | terminal response `timing.latency_seconds` | seconds |
+| `provider_total_duration_seconds` | terminal response `timing.provider_total_seconds` | seconds |
+| `provider_load_duration_seconds` | terminal response `timing.provider_load_seconds` | seconds |
+| `provider_prompt_eval_duration_seconds` | terminal response `timing.provider_prompt_eval_seconds` | seconds |
+| `provider_generation_duration_seconds` | terminal response `timing.provider_eval_seconds` | seconds |
+| `terminal_attempt_active_duration_seconds` | successful terminal attempt `duration_seconds` | seconds |
+| `prompt_tokens` | terminal response `usage.input_tokens` | tokens |
+| `generated_tokens` | terminal response `usage.output_tokens` | tokens |
+| `total_tokens` | terminal response `usage.total_tokens` | tokens |
+| `generation_tokens_per_second` | output tokens / provider generation seconds | tokens/second |
+| `attempt_count` | count of validated persisted attempts | count |
+| `failed_attempt_count` | count of persisted attempts with failed outcome | count |
+| `all_attempts_active_duration_seconds` | sum of persisted attempt durations | seconds |
+
+Terminal generation metrics use only a final successful attempt. An all-failed sample supplies no
+generation/timing/token metric, but its validated attempt counts and active durations remain
+observable. `all_attempts_active_duration_seconds` is not end-to-end time: it excludes retry
+backoff, queueing, gaps, and resume pauses. A truncated successful response remains valid
+performance evidence, as does a successfully generated answer whose deterministic quality score
+is zero.
+
+Throughput is unavailable for missing tokens, missing generation duration, or zero duration;
+zero generated tokens over positive duration is valid zero throughput. Non-finite values are
+never emitted. Ollama nanoseconds are already normalized to seconds by the adapter and comparison
+does not normalize them again. Time to first token is deliberately absent: current non-streaming
+Ollama artifacts do not provide trustworthy TTFT evidence.
+
+Token metrics are not directly comparable when known tokenizer identities differ and are
+qualified when tokenizer identity is unknown. Provider-native duration and derived throughput
+deltas are withheld across different provider/backend semantics. Client-observed and attempt
+durations may remain qualified observational evidence, including under backend intent. Remote or
+changed hardware/runtime/endpoint evidence qualifies interpretation but never changes quality.
+`warm_state_unknown` remains present, so current observed metrics cannot become strict causal
+performance claims.
+
+Quality-aligned case identities select terminal-generation metrics. Attempt-count and all-attempt
+cost metrics additionally retain the broader verified/common case identity population so failed
+execution cost is not hidden. One-sided and definition-mismatched cross-version cases never enter
+either paired population. Performance availability is metric-specific and is not quality
+coverage.
+
+Legacy schema-v2 runs expose only fields physically present in their canonical responses and
+attempts. Recorded attempt duration/count can be summarized, while absent usage/provider timing
+remains unavailable. Legacy metrics retain `legacy_identity_gap`; no tokenizer, retry, warm-state,
+environment, or provider semantics are synthesized.
 
 ## Benchmark and coverage policy
 
@@ -194,9 +252,9 @@ remain valid history; only the final attempt produces the canonical response.
 ## Output and exit status
 
 Text output summarizes quality and performance classifications with their separate reason-code
-lists, coverage, available score delta, and category deltas. Complete case, category, tag,
-evidence, intersection, and provenance records use comparison schema 1 and policy version
-`1.1.0`:
+lists, coverage, available score delta, paired performance observations, and category deltas.
+Complete case, category, tag, evidence, intersection, performance, and provenance records use
+comparison schema 1 and policy version `1.2.0`:
 
 ```bash
 elarabench compare runs/base runs/candidate --intent thinking --json
@@ -212,16 +270,21 @@ only an unrelated whole-source ratio. JSON continues to expose both scopes uncha
 Schema-1 artifacts written by policy `1.0.0` remain readable. Their category/tag breakdowns did
 not record intersection population mode or baseline/candidate denominators, so those additive
 fields deserialize as unknown (`null`) rather than receiving synthetic intersection semantics.
-New policy-`1.1.0` output always populates them for emitted breakdowns.
+Policy-`1.1.0` output always populated them for emitted breakdowns. Policy-`1.2.0` keeps that
+shape and adds optional typed performance analysis; artifacts from both earlier policies load
+with `performance_analysis: null` rather than synthesized measurements.
 
 With both flags, identical JSON is written and printed. Comparison fingerprints include ordered
 source evidence hashes, directional benchmark identities, intent, policy version, selected case
 population, fixture-aware verified/mismatched/one-sided case identities, expected repeats, common
 weights, intersection coverage semantics, canonical field evidence, current evaluator
-resolution/availability, and evaluator provenance. Evaluator resolution records specification
+resolution/availability, evaluator provenance, performance semantic/aggregation versions,
+directional performance evidence hashes, selected sample populations, metric missingness,
+comparability, and observed summaries/deltas. Evaluator resolution records specification
 hashes and resolved versions without exception text. Fingerprints exclude generation time, output
-path, formatting, and unrelated wall timestamps; reversing baseline and candidate changes
-identity. No automatic comparison directory is created.
+path, formatting, and unrelated wall timestamps; changing active duration or usage changes
+identity, and reversing baseline and candidate changes identity. No automatic comparison
+directory is created.
 
 Exit status reflects **quality comparability only**: 0 means a strict or qualified quality
 comparison was produced, 1 means quality is not directly comparable, and 2 means an
@@ -234,5 +297,5 @@ ElaraBench reports no p-values, confidence intervals, causal fine-tune claims, o
 meaningfulness thresholds. Small suites and three-case categories require appropriately cautious
 human interpretation.
 
-M4.2b is reserved for actual latency, throughput, token, retry-cost, and richer performance
-analysis. M4.2a changes no physical run schema and performs no performance aggregation.
+Time-to-first-token instrumentation, streaming redesign, warmup orchestration, hardware/energy
+sampling, p95/p99, confidence intervals, and significance testing remain future work.

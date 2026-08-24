@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import shutil
 from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
@@ -28,6 +29,10 @@ from elarabench.comparison_models import (
     ComparisonResult,
     EvidenceImpact,
     EvidenceState,
+    FinishReasonCount,
+    MetricAvailability,
+    PerformanceMetricComparison,
+    PerformanceMetricName,
 )
 from elarabench.hashing import hash_generation_request
 from elarabench.models import (
@@ -44,6 +49,7 @@ from elarabench.models import (
     SourceIdentity,
     ThinkingPolicy,
     TimingMetadata,
+    UsageInformation,
 )
 from elarabench.providers import FakeProvider
 from elarabench.runner import RunInterrupted, Runner
@@ -366,6 +372,52 @@ def _set_response_timing(
             json.dumps(attempt, sort_keys=True, indent=2) + "\n",
             encoding="utf-8",
         )
+
+
+def _set_sample_performance(
+    run_path: Path,
+    *,
+    timing: TimingMetadata | None,
+    usage: UsageInformation | None,
+    attempt_duration_seconds: float | None = None,
+    finish_reason: str | None = "stop",
+    only_sample: tuple[str, int] | None = None,
+) -> None:
+    timing_value = timing.model_dump(mode="json") if timing is not None else None
+    usage_value = usage.model_dump(mode="json") if usage is not None else None
+    for response_path in sorted(run_path.glob("samples/*/repeat-*/response.json")):
+        case_id = response_path.parents[1].name
+        repeat_index = int(response_path.parent.name.removeprefix("repeat-"))
+        if only_sample is not None and (case_id, repeat_index) != only_sample:
+            continue
+        response = json.loads(response_path.read_text(encoding="utf-8"))
+        if response["error"] is not None:
+            continue
+        response["timing"] = timing_value
+        response["usage"] = usage_value
+        response["finish_reason"] = finish_reason
+        response_path.write_text(
+            json.dumps(response, sort_keys=True, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        terminal_attempt = sorted((response_path.parent / "attempts").glob("attempt-*.json"))[-1]
+        attempt = json.loads(terminal_attempt.read_text(encoding="utf-8"))
+        attempt["response"] = response
+        if attempt_duration_seconds is not None:
+            attempt["duration_seconds"] = attempt_duration_seconds
+        terminal_attempt.write_text(
+            json.dumps(attempt, sort_keys=True, indent=2) + "\n",
+            encoding="utf-8",
+        )
+
+
+def _performance_metric(
+    result: ComparisonResult, name: PerformanceMetricName
+) -> PerformanceMetricComparison:
+    assert result.performance_analysis is not None
+    return next(
+        metric for metric in result.performance_analysis.metrics if metric.metric_name is name
+    )
 
 
 def _interrupted_run(root: Path, run_id: str) -> Path:
@@ -1548,6 +1600,22 @@ def test_interrupted_run_with_unmaterialized_planned_requests_loads_read_only(
         result.quality_comparability.classification
         is ComparabilityClassification.NOT_DIRECTLY_COMPARABLE
     )
+    for name in (
+        PerformanceMetricName.ATTEMPT_COUNT,
+        PerformanceMetricName.FAILED_ATTEMPT_COUNT,
+        PerformanceMetricName.ALL_ATTEMPTS_ACTIVE_DURATION_SECONDS,
+    ):
+        metric = _performance_metric(result, name)
+        assert metric.availability is MetricAvailability.PARTIAL
+        assert metric.missingness.expected_paired_sample_count == 5
+        assert metric.missingness.baseline_available_count == 1
+        assert metric.missingness.candidate_available_count == 5
+        assert metric.missingness.paired_available_count == 1
+        assert metric.missingness.baseline_missing_count == 4
+        assert metric.baseline_summary is not None
+        assert metric.candidate_summary is not None
+        assert metric.baseline_summary.count == 1
+        assert metric.candidate_summary.count == 1
     assert before == (_files(interrupted), _files(candidate))
 
 
@@ -1632,6 +1700,67 @@ def test_attempt_request_hash_must_match_canonical_request(tmp_path: Path) -> No
 
     with pytest.raises(ComparisonError, match="attempt request hash mismatch"):
         compare_runs(baseline, candidate)
+
+
+@pytest.mark.parametrize(
+    "duration",
+    (float("inf"), float("nan"), float("-inf")),
+    ids=("positive-infinity", "nan", "negative-infinity"),
+)
+def test_nonfinite_attempt_duration_is_corrupt_input_with_cli_exit_two(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    duration: float,
+) -> None:
+    baseline = _run(tmp_path / "baseline-runs", "baseline")
+    candidate = _run(tmp_path / "candidate-runs", "candidate")
+    attempt_path = next(baseline.glob("samples/*/repeat-*/attempts/attempt-*.json"))
+    attempt = json.loads(attempt_path.read_text(encoding="utf-8"))
+    attempt["duration_seconds"] = duration
+    attempt_path.write_text(
+        json.dumps(attempt, sort_keys=True, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ComparisonError, match="duration_seconds"):
+        compare_runs(baseline, candidate, intent=ComparisonIntent.REPEAT)
+
+    assert main(["compare", str(baseline), str(candidate), "--intent", "repeat"]) == 2
+    captured = capsys.readouterr()
+    assert "duration_seconds" in captured.err
+    assert "finite number" in captured.err
+    assert "Traceback" not in captured.err
+    assert captured.out == ""
+
+
+@pytest.mark.parametrize("duration", (0.0, 1e308), ids=("zero", "large-finite"))
+def test_finite_attempt_duration_boundaries_remain_valid(
+    tmp_path: Path,
+    duration: float,
+) -> None:
+    baseline = _run(tmp_path / "baseline-runs", "baseline")
+    candidate = _run(tmp_path / "candidate-runs", "candidate")
+    attempt_path = next(baseline.glob("samples/*/repeat-*/attempts/attempt-*.json"))
+    attempt = json.loads(attempt_path.read_text(encoding="utf-8"))
+    attempt["duration_seconds"] = duration
+    attempt_path.write_text(
+        json.dumps(attempt, sort_keys=True, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    result = compare_runs(baseline, candidate, intent=ComparisonIntent.REPEAT)
+
+    assert result.performance_analysis is not None
+    terminal_duration = _performance_metric(
+        result, PerformanceMetricName.TERMINAL_ATTEMPT_ACTIVE_DURATION_SECONDS
+    )
+    assert terminal_duration.baseline_summary is not None
+    assert math.isfinite(terminal_duration.baseline_summary.mean)
+    assert math.isfinite(terminal_duration.baseline_summary.maximum)
+    if duration == 0.0:
+        assert terminal_duration.baseline_summary.minimum == 0.0
+    else:
+        assert terminal_duration.baseline_summary.maximum == duration
 
 
 def test_matching_terminal_attempt_response_is_valid(tmp_path: Path) -> None:
@@ -2150,13 +2279,58 @@ def test_evidence_identity_excludes_descriptive_attempt_timestamps(tmp_path: Pat
     attempt = json.loads(attempt_path.read_text(encoding="utf-8"))
     attempt["started_at"] = "2030-01-01T00:00:00Z"
     attempt["completed_at"] = "2030-01-01T00:00:01Z"
-    attempt["duration_seconds"] = 1.0
     attempt_path.write_text(json.dumps(attempt, sort_keys=True, indent=2) + "\n", encoding="utf-8")
 
     after = compare_runs(baseline, candidate)
 
     assert after.candidate.evidence_hash == before.candidate.evidence_hash
     assert after.comparison_fingerprint == before.comparison_fingerprint
+
+
+def test_attempt_duration_changes_performance_hash_and_comparison_fingerprint(
+    tmp_path: Path,
+) -> None:
+    baseline = _run(tmp_path / "runs", "baseline")
+    candidate = _run(tmp_path / "runs", "candidate")
+    before = compare_runs(baseline, candidate)
+    attempt_path = next(candidate.glob("samples/*/repeat-*/attempts/attempt-*.json"))
+    attempt = json.loads(attempt_path.read_text(encoding="utf-8"))
+    attempt["duration_seconds"] = 1.0
+    attempt_path.write_text(
+        json.dumps(attempt, sort_keys=True, indent=2) + "\n", encoding="utf-8"
+    )
+
+    after = compare_runs(baseline, candidate)
+
+    assert before.performance_analysis is not None
+    assert after.performance_analysis is not None
+    assert (
+        after.performance_analysis.candidate_evidence_hash
+        != before.performance_analysis.candidate_evidence_hash
+    )
+    assert after.comparison_fingerprint != before.comparison_fingerprint
+
+
+def test_usage_changes_performance_hash_and_comparison_fingerprint(tmp_path: Path) -> None:
+    baseline = _run(tmp_path / "runs", "baseline")
+    candidate = _run(tmp_path / "runs", "candidate")
+    before = compare_runs(baseline, candidate)
+    _set_sample_performance(
+        candidate,
+        timing=None,
+        usage=UsageInformation(input_tokens=1, output_tokens=2, total_tokens=3),
+        only_sample=("exact-001", 0),
+    )
+
+    after = compare_runs(baseline, candidate)
+
+    assert before.performance_analysis is not None
+    assert after.performance_analysis is not None
+    assert (
+        after.performance_analysis.candidate_evidence_hash
+        != before.performance_analysis.candidate_evidence_hash
+    )
+    assert after.comparison_fingerprint != before.comparison_fingerprint
 
 
 def test_matching_retry_policy_and_attempt_counts_are_separate_matches(
@@ -2491,6 +2665,437 @@ def test_one_empty_timing_among_expected_responses_is_missing_evidence(
     )
 
 
+def test_complete_physical_performance_metrics_and_cli_are_paired_and_auditable(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    baseline = _run(tmp_path / "baseline-runs", "baseline")
+    candidate = _run(
+        tmp_path / "candidate-runs", "candidate", wrong_case="exact-001"
+    )
+    _set_sample_performance(
+        baseline,
+        timing=TimingMetadata(
+            latency_seconds=3.0,
+            provider_total_seconds=2.5,
+            provider_load_seconds=0.25,
+            provider_prompt_eval_seconds=0.5,
+            provider_eval_seconds=2.0,
+        ),
+        usage=UsageInformation(input_tokens=5, output_tokens=20, total_tokens=25),
+        attempt_duration_seconds=3.25,
+    )
+    _set_sample_performance(
+        candidate,
+        timing=TimingMetadata(
+            latency_seconds=5.0,
+            provider_total_seconds=4.5,
+            provider_load_seconds=0.5,
+            provider_prompt_eval_seconds=0.75,
+            provider_eval_seconds=4.0,
+        ),
+        usage=UsageInformation(input_tokens=5, output_tokens=40, total_tokens=45),
+        attempt_duration_seconds=5.25,
+        finish_reason="length",
+    )
+    before = (_files(baseline), _files(candidate))
+
+    result = compare_runs(baseline, candidate, intent=ComparisonIntent.REPEAT)
+    generated = _performance_metric(result, PerformanceMetricName.GENERATED_TOKENS)
+    generation_duration = _performance_metric(
+        result, PerformanceMetricName.PROVIDER_GENERATION_DURATION_SECONDS
+    )
+    throughput = _performance_metric(
+        result, PerformanceMetricName.GENERATION_TOKENS_PER_SECOND
+    )
+
+    assert result.comparison_policy_version == "1.2.0"
+    assert result.quality_comparability.classification is ComparabilityClassification.STRICT
+    assert result.full_suite_score_comparison is not None
+    assert result.full_suite_score_comparison.candidate_score == 0.8
+    assert result.performance_comparability.classification is ComparabilityClassification.QUALIFIED
+    assert ComparisonReasonCode.WARM_STATE_UNKNOWN in result.performance_comparability.reason_codes
+    assert generated.availability is MetricAvailability.AVAILABLE
+    assert generated.baseline_summary is not None
+    assert generated.candidate_summary is not None
+    assert generated.baseline_summary.median == 20.0
+    assert generated.candidate_summary.median == 40.0
+    assert generated.absolute_delta == 20.0
+    assert generated.relative_delta == 1.0
+    assert generated.missingness.paired_available_count == 5
+    assert generation_duration.baseline_summary is not None
+    assert generation_duration.candidate_summary is not None
+    assert generation_duration.baseline_summary.median == 2.0
+    assert generation_duration.candidate_summary.median == 4.0
+    assert throughput.baseline_summary is not None
+    assert throughput.candidate_summary is not None
+    assert throughput.baseline_summary.median == 10.0
+    assert throughput.candidate_summary.median == 10.0
+    assert result.performance_analysis is not None
+    assert result.performance_analysis.finish_reasons.baseline_counts == (
+        FinishReasonCount(finish_reason="stop", count=5),
+    )
+    assert result.performance_analysis.finish_reasons.candidate_counts == (
+        FinishReasonCount(finish_reason="length", count=5),
+    )
+    assert (_files(baseline), _files(candidate)) == before
+
+    assert main(["compare", str(baseline), str(candidate), "--intent", "repeat"]) == 0
+    output = capsys.readouterr().out
+    assert "Performance observations (paired medians):" in output
+    assert (
+        "Generated tokens: 20.00 tokens -> 40.00 tokens "
+        "(+20.00 tokens, +100.0%)" in output
+    )
+    assert "Provider generation duration: 2.000s -> 4.000s (+2.000s, +100.0%)" in output
+    assert "Generation throughput: 10.00 tokens/s -> 10.00 tokens/s" in output
+
+    assert main(["compare", str(baseline), str(candidate), "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["schema_version"] == 1
+    assert payload["comparison_policy_version"] == "1.2.0"
+    assert payload["performance_analysis"]["semantic_version"] == "performance_metrics_v1"
+    assert (
+        payload["performance_analysis"]["aggregation_semantic"]
+        == "paired_sample_median_v1"
+    )
+    assert len(payload["performance_analysis"]["metrics"]) == 13
+
+
+def test_finish_reason_diagnostics_round_trip_without_provider_collisions(
+    tmp_path: Path,
+) -> None:
+    baseline = _run(tmp_path / "baseline-runs", "baseline")
+    candidate = _run(tmp_path / "candidate-runs", "candidate")
+    sample_identities = [
+        (
+            response_path.parents[1].name,
+            int(response_path.parent.name.removeprefix("repeat-")),
+        )
+        for response_path in sorted(baseline.glob("samples/*/repeat-*/response.json"))
+    ]
+    for identity, finish_reason in zip(
+        sample_identities,
+        (None, None, "", "<missing>", "stop"),
+        strict=True,
+    ):
+        _set_sample_performance(
+            baseline,
+            timing=None,
+            usage=None,
+            finish_reason=finish_reason,
+            only_sample=identity,
+        )
+
+    result = compare_runs(baseline, candidate, intent=ComparisonIntent.REPEAT)
+    assert result.performance_analysis is not None
+    expected = (
+        FinishReasonCount(finish_reason=None, count=2),
+        FinishReasonCount(finish_reason="", count=1),
+        FinishReasonCount(finish_reason="<missing>", count=1),
+        FinishReasonCount(finish_reason="stop", count=1),
+    )
+    assert result.performance_analysis.finish_reasons.baseline_counts == expected
+
+    reloaded = ComparisonResult.model_validate_json(result.model_dump_json())
+    assert reloaded.performance_analysis is not None
+    assert reloaded.performance_analysis.finish_reasons.baseline_counts == expected
+    payload = json.loads(result.model_dump_json())
+    assert payload["performance_analysis"]["finish_reasons"]["baseline_counts"] == [
+        {"finish_reason": None, "count": 2},
+        {"finish_reason": "", "count": 1},
+        {"finish_reason": "<missing>", "count": 1},
+        {"finish_reason": "stop", "count": 1},
+    ]
+
+
+@pytest.mark.parametrize(
+    ("baseline_provider_seconds", "candidate_provider_seconds"),
+    ((2.0, None), (None, 2.0), (None, None)),
+)
+def test_cli_falls_back_to_paired_client_duration_symmetrically(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    baseline_provider_seconds: float | None,
+    candidate_provider_seconds: float | None,
+) -> None:
+    baseline = _run(tmp_path / "baseline-runs", "baseline")
+    candidate = _run(tmp_path / "candidate-runs", "candidate")
+    _set_sample_performance(
+        baseline,
+        timing=TimingMetadata(
+            latency_seconds=3.0,
+            provider_eval_seconds=baseline_provider_seconds,
+        ),
+        usage=UsageInformation(output_tokens=20),
+    )
+    _set_sample_performance(
+        candidate,
+        timing=TimingMetadata(
+            latency_seconds=4.0,
+            provider_eval_seconds=candidate_provider_seconds,
+        ),
+        usage=UsageInformation(output_tokens=20),
+    )
+
+    result = compare_runs(baseline, candidate, intent=ComparisonIntent.REPEAT)
+    provider_duration = _performance_metric(
+        result, PerformanceMetricName.PROVIDER_GENERATION_DURATION_SECONDS
+    )
+    client_duration = _performance_metric(
+        result, PerformanceMetricName.CLIENT_REQUEST_DURATION_SECONDS
+    )
+    assert client_duration.baseline_summary is not None
+    assert client_duration.candidate_summary is not None
+    assert client_duration.absolute_delta == 1.0
+    if baseline_provider_seconds is None or candidate_provider_seconds is None:
+        assert provider_duration.availability is MetricAvailability.UNAVAILABLE
+
+    assert main(["compare", str(baseline), str(candidate), "--intent", "repeat"]) == 0
+    output = capsys.readouterr().out
+    assert "Client request duration: 3.000s -> 4.000s (+1.000s, +33.3%)" in output
+    assert "  Provider generation duration:" not in output
+
+    assert main(["compare", str(baseline), str(candidate), "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    metrics = {
+        metric["metric_name"]: metric
+        for metric in payload["performance_analysis"]["metrics"]
+    }
+    assert "provider_generation_duration_seconds" in metrics
+    assert "client_request_duration_seconds" in metrics
+
+
+def test_cli_omits_duration_when_neither_duration_metric_is_paired(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    baseline = _run(tmp_path / "baseline-runs", "baseline")
+    candidate = _run(tmp_path / "candidate-runs", "candidate")
+    _set_sample_performance(
+        baseline,
+        timing=TimingMetadata(latency_seconds=3.0, provider_eval_seconds=2.0),
+        usage=UsageInformation(output_tokens=20),
+    )
+    _set_sample_performance(
+        candidate,
+        timing=None,
+        usage=UsageInformation(output_tokens=20),
+    )
+
+    assert main(["compare", str(baseline), str(candidate), "--intent", "repeat"]) == 0
+    output = capsys.readouterr().out
+    assert "  Provider generation duration:" not in output
+    assert "  Client request duration:" not in output
+
+
+def test_metric_missingness_uses_joint_paired_subset(tmp_path: Path) -> None:
+    baseline = _run(tmp_path / "baseline-runs", "baseline")
+    candidate = _run(tmp_path / "candidate-runs", "candidate")
+    timing = TimingMetadata(provider_eval_seconds=2.0)
+    usage = UsageInformation(input_tokens=5, output_tokens=20, total_tokens=25)
+    _set_sample_performance(baseline, timing=timing, usage=usage)
+    _set_sample_performance(candidate, timing=timing, usage=usage)
+    _set_sample_performance(
+        candidate,
+        timing=timing,
+        usage=None,
+        only_sample=("exact-001", 0),
+    )
+
+    result = compare_runs(baseline, candidate, intent=ComparisonIntent.REPEAT)
+    generated = _performance_metric(result, PerformanceMetricName.GENERATED_TOKENS)
+
+    assert generated.availability is MetricAvailability.PARTIAL
+    assert generated.missingness.expected_paired_sample_count == 5
+    assert generated.missingness.baseline_available_count == 5
+    assert generated.missingness.candidate_available_count == 4
+    assert generated.missingness.paired_available_count == 4
+    assert generated.missingness.baseline_missing_count == 0
+    assert generated.missingness.candidate_missing_count == 1
+    assert generated.missingness.unpaired_available_count == 1
+    assert generated.baseline_summary is not None
+    assert generated.candidate_summary is not None
+    assert generated.baseline_summary.count == 4
+    assert generated.candidate_summary.count == 4
+
+
+def test_retry_execution_cost_is_separate_from_terminal_generation_metrics(
+    tmp_path: Path,
+) -> None:
+    baseline = _run(tmp_path / "baseline-runs", "baseline")
+    candidate = _retry_success_run(tmp_path / "candidate-runs", "candidate")
+    timing = TimingMetadata(provider_eval_seconds=2.0)
+    usage = UsageInformation(output_tokens=20)
+    _set_sample_performance(
+        baseline,
+        timing=timing,
+        usage=usage,
+        attempt_duration_seconds=1.0,
+    )
+    _set_sample_performance(
+        candidate,
+        timing=timing,
+        usage=usage,
+        attempt_duration_seconds=1.0,
+    )
+    failed_attempt_path = (
+        candidate
+        / "samples"
+        / "exact-001"
+        / "repeat-000"
+        / "attempts"
+        / "attempt-000.json"
+    )
+    failed_attempt = json.loads(failed_attempt_path.read_text(encoding="utf-8"))
+    failed_attempt["duration_seconds"] = 2.0
+    failed_attempt_path.write_text(
+        json.dumps(failed_attempt, sort_keys=True, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    result = compare_runs(baseline, candidate, intent=ComparisonIntent.REPEAT)
+    attempts = _performance_metric(result, PerformanceMetricName.ATTEMPT_COUNT)
+    failed = _performance_metric(result, PerformanceMetricName.FAILED_ATTEMPT_COUNT)
+    terminal = _performance_metric(
+        result, PerformanceMetricName.TERMINAL_ATTEMPT_ACTIVE_DURATION_SECONDS
+    )
+    all_active = _performance_metric(
+        result, PerformanceMetricName.ALL_ATTEMPTS_ACTIVE_DURATION_SECONDS
+    )
+
+    assert attempts.candidate_summary is not None
+    assert attempts.candidate_summary.mean == pytest.approx(1.2)
+    assert attempts.candidate_summary.maximum == 2.0
+    assert failed.candidate_summary is not None
+    assert failed.candidate_summary.maximum == 1.0
+    assert terminal.candidate_summary is not None
+    assert terminal.candidate_summary.maximum == 1.0
+    assert all_active.candidate_summary is not None
+    assert all_active.candidate_summary.mean == pytest.approx(1.4)
+    assert all_active.candidate_summary.maximum == 3.0
+
+
+def test_all_failed_sample_cost_remains_available_outside_quality_population(
+    tmp_path: Path,
+) -> None:
+    baseline = _all_failed_retry_run(tmp_path / "baseline-runs", "baseline")
+    candidate = _all_failed_retry_run(tmp_path / "candidate-runs", "candidate")
+
+    result = compare_runs(baseline, candidate, intent=ComparisonIntent.REPEAT)
+    attempts = _performance_metric(result, PerformanceMetricName.ATTEMPT_COUNT)
+    failed = _performance_metric(result, PerformanceMetricName.FAILED_ATTEMPT_COUNT)
+    generated = _performance_metric(result, PerformanceMetricName.GENERATED_TOKENS)
+
+    assert result.case_population_mode is CasePopulationMode.MATCHED_CASE_PARTIAL
+    assert len(attempts.selected_sample_identities) == 5
+    assert attempts.missingness.paired_available_count == 5
+    assert failed.baseline_summary is not None
+    assert failed.baseline_summary.maximum == 3.0
+    assert len(generated.selected_sample_identities) == 4
+    assert generated.missingness.expected_paired_sample_count == 4
+
+
+def test_tokenizer_difference_withholds_only_token_metric_delta(tmp_path: Path) -> None:
+    baseline = _run(
+        tmp_path / "baseline-runs", "baseline", tokenizer="tokenizer-a"
+    )
+    candidate = _run(
+        tmp_path / "candidate-runs", "candidate", tokenizer="tokenizer-b"
+    )
+    timing = TimingMetadata(provider_eval_seconds=2.0)
+    usage = UsageInformation(output_tokens=20)
+    _set_sample_performance(baseline, timing=timing, usage=usage)
+    _set_sample_performance(candidate, timing=timing, usage=usage)
+
+    result = compare_runs(baseline, candidate, intent=ComparisonIntent.REPEAT)
+    generated = _performance_metric(result, PerformanceMetricName.GENERATED_TOKENS)
+    duration = _performance_metric(
+        result, PerformanceMetricName.PROVIDER_GENERATION_DURATION_SECONDS
+    )
+
+    assert (
+        generated.comparability.classification
+        is ComparabilityClassification.NOT_DIRECTLY_COMPARABLE
+    )
+    assert ComparisonReasonCode.TOKENIZER_DIFFERENCE in generated.comparability.reason_codes
+    assert generated.baseline_summary is not None
+    assert generated.candidate_summary is not None
+    assert generated.absolute_delta is None
+    assert duration.comparability.classification is ComparabilityClassification.QUALIFIED
+    assert duration.absolute_delta == 0.0
+
+
+def test_provider_native_incompatibility_does_not_change_quality_based_exit(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    baseline = _run(
+        tmp_path / "baseline-runs", "baseline", provider_name="fake-a"
+    )
+    candidate = _run(
+        tmp_path / "candidate-runs", "candidate", provider_name="fake-b"
+    )
+    timing = TimingMetadata(latency_seconds=3.0, provider_eval_seconds=2.0)
+    usage = UsageInformation(output_tokens=20)
+    _set_sample_performance(baseline, timing=timing, usage=usage)
+    _set_sample_performance(candidate, timing=timing, usage=usage)
+
+    result = compare_runs(baseline, candidate, intent=ComparisonIntent.REPEAT)
+    provider_duration = _performance_metric(
+        result, PerformanceMetricName.PROVIDER_GENERATION_DURATION_SECONDS
+    )
+    client_duration = _performance_metric(
+        result, PerformanceMetricName.CLIENT_REQUEST_DURATION_SECONDS
+    )
+
+    assert result.quality_comparability.classification is ComparabilityClassification.QUALIFIED
+    assert (
+        result.performance_comparability.classification
+        is ComparabilityClassification.NOT_DIRECTLY_COMPARABLE
+    )
+    assert (
+        provider_duration.comparability.classification
+        is ComparabilityClassification.NOT_DIRECTLY_COMPARABLE
+    )
+    assert provider_duration.absolute_delta is None
+    assert client_duration.comparability.classification is ComparabilityClassification.QUALIFIED
+    assert client_duration.absolute_delta == 0.0
+    assert main(["compare", str(baseline), str(candidate), "--intent", "repeat"]) == 0
+    output = capsys.readouterr().out
+    assert "Performance comparability: NOT_DIRECTLY_COMPARABLE" in output
+    assert "  Client request duration:" in output
+    assert "  Provider generation duration:" not in output
+
+
+def test_backend_intent_keeps_client_observation_but_withholds_provider_native_delta(
+    tmp_path: Path,
+) -> None:
+    baseline = _run(tmp_path / "baseline-runs", "baseline", backend="backend-a")
+    candidate = _run(tmp_path / "candidate-runs", "candidate", backend="backend-b")
+    timing = TimingMetadata(latency_seconds=3.0, provider_eval_seconds=2.0)
+    usage = UsageInformation(output_tokens=20)
+    _set_sample_performance(baseline, timing=timing, usage=usage)
+    _set_sample_performance(candidate, timing=timing, usage=usage)
+
+    result = compare_runs(baseline, candidate, intent=ComparisonIntent.BACKEND)
+    provider_duration = _performance_metric(
+        result, PerformanceMetricName.PROVIDER_GENERATION_DURATION_SECONDS
+    )
+    client_duration = _performance_metric(
+        result, PerformanceMetricName.CLIENT_REQUEST_DURATION_SECONDS
+    )
+
+    assert result.quality_comparability.classification is ComparabilityClassification.STRICT
+    assert (
+        provider_duration.comparability.classification
+        is ComparabilityClassification.NOT_DIRECTLY_COMPARABLE
+    )
+    assert provider_duration.absolute_delta is None
+    assert client_duration.comparability.classification is ComparabilityClassification.QUALIFIED
+    assert client_duration.absolute_delta == 0.0
+
+
 def test_identical_gpu_metadata_is_structured_json_evidence(tmp_path: Path) -> None:
     gpus = (GPUInfo(name="RTX 4090", driver_version="550.54"),)
     baseline = _run(
@@ -2543,6 +3148,12 @@ def test_different_gpu_names_are_performance_evidence_not_an_error(
     )
     assert result.quality_comparability.classification is ComparabilityClassification.STRICT
     assert result.performance_comparability.classification is ComparabilityClassification.QUALIFIED
+    attempt_metric = _performance_metric(result, PerformanceMetricName.ATTEMPT_COUNT)
+    assert attempt_metric.comparability.classification is ComparabilityClassification.QUALIFIED
+    assert (
+        ComparisonReasonCode.ENVIRONMENT_GPU_DIFFERENCE
+        in attempt_metric.comparability.reason_codes
+    )
 
 
 def test_different_gpu_driver_is_recorded_as_performance_evidence(
@@ -2699,6 +3310,21 @@ def test_legacy_v2_evidence_is_evaluated_in_memory_and_qualified() -> None:
         "baseline",
         "candidate",
     }
+    terminal_duration = _performance_metric(
+        result, PerformanceMetricName.TERMINAL_ATTEMPT_ACTIVE_DURATION_SECONDS
+    )
+    provider_duration = _performance_metric(
+        result, PerformanceMetricName.PROVIDER_GENERATION_DURATION_SECONDS
+    )
+    assert terminal_duration.availability is MetricAvailability.AVAILABLE
+    assert terminal_duration.baseline_summary is not None
+    assert terminal_duration.baseline_summary.median > 0.0
+    assert (
+        ComparisonReasonCode.LEGACY_IDENTITY_GAP
+        in terminal_duration.comparability.reason_codes
+    )
+    assert provider_duration.availability is MetricAvailability.UNAVAILABLE
+    assert provider_duration.baseline_summary is None
     assert _files(path) == before
 
 
@@ -2981,7 +3607,7 @@ def test_cross_version_added_case_uses_complete_verified_intersection(
 
     result = compare_runs(baseline, candidate, intent=ComparisonIntent.REPEAT)
 
-    assert result.comparison_policy_version == "1.1.0"
+    assert result.comparison_policy_version == "1.2.0"
     assert result.case_population_mode is CasePopulationMode.VERIFIED_INTERSECTION
     assert result.quality_comparability.classification is ComparabilityClassification.QUALIFIED
     assert (
@@ -3346,6 +3972,13 @@ def test_ordering_only_change_across_versions_keeps_case_alignment(tmp_path: Pat
     assert not result.verified_intersection.definition_mismatches
     assert result.verified_intersection_score_comparison is not None
     assert result.verified_intersection_score_comparison.case_count == 5
+    assert result.performance_analysis is not None
+    assert len(result.performance_analysis.selected_sample_identities) == 5
+    assert all(
+        identity.case_id != "added-001"
+        for identity in result.performance_analysis.selected_sample_identities
+    )
+    assert len(result.performance_analysis.execution_cost_sample_identities) == 5
 
 
 def test_baseline_only_case_is_reported_in_directional_intersection(tmp_path: Path) -> None:
@@ -3621,6 +4254,16 @@ def test_cross_version_evaluator_unavailability_is_case_scoped(
         is CasePopulationMode.VERIFIED_INTERSECTION_MATCHED_PARTIAL
     )
     assert result.quality_comparability.classification is ComparabilityClassification.QUALIFIED
+    assert result.performance_analysis is not None
+    assert len(result.performance_analysis.selected_sample_identities) == 5
+    assert any(
+        identity.case_id == "exact-001"
+        for identity in result.performance_analysis.selected_sample_identities
+    )
+    assert all(
+        identity.case_id != "added-001"
+        for identity in result.performance_analysis.selected_sample_identities
+    )
     assert (
         ComparisonReasonCode.EVALUATOR_UNAVAILABLE
         in result.quality_comparability.reason_codes
@@ -4015,6 +4658,13 @@ def test_incomplete_intersection_uses_matched_partial_when_coverage_allows(
     assert result.verified_intersection.coverage.sufficient
     assert result.verified_intersection_score_comparison is not None
     assert result.verified_intersection_score_comparison.case_count == 4
+    assert result.performance_analysis is not None
+    assert len(result.performance_analysis.selected_sample_identities) == 4
+    assert all(
+        identity.case_id != "exact-001"
+        for identity in result.performance_analysis.selected_sample_identities
+    )
+    assert len(result.performance_analysis.execution_cost_sample_identities) == 5
     assert result.quality_comparability.classification is ComparabilityClassification.QUALIFIED
     assert (
         ComparisonReasonCode.COVERAGE_THRESHOLD_DIFFERENCE
@@ -4359,7 +5009,7 @@ def test_cross_version_cli_text_and_json_are_explicit_intersection_output(
     assert main(["compare", str(baseline), str(candidate), "--json"]) == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["schema_version"] == 1
-    assert payload["comparison_policy_version"] == "1.1.0"
+    assert payload["comparison_policy_version"] == "1.2.0"
     assert payload["case_population_mode"] == "verified_intersection"
     assert payload["full_suite_score_comparison"] is None
     assert payload["verified_intersection_score_comparison"]["case_count"] == 5
@@ -4395,6 +5045,7 @@ def test_policy_1_0_schema_1_breakdowns_remain_readable(tmp_path: Path) -> None:
     legacy_payload.pop("candidate_source_run_score")
     legacy_payload.pop("verified_intersection")
     legacy_payload.pop("verified_intersection_score_comparison")
+    legacy_payload.pop("performance_analysis")
     historical_breakdowns = legacy_payload["categories"] + legacy_payload["tags"]
     expected = [
         (
@@ -4418,6 +5069,7 @@ def test_policy_1_0_schema_1_breakdowns_remain_readable(tmp_path: Path) -> None:
     assert loaded.comparison_policy_version == "1.0.0"
     assert loaded.verified_intersection is None
     assert loaded.verified_intersection_score_comparison is None
+    assert loaded.performance_analysis is None
     loaded_breakdowns = loaded.categories + loaded.tags
     assert [
         (
@@ -4442,6 +5094,25 @@ def test_policy_1_0_schema_1_breakdowns_remain_readable(tmp_path: Path) -> None:
         and item["candidate_total_case_count"] is None
         for item in reserialized["categories"] + reserialized["tags"]
     )
+
+
+def test_policy_1_1_schema_1_artifact_without_performance_analysis_remains_readable(
+    tmp_path: Path,
+) -> None:
+    baseline = _run(tmp_path / "baseline-runs", "baseline")
+    candidate = _run(tmp_path / "candidate-runs", "candidate")
+    payload = json.loads(compare_runs(baseline, candidate).model_dump_json())
+    payload["comparison_policy_version"] = "1.1.0"
+    payload.pop("performance_analysis")
+
+    loaded = ComparisonResult.model_validate(payload)
+
+    assert loaded.schema_version == 1
+    assert loaded.comparison_policy_version == "1.1.0"
+    assert loaded.performance_analysis is None
+    reserialized = json.loads(loaded.model_dump_json())
+    assert reserialized["schema_version"] == 1
+    assert reserialized["performance_analysis"] is None
 
 
 def _legacy_v3_suite(

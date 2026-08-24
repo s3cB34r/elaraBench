@@ -159,7 +159,7 @@ original score.
 
 Comparison JSON is an independent derived artifact; it does not change result schema v3 or live
 inside either source run. Output paths inside source runs are rejected. Schema 1 records
-comparison policy `1.1.0`, ordered baseline/candidate run and evidence identities, intent,
+comparison policy `1.2.0`, ordered baseline/candidate run and evidence identities, intent,
 benchmark/model/profile evidence, separate quality and performance assessments, current in-memory
 evaluator provenance, coverage/population mode, and available full-suite, matched-case partial, or
 verified cross-version intersection case/category/tag deltas. Intersection evidence records both
@@ -174,6 +174,14 @@ treat those absent additive fields as unknown (`null`) and do not infer intersec
 Policy-`1.1.0` writers populate all three fields on every emitted breakdown. A suite version
 difference is reported independently and does not emit `verified_intersection_comparison` unless
 an intersection population is actually selected.
+
+Policy `1.2.0` adds optional `performance_analysis`. Compatibility defaults keep schema-1
+policy-`1.0.0` and policy-`1.1.0` artifacts readable without fabricating performance data. New
+analysis records semantic/aggregation versions, directional performance evidence hashes, selected
+terminal and execution-cost sample identities, all thirteen typed metrics, units, paired
+missingness, metric-specific comparability/reasons, paired summaries/deltas, and finish-reason
+counts. Performance hashes include attempt index/retry/outcome/duration and normalized terminal
+usage/timing/finish reason; descriptive attempt wall timestamps are excluded.
 
 `evaluator_resolution` retains availability for every case on each side. Run-global registry
 failures are diagnostic; `evaluator_unavailable` enters quality comparability only when an

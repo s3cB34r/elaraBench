@@ -518,7 +518,7 @@ class AttemptRecord(DomainModel):
     request_hash: Sha256Digest
     started_at: datetime
     completed_at: datetime
-    duration_seconds: Annotated[float, Field(ge=0.0)]
+    duration_seconds: Annotated[float, Field(ge=0.0, allow_inf_nan=False)]
     outcome: AttemptOutcome
     response: GenerationResponse
 

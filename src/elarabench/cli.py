@@ -23,6 +23,9 @@ from elarabench.comparison_models import (
     ComparisonIntent,
     ComparisonResult,
     EvidenceState,
+    PerformanceMetricComparison,
+    PerformanceMetricName,
+    PerformanceMetricUnit,
 )
 from elarabench.models import (
     GenerationParameters,
@@ -451,6 +454,7 @@ def _print_comparison(result: ComparisonResult) -> None:
         )
     else:
         print("Full-suite delta: unavailable")
+    _print_performance_observations(result)
     if result.categories:
         print("Categories:")
         for category in result.categories:
@@ -465,6 +469,96 @@ def _print_comparison(result: ComparisonResult) -> None:
                 f"{category.candidate_score:.4f} ({category.delta:+.4f})"
                 f"{denominator}"
             )
+
+
+def _print_performance_observations(result: ComparisonResult) -> None:
+    analysis = result.performance_analysis
+    if analysis is None:
+        return
+    by_name = {metric.metric_name: metric for metric in analysis.metrics}
+    names = [PerformanceMetricName.GENERATED_TOKENS]
+    provider_generation = by_name.get(
+        PerformanceMetricName.PROVIDER_GENERATION_DURATION_SECONDS
+    )
+    client_request = by_name.get(PerformanceMetricName.CLIENT_REQUEST_DURATION_SECONDS)
+    if _has_direct_performance_observation(provider_generation):
+        names.append(PerformanceMetricName.PROVIDER_GENERATION_DURATION_SECONDS)
+    elif _has_direct_performance_observation(client_request):
+        names.append(PerformanceMetricName.CLIENT_REQUEST_DURATION_SECONDS)
+    names.append(PerformanceMetricName.GENERATION_TOKENS_PER_SECOND)
+    displayed = [
+        by_name[name]
+        for name in names
+        if name in by_name
+        and by_name[name].baseline_summary is not None
+        and by_name[name].candidate_summary is not None
+    ]
+    if not displayed:
+        return
+    print("Performance observations (paired medians):")
+    for metric in displayed:
+        _print_performance_metric(metric)
+
+
+def _has_direct_performance_observation(
+    metric: PerformanceMetricComparison | None,
+) -> bool:
+    return (
+        metric is not None
+        and metric.baseline_summary is not None
+        and metric.candidate_summary is not None
+        and metric.comparability.classification
+        is not ComparabilityClassification.NOT_DIRECTLY_COMPARABLE
+    )
+
+
+def _print_performance_metric(metric: PerformanceMetricComparison) -> None:
+    assert metric.baseline_summary is not None
+    assert metric.candidate_summary is not None
+    labels = {
+        PerformanceMetricName.GENERATED_TOKENS: "Generated tokens",
+        PerformanceMetricName.PROVIDER_GENERATION_DURATION_SECONDS: (
+            "Provider generation duration"
+        ),
+        PerformanceMetricName.GENERATION_TOKENS_PER_SECOND: "Generation throughput",
+        PerformanceMetricName.CLIENT_REQUEST_DURATION_SECONDS: "Client request duration",
+    }
+    baseline = _format_performance_value(metric.baseline_summary.median, metric.unit)
+    candidate = _format_performance_value(metric.candidate_summary.median, metric.unit)
+    if metric.absolute_delta is None:
+        delta = "direct delta withheld"
+    else:
+        absolute = _format_performance_value(metric.absolute_delta, metric.unit, signed=True)
+        relative = (
+            f", {metric.relative_delta:+.1%}"
+            if metric.relative_delta is not None
+            else ""
+        )
+        delta = f"{absolute}{relative}"
+    missingness = metric.missingness
+    paired = ""
+    if missingness.paired_available_count != missingness.expected_paired_sample_count:
+        paired = (
+            f"; {missingness.paired_available_count}/"
+            f"{missingness.expected_paired_sample_count} paired samples"
+        )
+    print(f"  {labels[metric.metric_name]}: {baseline} -> {candidate} ({delta}{paired})")
+
+
+def _format_performance_value(
+    value: float,
+    unit: PerformanceMetricUnit,
+    *,
+    signed: bool = False,
+) -> str:
+    prefix = "+" if signed and value >= 0 else ""
+    if unit is PerformanceMetricUnit.SECONDS:
+        return f"{prefix}{value:.3f}s"
+    if unit is PerformanceMetricUnit.TOKENS_PER_SECOND:
+        return f"{prefix}{value:.2f} tokens/s"
+    if unit is PerformanceMetricUnit.TOKENS:
+        return f"{prefix}{value:.2f} tokens"
+    return f"{prefix}{value:.2f}"
 
 
 def _compare_command(arguments: argparse.Namespace) -> int:

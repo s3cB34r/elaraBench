@@ -110,12 +110,19 @@ stored evaluator specifications and evaluates both canonical response sets in me
 summary, event, manifest, or source artifact write occurs.
 
 The comparison domain is independent of result schema v3: comparison schema 1 and policy version
-`1.1.0` represent intent, field evidence, separate quality/performance classifications, complete,
+`1.2.0` represent intent, field evidence, separate quality/performance classifications, complete,
 matched-case, or verified-intersection populations, and case/category/tag deltas. Snapshot fixture
 hashes extend individual case identity without consulting live suite files. Same-suite different-
 version runs may select exact verified cases; different suite namespaces and same-version content
 conflicts cannot. Optional JSON export is the only write and targets a caller-selected path
 outside the source-run protocol.
+
+Validated attempts and terminal responses also flow through the provider-neutral
+`comparison_performance` layer. That layer selects paired sample identities, extracts normalized
+physical metrics, retains retry active cost, aggregates paired medians, applies metric-specific
+tokenizer/provider comparability, and produces deterministic performance hashes. Runner,
+providers, storage, benchmark evaluators, and physical result schema v3 are unchanged. Missing
+optional timing/usage degrades only the affected metric and never changes quality scoring.
 
 ## Evaluation outcome boundaries
 

@@ -143,6 +143,11 @@ strict/qualified quality, 1 for quality that is not directly comparable, and 2 f
 operational failure. Performance comparability remains independently reported. See
 [Same-benchmark comparison](docs/comparison.md).
 
+Policy `1.2.0` also reports observed paired performance medians from immutable attempts and
+responses: generated tokens, explicit client/provider durations, generation throughput, and
+attempt/retry active cost. Each metric carries its own availability and comparability; unknown
+warm state keeps observations qualified, and CLI exit status remains quality-based.
+
 ## Runtime policy
 
 ElaraBench v0.2.1 treats model reasoning/thinking as explicit inference configuration:

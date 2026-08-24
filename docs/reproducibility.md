@@ -98,7 +98,7 @@ semantic change visible, while rescoring always retains the original raw respons
 
 ## Comparison identity and classes
 
-M4.2a derives comparison schema 1 results under policy `1.1.0`. It hashes the ordered baseline and
+M4.2b derives comparison schema 1 results under policy `1.2.0`. It hashes the ordered baseline and
 candidate evidence identities and benchmark identities, declared intent, selected case
 population, canonical comparison evidence, current evaluator resolution/availability, and
 evaluator provenance. For verified intersections it also hashes exact fixture-aware case
@@ -108,6 +108,14 @@ direction is material. The evidence hash uses validated run fingerprint/snapshot
 response hashes, never filesystem location or mutable summary data. A canonical response is
 accepted only when it exactly matches the final attempt response and its success/error state
 agrees with that terminal outcome; contradictory attempt/response artifacts are corrupt input.
+
+The comparison fingerprint also includes `performance_metrics_v1`,
+`paired_sample_median_v1`, directional per-run performance evidence hashes, selected paired
+populations, metric missingness/comparability, and computed summaries/deltas. Performance hashes
+cover attempt durations/outcomes/indexes/retry numbers and normalized terminal usage, timing, and
+finish reason. `started_at` and `completed_at` remain descriptive and do not affect identity;
+changing an active duration or usage count does. Ollama provider durations are already normalized
+seconds. No live provider, current source fixture, or mutable summary is consulted.
 
 Fixture-aware case hashes use fixture content hashes embedded in and validated from each physical
 run snapshot. A later edit to a source suite or fixture cannot change comparison identity. Valid
