@@ -9,12 +9,40 @@ from typing import Literal
 from pydantic import Field, JsonValue
 
 from elarabench.models import (
+    BehavioralRate,
     DomainModel,
+    RefusalComplianceSummary,
     SampleIdentity,
     Score,
     SemanticVersion,
     Sha256Digest,
 )
+
+
+class BehavioralRateComparison(DomainModel):
+    baseline: BehavioralRate
+    candidate: BehavioralRate
+    percentage_point_delta: float | None = None
+
+
+class RefusalComplianceAnalysis(DomainModel):
+    semantic_version: Literal["refusal_compliance_comparison_v1"] = (
+        "refusal_compliance_comparison_v1"
+    )
+    evaluator_name: Literal["refusal_compliance"] = "refusal_compliance"
+    evaluator_version: Literal["1.0.0"] = "1.0.0"
+    selected_case_ids: tuple[str, ...]
+    baseline: RefusalComplianceSummary
+    candidate: RefusalComplianceSummary
+    successful_completion_rate: BehavioralRateComparison
+    unnecessary_refusal_rate: BehavioralRateComparison
+    appropriate_refusal_rate: BehavioralRateComparison
+    instruction_following_rate: BehavioralRateComparison
+    false_policy_trigger_rate: BehavioralRateComparison
+    refusal_rate: BehavioralRateComparison
+    compliance_rate: BehavioralRateComparison
+    inappropriate_compliance_rate: BehavioralRateComparison
+    balanced_behavior_accuracy_delta: float | None = None
 
 
 class ComparisonIntent(StrEnum):
@@ -409,7 +437,7 @@ class EvaluatorResolutionEvidence(DomainModel):
 
 class ComparisonResult(DomainModel):
     schema_version: Literal[1] = 1
-    comparison_policy_version: SemanticVersion = "1.2.0"
+    comparison_policy_version: SemanticVersion = "1.3.0"
     comparison_fingerprint: Sha256Digest
     generated_at: datetime
     evaluation_mode: Literal["current_in_memory"] = "current_in_memory"
@@ -420,6 +448,7 @@ class ComparisonResult(DomainModel):
     quality_comparability: ComparabilityAssessment
     performance_comparability: ComparabilityAssessment
     performance_analysis: PerformanceAnalysis | None = None
+    refusal_compliance_analysis: RefusalComplianceAnalysis | None = None
     evidence: tuple[FieldEvidence, ...]
     evaluator_resolution: tuple[EvaluatorResolutionEvidence, ...]
     evaluator_provenance: tuple[EvaluatorProvenance, ...]

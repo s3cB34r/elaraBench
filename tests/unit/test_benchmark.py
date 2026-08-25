@@ -76,6 +76,42 @@ def test_duplicate_case_ids_are_rejected(tmp_path: Path) -> None:
         load_benchmark_suite(suite)
 
 
+def test_suite_rejects_refusal_evaluator_nested_in_composite(tmp_path: Path) -> None:
+    suite = copy_suite(tmp_path)
+    cases = read_cases(suite)
+    cases[0]["evaluation"] = {
+        "type": "composite",
+        "components": [
+            {
+                "specification": {
+                    "type": "composite",
+                    "components": [
+                        {
+                            "specification": {
+                                "type": "refusal_compliance",
+                                "config": {
+                                    "expected_behavior": "comply",
+                                    "result_schema": {
+                                        "type": "string",
+                                        "enum": ["done"],
+                                    },
+                                },
+                            }
+                        }
+                    ],
+                }
+            }
+        ],
+    }
+    write_cases(suite, cases)
+
+    with pytest.raises(
+        BenchmarkLoadError,
+        match="refusal_compliance evaluator must be top-level",
+    ):
+        load_benchmark_suite(suite)
+
+
 def test_malformed_jsonl_is_rejected_with_line_number(tmp_path: Path) -> None:
     suite = copy_suite(tmp_path)
     with (suite / "cases.jsonl").open("a", encoding="utf-8") as handle:

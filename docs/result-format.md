@@ -42,8 +42,13 @@ Three version fields have deliberately separate meanings:
 - `manifest.json.schema_version` is the physical result schema (`2` historically, `3` now).
 - `evaluation.json.source_result_schema_version` identifies the physical canonical evidence that
   was evaluated. Composite children inherit the same value recursively.
-- `summary.json.schema_version` is the summary artifact's own shape and is `3` for summaries
-  written by v0.2.1. `summary.json.source_result_schema_version` identifies its physical source.
+- `summary.json.schema_version` is the summary artifact's own shape and is `4` for current
+  summaries. `summary.json.source_result_schema_version` identifies its physical source.
+
+Summary artifact shape does not establish physical provenance. Trusted run reads validate the
+summary source version against the owning manifest. The missing provenance field in historical
+summary schema v2 is resolved as source v2 only inside a physical-v2 run; the same payload in a
+physical-v3 run is corrupt and is rejected.
 
 Consequently, rescoring a historical physical v2 run with current evaluators produces:
 
@@ -51,14 +56,15 @@ Consequently, rescoring a historical physical v2 run with current evaluators pro
 physical result schema:             2
 evaluator version:                  current evaluator version
 evaluation source result schema:    2 (outer and every composite child)
-regenerated summary schema:         3
+regenerated summary schema:         4
 summary source result schema:       2
 ```
 
 The original strict summary schema v2 had no source-provenance field. It remains historical
-derived data, not a new extended shape masquerading as schema v2. Regeneration may replace that
-derived file with summary schema v3; canonical v2 manifest, benchmark, requests, attempts, and
-responses remain unchanged.
+derived data. Readers accept summary v2 and infer only its physical source provenance; summary v3
+also remains readable without fabricated refusal data. Regeneration may replace either derived
+shape with summary schema v4; canonical manifests, benchmarks, requests, attempts, and responses
+remain unchanged.
 
 Historical schema-v2 `evaluation.json` files also predate the source-provenance field. Their
 physical manifest is authoritative: version-aware loading infers source result schema 2 in memory
@@ -126,9 +132,14 @@ request precedes canonical samples.
 
 ## Summary and coverage
 
-Current `summary.json` uses summary schema version 3. A current physical v3 run produces
-`schema_version: 3` and `source_result_schema_version: 3`; a regenerated historical v2 summary
-produces `schema_version: 3` and `source_result_schema_version: 2`.
+Current `summary.json` uses summary schema version 4. A current physical v3 run produces
+`schema_version: 4` and `source_result_schema_version: 3`; a regenerated historical v2 summary
+produces `schema_version: 4` and `source_result_schema_version: 2`. Schema v4 adds optional
+`refusal_compliance`; it is null when compatible evaluator evidence is absent.
+Current schema-v3/v4 summaries require explicit source provenance. The only inferred provenance is
+for a provenance-less schema-v2 summary owned by a physical-v2 run. Historical v2/v3 summaries are
+read-only compatibility objects; the current writer accepts only schema v4, and explicit rescore or
+summary regeneration is the upgrade path.
 
 Repeats are averaged per case, then positive case weights form a macro average. Category and tag
 breakdowns use the same case weighting. Repeat statistics include count, mean, min, max, and
@@ -155,11 +166,37 @@ evaluators never repair it. Regenerated evaluations and summaries record the phy
 source result schema, so a current rescore of v2 evidence is not presented as its historical
 original score.
 
+Refusal-aware evaluations retain the generic `EvaluationResult` shape. Orthogonal expected and
+observed behavior, protocol and completion status, detection source, reason/redirect evidence,
+redirect acceptance, policy-probe status, observable policy attribution, and result-schema status
+use a strict refusal-specific artifact contract. Policy attribution records its typed source:
+configured reason-code membership for structured refusals or the versioned anchored-prose
+classification for fallback refusals. Safe-redirect acceptance is likewise validated against the
+expected behavior, protocol status, configured enablement and redirect-code allowlist. Summary
+regeneration validates required fields,
+enum and cross-field semantics, evaluator/configuration provenance, and agreement with the
+snapshot case expectation. Corrupt derived evidence fails summary construction rather than being
+counted as model behavior; an explicit rescore can regenerate it from the immutable canonical
+response. `refusal_compliance_summary_v1` first averages repeats within each case,
+then macro-averages eligible cases. Every rate records numerator, denominator, eligible count,
+coverage, partial value, and a headline value only at 100% scored coverage for that metric's
+eligible population. Missing historical analysis is not a zero rate.
+Outcome counts are mutually exclusive, including a distinct accepted-safe-redirection count;
+protocol validity remains independently visible. A zero-eligible rate has null coverage and
+values, whereas an incompletely covered non-empty population has a positive denominator and a
+coverage ratio below one.
+Run scoring supplies the persisted run-level repeat count. Standalone `aggregate(samples)` calls
+infer that count only from a contiguous global repeat-index domain starting at zero; ambiguous
+gaps, duplicate sample identities, and indexes outside an explicit repeat count are aggregation
+errors rather than clamped or over-100% behavioral coverage. If standalone aggregation has no
+authoritative case expectations and encounters an unscored refusal evaluation, it withholds the
+behavioral analysis rather than inferring a complete population from surviving scored evidence.
+
 ## Comparison schema 1
 
 Comparison JSON is an independent derived artifact; it does not change result schema v3 or live
 inside either source run. Output paths inside source runs are rejected. Schema 1 records
-comparison policy `1.2.0`, ordered baseline/candidate run and evidence identities, intent,
+comparison policy `1.3.0`, ordered baseline/candidate run and evidence identities, intent,
 benchmark/model/profile evidence, separate quality and performance assessments, current in-memory
 evaluator provenance, coverage/population mode, and available full-suite, matched-case partial, or
 verified cross-version intersection case/category/tag deltas. Intersection evidence records both
@@ -175,9 +212,12 @@ Policy-`1.1.0` writers populate all three fields on every emitted breakdown. A s
 difference is reported independently and does not emit `verified_intersection_comparison` unless
 an intersection population is actually selected.
 
-Policy `1.2.0` adds optional `performance_analysis`. Compatibility defaults keep schema-1
-policy-`1.0.0` and policy-`1.1.0` artifacts readable without fabricating performance data. New
-analysis records semantic/aggregation versions, directional performance evidence hashes, selected
+Policy `1.2.0` adds optional `performance_analysis`. Policy `1.3.0` adds optional typed
+`refusal_compliance_analysis`, derived symmetrically over the M4-selected population. Compatibility
+defaults keep schema-1
+policy-`1.0.0`, policy-`1.1.0`, and policy-`1.2.0` artifacts readable without fabricating absent
+performance or refusal data. Performance analysis records semantic/aggregation versions,
+directional performance evidence hashes, selected
 terminal and execution-cost sample identities, all thirteen typed metrics, units, paired
 missingness, metric-specific comparability/reasons, paired summaries/deltas, and finish-reason
 counts. Performance hashes include attempt index/retry/outcome/duration and normalized terminal

@@ -344,10 +344,50 @@ class RunArtifactStore:
 
     def replace_summary(self, summary: AggregationSummary) -> None:
         """Explicitly and atomically replace the reproducible derived summary."""
+        if summary.schema_version != 4:
+            raise ArtifactStoreError(
+                "current summary writer only accepts summary schema v4"
+            )
+        self._validate_summary_provenance(summary)
         _atomic_write(self.path / "summary.json", _json_bytes(summary), replace=True)
 
     def read_summary(self) -> AggregationSummary:
-        return _read_model(self.path / "summary.json", AggregationSummary)
+        path = self.path / "summary.json"
+        value = _read_json_object(path)
+        physical_schema = self._physical_result_schema_version()
+        provenance_field = "source_result_schema_version"
+        if provenance_field not in value:
+            if physical_schema == 2 and value.get("schema_version") == 2:
+                value[provenance_field] = 2
+            else:
+                raise ArtifactStoreError(
+                    f"incomplete summary artifact {path}: missing required "
+                    f"{provenance_field}"
+                )
+        try:
+            summary = AggregationSummary.model_validate(value)
+        except ValidationError as error:
+            raise ArtifactStoreError(f"invalid artifact {path}: {error}") from error
+        self._validate_summary_provenance(summary)
+        return summary
+
+    def _physical_result_schema_version(self) -> Literal[2, 3]:
+        value = self.read_manifest_data().get("schema_version")
+        if value not in {2, 3}:
+            raise ArtifactStoreError(
+                f"invalid physical result schema version in {self.path / 'manifest.json'}"
+            )
+        return cast(Literal[2, 3], value)
+
+    def _validate_summary_provenance(self, summary: AggregationSummary) -> None:
+        physical_schema = self._physical_result_schema_version()
+        if summary.source_result_schema_version != physical_schema:
+            raise ArtifactStoreError(
+                "summary source schema mismatch in "
+                f"{self.path / 'summary.json'}: stored "
+                f"{summary.source_result_schema_version}, physical run schema "
+                f"{physical_schema}"
+            )
 
     def read_events(self) -> tuple[RunEvent, ...]:
         """Read and validate the diagnostic event log."""

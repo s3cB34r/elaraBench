@@ -203,7 +203,7 @@ def test_successful_run_is_ordered_complete_and_self_contained(tmp_path: Path) -
     assert result.manifest.lifecycle.status is RunLifecycleStatus.COMPLETED
     assert result.summary.score == 1.0
     assert result.summary.coverage.ratio == 1.0
-    assert result.summary.schema_version == 3
+    assert result.summary.schema_version == 4
     assert result.summary.source_result_schema_version == 3
     assert result.manifest.run_id == "ordered-run"
     assert result.manifest.schema_version == 3
@@ -499,6 +499,59 @@ def test_resume_and_summarize_reject_missing_schema_v3_evaluation_provenance(
     with pytest.raises(RunIntegrityError, match="incomplete schema-v3 evaluation"):
         summarize_run(result.path)
     with pytest.raises(ArtifactStoreError, match="incomplete schema-v3 evaluation"):
+        runner(FakeProvider(responses=passing_responses(loaded)), runs_dir).resume(
+            result.path
+        )
+
+
+def test_resume_rejects_provenance_less_v2_summary_on_physical_v3_run(
+    tmp_path: Path,
+) -> None:
+    loaded = load_benchmark_suite(SUITE_PATH)
+    runs_dir = tmp_path / "runs"
+    result = runner(FakeProvider(responses=passing_responses(loaded)), runs_dir).run(
+        loaded,
+        configuration(loaded),
+        run_id="mismatched-summary-provenance",
+    )
+    summary_path = result.path / "summary.json"
+    payload = json.loads(summary_path.read_text(encoding="utf-8"))
+    payload["schema_version"] = 2
+    payload.pop("source_result_schema_version")
+    payload.pop("refusal_compliance")
+    summary_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ArtifactStoreError, match="missing required source_result"):
+        runner(FakeProvider(responses=passing_responses(loaded)), runs_dir).resume(
+            result.path
+        )
+
+    recovered = score_run(result.path)
+    assert recovered.schema_version == 4
+    assert recovered.source_result_schema_version == 3
+    assert ArtifactStore(runs_dir).open_run(result.path.name).read_summary() == recovered
+
+
+@pytest.mark.parametrize("summary_schema", [3, 4])
+def test_resume_rejects_current_summary_missing_provenance(
+    tmp_path: Path, summary_schema: int
+) -> None:
+    loaded = load_benchmark_suite(SUITE_PATH)
+    runs_dir = tmp_path / "runs"
+    result = runner(FakeProvider(responses=passing_responses(loaded)), runs_dir).run(
+        loaded,
+        configuration(loaded),
+        run_id=f"missing-summary-{summary_schema}-provenance",
+    )
+    summary_path = result.path / "summary.json"
+    payload = json.loads(summary_path.read_text(encoding="utf-8"))
+    payload["schema_version"] = summary_schema
+    payload.pop("source_result_schema_version")
+    if summary_schema == 3:
+        payload.pop("refusal_compliance")
+    summary_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ArtifactStoreError, match="missing required source_result"):
         runner(FakeProvider(responses=passing_responses(loaded)), runs_dir).resume(
             result.path
         )

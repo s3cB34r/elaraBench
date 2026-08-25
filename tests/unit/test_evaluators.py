@@ -278,6 +278,77 @@ def test_composite_evaluator_uses_weights_and_preserves_children() -> None:
     assert first_component["score"] == 0.0
 
 
+@pytest.mark.parametrize("depth", [1, 2, 4])
+def test_composite_rejects_refusal_evaluator_at_every_nested_depth(depth: int) -> None:
+    child: dict[str, object] = {
+        "type": "refusal_compliance",
+        "config": {
+            "expected_behavior": "comply",
+            "result_schema": {"type": "string", "enum": ["done"]},
+        },
+    }
+    for _ in range(depth):
+        child = {
+            "type": "composite",
+            "components": [{"specification": child}],
+        }
+    specification = EvaluationSpecification.model_validate(child)
+
+    with pytest.raises(
+        EvaluatorConfigurationError,
+        match="must be top-level and cannot be nested inside composite evaluators",
+    ):
+        validate_specification(specification)
+    result = evaluate(
+        EvaluationContext(
+            response=GenerationResponse(text="irrelevant"),
+            specification=specification,
+        )
+    )
+    assert result.status is EvaluationStatus.INVALID
+    assert result.score is None
+    assert "must be top-level" in result.explanation
+
+
+def test_nested_ordinary_composite_remains_valid() -> None:
+    specification = EvaluationSpecification.model_validate(
+        {
+            "type": "composite",
+            "components": [
+                {
+                    "specification": {
+                        "type": "exact_match",
+                        "config": {"expected": "ELARA"},
+                    }
+                },
+                {
+                    "specification": {
+                        "type": "composite",
+                        "components": [
+                            {
+                                "specification": {
+                                    "type": "regex_full_match",
+                                    "config": {"pattern": "ELARA"},
+                                }
+                            }
+                        ],
+                    }
+                },
+            ],
+        }
+    )
+
+    validate_specification(specification)
+    result = evaluate(
+        EvaluationContext(
+            response=GenerationResponse(text="ELARA"),
+            specification=specification,
+        )
+    )
+    assert result.status is EvaluationStatus.SCORED
+    assert result.score == 1.0
+
+
 @pytest.mark.parametrize("source_schema", [2, 3])
 def test_recursive_composite_preserves_physical_source_provenance(
     source_schema: Literal[2, 3],

@@ -28,6 +28,7 @@ from elarabench.comparison_models import (
     PerformanceMetricUnit,
 )
 from elarabench.models import (
+    BehavioralRate,
     GenerationParameters,
     RetryPolicy,
     RunConfiguration,
@@ -454,6 +455,7 @@ def _print_comparison(result: ComparisonResult) -> None:
         )
     else:
         print("Full-suite delta: unavailable")
+    _print_refusal_compliance(result)
     _print_performance_observations(result)
     if result.categories:
         print("Categories:")
@@ -469,6 +471,47 @@ def _print_comparison(result: ComparisonResult) -> None:
                 f"{category.candidate_score:.4f} ({category.delta:+.4f})"
                 f"{denominator}"
             )
+
+
+def _print_refusal_compliance(result: ComparisonResult) -> None:
+    analysis = result.refusal_compliance_analysis
+    if analysis is None:
+        return
+    print("Refusal & compliance:")
+    rows = (
+        ("Successful completion", analysis.successful_completion_rate),
+        ("Unnecessary refusal", analysis.unnecessary_refusal_rate),
+        ("Appropriate refusal", analysis.appropriate_refusal_rate),
+        ("Inappropriate compliance", analysis.inappropriate_compliance_rate),
+        ("False policy trigger", analysis.false_policy_trigger_rate),
+    )
+    for label, comparison in rows:
+        baseline = comparison.baseline.headline_value
+        candidate = comparison.candidate.headline_value
+        if baseline is None or candidate is None:
+            if comparison.baseline.denominator == comparison.candidate.denominator == 0:
+                print(f"  {label}: n/a (no eligible cases)")
+            else:
+                print(
+                    f"  {label}: "
+                    f"baseline {_behavioral_rate_state(comparison.baseline)}, "
+                    f"candidate {_behavioral_rate_state(comparison.candidate)}"
+                )
+            continue
+        delta = comparison.percentage_point_delta
+        assert delta is not None
+        print(
+            f"  {label}: {baseline:.1%} -> {candidate:.1%} "
+            f"({delta:+.1f} pp)"
+        )
+
+
+def _behavioral_rate_state(rate: BehavioralRate) -> str:
+    if rate.denominator == 0:
+        return "n/a (no eligible cases)"
+    if rate.headline_value is None:
+        return "withheld (incomplete behavioral coverage)"
+    return f"{rate.headline_value:.1%}"
 
 
 def _print_performance_observations(result: ComparisonResult) -> None:

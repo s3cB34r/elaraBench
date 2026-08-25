@@ -127,6 +127,9 @@ def test_canonical_and_derived_artifacts_round_trip(tmp_path: Path) -> None:
     assert run.read_response(identity) == response
     assert run.read_evaluation(identity, source_result_schema_version=3) == result
     assert run.read_summary() == summary
+    stored_summary = json.loads((run.path / "summary.json").read_text(encoding="utf-8"))
+    assert stored_summary["schema_version"] == 4
+    assert stored_summary["source_result_schema_version"] == 3
     assert "café" in (run.path / "samples/case-1/repeat-000/request.json").read_text()
 
 
@@ -201,6 +204,7 @@ def test_schema_v3_evaluation_requires_valid_explicit_provenance(
 
 def test_summary_is_atomically_regenerable(tmp_path: Path) -> None:
     run = ArtifactStore(tmp_path).run("run")
+    run.write_manifest(manifest("run"))
     identity = SampleIdentity(case_id="case", repeat_index=0)
     first = aggregate(
         [AggregationSample(identity=identity, category="reasoning", result=evaluation(0.0))]
@@ -214,6 +218,113 @@ def test_summary_is_atomically_regenerable(tmp_path: Path) -> None:
 
     assert run.read_summary().score == 1.0
     assert not list(run.path.rglob(".elarabench-*"))
+
+
+@pytest.mark.parametrize("schema_version", [2, 3])
+def test_current_summary_writer_rejects_historical_schema_objects(
+    tmp_path: Path, schema_version: int
+) -> None:
+    run = ArtifactStore(tmp_path).run("run")
+    run.write_manifest(manifest("run"))
+    current = aggregate(
+        [
+            AggregationSample(
+                identity=SampleIdentity(case_id="case", repeat_index=0),
+                category="reasoning",
+                result=evaluation(1.0),
+            )
+        ]
+    )
+    historical = current.model_copy(
+        update={
+            "schema_version": schema_version,
+            "source_result_schema_version": 2 if schema_version == 2 else 3,
+            "refusal_compliance": None,
+        }
+    )
+
+    with pytest.raises(ArtifactStoreError, match="only accepts summary schema v4"):
+        run.write_summary(historical)
+    assert not (run.path / "summary.json").exists()
+
+
+@pytest.mark.parametrize("schema_version", [3, 4])
+def test_physical_v3_rejects_current_summary_missing_provenance(
+    tmp_path: Path, schema_version: int
+) -> None:
+    run = ArtifactStore(tmp_path).run("run")
+    run.write_manifest(manifest("run"))
+    summary = aggregate(
+        [
+            AggregationSample(
+                identity=SampleIdentity(case_id="case", repeat_index=0),
+                category="reasoning",
+                result=evaluation(1.0),
+            )
+        ]
+    )
+    payload = summary.model_dump(mode="json")
+    payload["schema_version"] = schema_version
+    payload.pop("source_result_schema_version")
+    if schema_version == 3:
+        payload.pop("refusal_compliance")
+    (run.path / "summary.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ArtifactStoreError, match="missing required source_result"):
+        run.read_summary()
+
+
+def test_physical_v3_reads_explicit_schema_v3_summary_provenance(tmp_path: Path) -> None:
+    run = ArtifactStore(tmp_path).run("run")
+    run.write_manifest(manifest("run"))
+    summary = aggregate(
+        [
+            AggregationSample(
+                identity=SampleIdentity(case_id="case", repeat_index=0),
+                category="reasoning",
+                result=evaluation(1.0),
+            )
+        ]
+    )
+    payload = summary.model_dump(mode="json")
+    payload["schema_version"] = 3
+    payload.pop("refusal_compliance")
+    (run.path / "summary.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    stored = run.read_summary()
+    assert stored.schema_version == 3
+    assert stored.source_result_schema_version == 3
+
+
+@pytest.mark.parametrize("explicit_source", [None, 2])
+def test_physical_v3_rejects_legacy_or_mismatched_summary_provenance(
+    tmp_path: Path, explicit_source: int | None
+) -> None:
+    run = ArtifactStore(tmp_path).run("run")
+    run.write_manifest(manifest("run"))
+    summary = aggregate(
+        [
+            AggregationSample(
+                identity=SampleIdentity(case_id="case", repeat_index=0),
+                category="reasoning",
+                result=evaluation(1.0),
+            )
+        ]
+    )
+    payload = summary.model_dump(mode="json")
+    if explicit_source is None:
+        payload["schema_version"] = 2
+        payload.pop("source_result_schema_version")
+        payload.pop("refusal_compliance")
+    else:
+        payload["source_result_schema_version"] = explicit_source
+    (run.path / "summary.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(
+        ArtifactStoreError,
+        match=r"summary source schema mismatch|missing required source_result",
+    ):
+        run.read_summary()
 
 
 @pytest.mark.parametrize("run_id", ["../escape", "/absolute", "bad/name"])

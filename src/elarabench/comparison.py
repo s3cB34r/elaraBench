@@ -17,6 +17,7 @@ from typing import Literal
 from pydantic import BaseModel, JsonValue
 
 from elarabench.comparison_models import (
+    BehavioralRateComparison,
     BenchmarkIdentityEvidence,
     BreakdownComparison,
     CaseComparison,
@@ -40,6 +41,7 @@ from elarabench.comparison_models import (
     ModelIdentityAssessment,
     ModelIdentityConfidence,
     PerformanceAnalysis,
+    RefusalComplianceAnalysis,
     RunComparisonReference,
     ScoreComparison,
     SourceRunScore,
@@ -71,6 +73,8 @@ from elarabench.hashing import (
 )
 from elarabench.legacy_v2 import LegacyV2RunManifest
 from elarabench.models import (
+    AggregationSample,
+    BehavioralRate,
     BenchmarkCase,
     EvaluationContext,
     EvaluationResult,
@@ -81,9 +85,14 @@ from elarabench.models import (
     ThinkingPolicy,
     TimingMetadata,
 )
+from elarabench.refusal_compliance import (
+    RefusalCaseExpectation,
+    derive_refusal_compliance_summary,
+    expectation_from_specification,
+)
 from elarabench.storage import ArtifactStoreError, RunArtifactStore
 
-COMPARISON_POLICY_VERSION = "1.2.0"
+COMPARISON_POLICY_VERSION = "1.3.0"
 Clock = Callable[[], datetime]
 ModelIdentityFieldRole = Literal[
     "material_identity",
@@ -228,6 +237,126 @@ class _IntersectionSelection:
     evaluable_case_ids: tuple[str, ...]
     selected_case_ids: tuple[str, ...]
     complete: bool
+
+
+def _rate_comparison(
+    baseline: BehavioralRate,
+    candidate: BehavioralRate,
+) -> BehavioralRateComparison:
+    delta = (
+        (candidate.headline_value - baseline.headline_value) * 100.0
+        if baseline.headline_value is not None and candidate.headline_value is not None
+        else None
+    )
+    return BehavioralRateComparison(
+        baseline=baseline,
+        candidate=candidate,
+        percentage_point_delta=delta,
+    )
+
+
+def _refusal_compliance_analysis(
+    baseline_cases: Sequence[_CaseEvidence],
+    candidate_cases: Sequence[_CaseEvidence],
+) -> RefusalComplianceAnalysis | None:
+    """Derive behavior metrics from the exact selected M4 case population."""
+    baseline_by_id = {item.case.id: item for item in baseline_cases}
+    candidate_by_id = {item.case.id: item for item in candidate_cases}
+    expectations: dict[str, RefusalCaseExpectation] = {}
+    for item in baseline_cases:
+        case_id = item.case.id
+        if case_id not in candidate_by_id:
+            continue
+        left = item.case
+        right = candidate_by_id[case_id].case
+        if left.evaluation != right.evaluation:
+            continue
+        expectation = expectation_from_specification(left.evaluation)
+        if expectation is not None:
+            expectations[case_id] = expectation
+    if not expectations:
+        return None
+
+    def samples(cases: Mapping[str, _CaseEvidence]) -> list[AggregationSample]:
+        values: list[AggregationSample] = []
+        for case_id in expectations:
+            item = cases[case_id]
+            for repeat_index, result in item.results_by_repeat.items():
+                values.append(
+                    AggregationSample(
+                        identity=SampleIdentity(
+                            case_id=case_id, repeat_index=repeat_index
+                        ),
+                        category=item.case.category,
+                        tags=item.case.tags,
+                        case_weight=item.case.weight,
+                        result=result,
+                    )
+                )
+        return values
+
+    baseline_expected_repeats = max(
+        baseline_by_id[case_id].expected_repeats for case_id in expectations
+    )
+    candidate_expected_repeats = max(
+        candidate_by_id[case_id].expected_repeats for case_id in expectations
+    )
+    baseline_summary = derive_refusal_compliance_summary(
+        samples(baseline_by_id),
+        expectations=expectations,
+        expected_repeats=baseline_expected_repeats,
+    )
+    candidate_summary = derive_refusal_compliance_summary(
+        samples(candidate_by_id),
+        expectations=expectations,
+        expected_repeats=candidate_expected_repeats,
+    )
+    assert baseline_summary is not None and candidate_summary is not None
+    balanced_delta = (
+        (candidate_summary.balanced_behavior_accuracy - baseline_summary.balanced_behavior_accuracy)
+        * 100.0
+        if baseline_summary.balanced_behavior_accuracy is not None
+        and candidate_summary.balanced_behavior_accuracy is not None
+        else None
+    )
+    return RefusalComplianceAnalysis(
+        selected_case_ids=tuple(expectations),
+        baseline=baseline_summary,
+        candidate=candidate_summary,
+        successful_completion_rate=_rate_comparison(
+            baseline_summary.successful_completion_rate,
+            candidate_summary.successful_completion_rate,
+        ),
+        unnecessary_refusal_rate=_rate_comparison(
+            baseline_summary.unnecessary_refusal_rate,
+            candidate_summary.unnecessary_refusal_rate,
+        ),
+        appropriate_refusal_rate=_rate_comparison(
+            baseline_summary.appropriate_refusal_rate,
+            candidate_summary.appropriate_refusal_rate,
+        ),
+        instruction_following_rate=_rate_comparison(
+            baseline_summary.instruction_following_rate,
+            candidate_summary.instruction_following_rate,
+        ),
+        false_policy_trigger_rate=_rate_comparison(
+            baseline_summary.false_policy_trigger_rate,
+            candidate_summary.false_policy_trigger_rate,
+        ),
+        refusal_rate=_rate_comparison(
+            baseline_summary.refusal_rate,
+            candidate_summary.refusal_rate,
+        ),
+        compliance_rate=_rate_comparison(
+            baseline_summary.compliance_rate,
+            candidate_summary.compliance_rate,
+        ),
+        inappropriate_compliance_rate=_rate_comparison(
+            baseline_summary.inappropriate_compliance_rate,
+            candidate_summary.inappropriate_compliance_rate,
+        ),
+        balanced_behavior_accuracy_delta=balanced_delta,
+    )
 
 
 def utc_now() -> datetime:
@@ -1897,6 +2026,9 @@ def compare_runs(
         if intersection_selection is not None and selected_ids
         else None
     )
+    refusal_compliance_analysis = _refusal_compliance_analysis(
+        left_selected, right_selected
+    )
     population_mode = (
         CasePopulationMode.FULL_SUITE
         if full_score
@@ -2163,6 +2295,11 @@ def compare_runs(
             "evaluator_provenance": canonical_provenance,
             "semantic_evidence": canonical_evidence,
             "performance_analysis": performance_analysis.model_dump(mode="json"),
+            "refusal_compliance_analysis": (
+                refusal_compliance_analysis.model_dump(mode="json")
+                if refusal_compliance_analysis is not None
+                else None
+            ),
         }
     )
     return ComparisonResult(
@@ -2188,6 +2325,7 @@ def compare_runs(
         quality_comparability=quality,
         performance_comparability=performance,
         performance_analysis=performance_analysis,
+        refusal_compliance_analysis=refusal_compliance_analysis,
         evidence=tuple(evidence),
         evaluator_resolution=evaluator_resolution,
         evaluator_provenance=evaluator_provenance,

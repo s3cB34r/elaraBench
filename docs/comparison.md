@@ -161,6 +161,32 @@ attempts. Recorded attempt duration/count can be summarized, while absent usage/
 remains unavailable. Legacy metrics retain `legacy_identity_gap`; no tokenizer, retry, warm-state,
 environment, or provider semantics are synthesized.
 
+### Refusal/compliance analysis
+
+Policy `1.3.0` adds optional `refusal_compliance_analysis` without changing comparison schema 1.
+It appears only when compatible refusal-aware cases occur in the M4-selected full, matched, or
+verified-intersection population. Both sides are reevaluated in memory; stored behavior summaries
+are never subtracted. Historical policy-1.0, 1.1, and 1.2 artifacts load with the field absent
+rather than fabricated.
+
+The analysis reports explicit populations, confusion counts, safe-redirection diagnostics, and
+baseline/candidate rates plus percentage-point deltas. Rates cover successful completion,
+unnecessary and appropriate refusal, instruction following, observable false-policy triggers,
+refusal, compliance, and inappropriate compliance. `balanced_behavior_accuracy` averages
+successful completion and appropriate refusal only when both headline components exist. Each rate
+is repeat-first, case-macro and requires 100% scored coverage of its eligible population for a
+headline. Malformed or unclassified model output remains a scored behavioral failure.
+An eligible evaluation contributes to exactly one outcome count; accepted safe redirection has
+its own outcome count while also contributing to the appropriate-refusal rate. Protocol validity
+is orthogonal, so an anchored prose refusal can be an appropriate or unnecessary refusal while
+still reducing instruction following. A zero denominator means no eligible cases, not incomplete
+coverage; incomplete coverage applies only to a non-empty eligible population.
+
+`false_policy_trigger_rate` is an observable proxy: a configured comply-expected probe must be
+refused and explicitly attributed by the output to policy, safety rules, permission, or
+authorization. It makes no claim about internal model policy. Safe redirect is an observed refusal
+subtype and is appropriate only when the refuse-expected case permits its exact redirect code.
+
 ## Benchmark and coverage policy
 
 A full-suite comparison requires identical benchmark content hashes, matching ordered cases and
@@ -252,9 +278,10 @@ remain valid history; only the final attempt produces the canonical response.
 ## Output and exit status
 
 Text output summarizes quality and performance classifications with their separate reason-code
-lists, coverage, available score delta, paired performance observations, and category deltas.
-Complete case, category, tag, evidence, intersection, performance, and provenance records use
-comparison schema 1 and policy version `1.2.0`:
+lists, coverage, available score delta, optional refusal/compliance rates, paired performance
+observations, and category deltas. Complete case, category, tag, evidence, intersection,
+refusal/compliance, performance, and provenance records use
+comparison schema 1 and policy version `1.3.0`:
 
 ```bash
 elarabench compare runs/base runs/candidate --intent thinking --json
@@ -270,9 +297,9 @@ only an unrelated whole-source ratio. JSON continues to expose both scopes uncha
 Schema-1 artifacts written by policy `1.0.0` remain readable. Their category/tag breakdowns did
 not record intersection population mode or baseline/candidate denominators, so those additive
 fields deserialize as unknown (`null`) rather than receiving synthetic intersection semantics.
-Policy-`1.1.0` output always populated them for emitted breakdowns. Policy-`1.2.0` keeps that
-shape and adds optional typed performance analysis; artifacts from both earlier policies load
-with `performance_analysis: null` rather than synthesized measurements.
+Policy-`1.1.0` output always populated them for emitted breakdowns. Policy `1.2.0` added optional
+typed performance analysis, and policy `1.3.0` adds optional typed refusal/compliance analysis;
+artifacts from earlier policies load with absent analyses as null rather than synthesized data.
 
 With both flags, identical JSON is written and printed. Comparison fingerprints include ordered
 source evidence hashes, directional benchmark identities, intent, policy version, selected case
@@ -280,7 +307,9 @@ population, fixture-aware verified/mismatched/one-sided case identities, expecte
 weights, intersection coverage semantics, canonical field evidence, current evaluator
 resolution/availability, evaluator provenance, performance semantic/aggregation versions,
 directional performance evidence hashes, selected sample populations, metric missingness,
-comparability, and observed summaries/deltas. Evaluator resolution records specification
+comparability, and observed summaries/deltas. When present, selected refusal expectations,
+observed/protocol/completion evidence, policy attribution, redirect acceptance, counts, rates, and
+summary semantic version are also fingerprinted. Evaluator resolution records specification
 hashes and resolved versions without exception text. Fingerprints exclude generation time, output
 path, formatting, and unrelated wall timestamps; changing active duration or usage changes
 identity, and reversing baseline and candidate changes identity. No automatic comparison

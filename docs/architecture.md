@@ -89,11 +89,14 @@ incompatibility, or corrupt finalized JSON aborts resume.
 evaluations and summary. `summarize` reads evaluations and replaces only the summary. Neither
 service constructs a provider, reads the original suite directory, or uses the network.
 Evaluation context carries the physical source result-schema version; composite dispatch forwards
-it unchanged at every nesting level. Current summaries use their own artifact schema version 3
+it unchanged at every nesting level. Current summaries use their own artifact schema version 4
 and separately record whether their canonical source run was result schema 2 or 3.
 Artifact loading receives the physical manifest schema explicitly. A versionless historical v2
 evaluation is interpreted as source schema 2 in memory and is not silently migrated on read;
-current v3 evaluation writes carry the field explicitly.
+current v3 evaluation writes carry the field explicitly. Summary reads and writes likewise
+validate source provenance against the owning manifest. Only a physical-v2 run may resolve the
+omitted provenance of a historical summary-v2 payload; context-free summary parsing does not
+invent that ownership fact.
 
 New physical runs use result schema v3. A narrow compatibility layer validates historical M2
 schema-v2 manifests, snapshots, request hashes, and fingerprint schema v1 without injecting v3
@@ -110,7 +113,7 @@ stored evaluator specifications and evaluates both canonical response sets in me
 summary, event, manifest, or source artifact write occurs.
 
 The comparison domain is independent of result schema v3: comparison schema 1 and policy version
-`1.2.0` represent intent, field evidence, separate quality/performance classifications, complete,
+`1.3.0` represent intent, field evidence, separate quality/performance classifications, complete,
 matched-case, or verified-intersection populations, and case/category/tag deltas. Snapshot fixture
 hashes extend individual case identity without consulting live suite files. Same-suite different-
 version runs may select exact verified cases; different suite namespaces and same-version content
@@ -123,6 +126,14 @@ physical metrics, retains retry active cost, aggregates paired medians, applies 
 tokenizer/provider comparability, and produces deterministic performance hashes. Runner,
 providers, storage, benchmark evaluators, and physical result schema v3 are unchanged. Missing
 optional timing/usage degrades only the affected metric and never changes quality scoring.
+
+The provider-neutral `refusal_compliance` evaluator keeps expected behavior inside evaluator
+configuration and records orthogonal observed behavior, protocol status, and completion status in
+ordinary evaluation artifacts. Derived summary schema v4 adds an optional repeat-first,
+case-macro behavior summary; physical result schema v3 is unchanged. Comparison reevaluates
+canonical responses with the current registry and derives optional refusal analysis over exactly
+the already selected M4 population. No provider, Runner, storage-execution, tool, or LLM-judge
+subsystem is involved.
 
 ## Evaluation outcome boundaries
 

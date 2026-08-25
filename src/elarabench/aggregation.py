@@ -5,7 +5,8 @@ from __future__ import annotations
 import math
 import statistics
 from collections import defaultdict
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
+from typing import Literal
 
 from elarabench.models import (
     AggregationSample,
@@ -16,6 +17,11 @@ from elarabench.models import (
     EvaluationStatus,
     ScoreStatistics,
     StatusCounts,
+)
+from elarabench.refusal_compliance import (
+    RefusalAggregationError,
+    RefusalCaseExpectation,
+    derive_refusal_compliance_summary,
 )
 
 
@@ -74,6 +80,9 @@ def aggregate(
     *,
     expected_samples: int | None = None,
     minimum_scored_coverage: float = 0.95,
+    refusal_case_expectations: Mapping[str, RefusalCaseExpectation] | None = None,
+    expected_repeats: int | None = None,
+    source_result_schema_version: Literal[2, 3] = 3,
 ) -> AggregationSummary:
     """Aggregate scored samples without converting other statuses into zeroes."""
     expected = len(samples) if expected_samples is None else expected_samples
@@ -129,6 +138,14 @@ def aggregate(
     )
     coverage_ratio = scored_samples / expected
     coverage_sufficient = coverage_ratio >= minimum_scored_coverage
+    try:
+        refusal_summary = derive_refusal_compliance_summary(
+            samples,
+            expectations=refusal_case_expectations,
+            expected_repeats=expected_repeats,
+        )
+    except RefusalAggregationError as error:
+        raise AggregationError(str(error)) from error
     return AggregationSummary(
         score=partial_score if coverage_sufficient else None,
         partial_score=partial_score,
@@ -145,4 +162,6 @@ def aggregate(
         cases=tuple(case_summaries),
         categories={name: _breakdown(group) for name, group in sorted(categories.items())},
         tags={name: _breakdown(group) for name, group in sorted(tags.items())},
+        source_result_schema_version=source_result_schema_version,
+        refusal_compliance=refusal_summary,
     )

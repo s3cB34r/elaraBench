@@ -26,6 +26,7 @@ from elarabench.scoring import (
     summarize_run,
     validate_stored_run,
 )
+from elarabench.storage import ArtifactStoreError
 
 FIXTURE = Path("tests/fixtures/historical_v2_run")
 IDENTITY = SampleIdentity(case_id="exact-001", repeat_index=0)
@@ -136,7 +137,7 @@ def test_v2_summarize_infers_untouched_evaluation_provenance_without_rescoring(
 
     summary = summarize_run(run_path)
 
-    assert summary.schema_version == 3
+    assert summary.schema_version == 4
     assert summary.source_result_schema_version == 2
     assert evaluation_path.read_bytes() == evaluation_before
     assert canonical_hashes(run_path) == canonical_before
@@ -148,12 +149,18 @@ def test_v2_score_and_summarize_preserve_all_canonical_evidence(tmp_path: Path) 
     historical_summary = json.loads((run_path / "summary.json").read_text(encoding="utf-8"))
     assert historical_summary["schema_version"] == 2
     assert "source_result_schema_version" not in historical_summary
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValidationError, match="source_result_schema_version"):
         AggregationSummary.model_validate(historical_summary)
+    stored_historical = open_run_path(run_path).read_summary()
+    assert stored_historical.schema_version == 2
+    assert stored_historical.source_result_schema_version == 2
+    assert stored_historical.refusal_compliance is None
+    with pytest.raises(ArtifactStoreError, match="only accepts summary schema v4"):
+        open_run_path(run_path).write_summary(stored_historical)
 
     scored = score_run(run_path)
     assert scored.score == 1.0
-    assert scored.schema_version == 3
+    assert scored.schema_version == 4
     assert scored.source_result_schema_version == 2
     store = open_run_path(run_path)
     assert (
@@ -165,9 +172,21 @@ def test_v2_score_and_summarize_preserve_all_canonical_evidence(tmp_path: Path) 
 
     summarized = summarize_run(run_path)
     assert summarized.score == 1.0
-    assert summarized.schema_version == 3
+    assert summarized.schema_version == 4
     assert summarized.source_result_schema_version == 2
     assert canonical_hashes(run_path) == before
+
+
+def test_physical_v2_rejects_explicit_v3_summary_provenance(tmp_path: Path) -> None:
+    run_path = copied_run(tmp_path)
+    summary_path = run_path / "summary.json"
+    payload = json.loads(summary_path.read_text(encoding="utf-8"))
+    payload["schema_version"] = 3
+    payload["source_result_schema_version"] = 3
+    summary_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ArtifactStoreError, match="summary source schema mismatch"):
+        open_run_path(run_path).read_summary()
 
 
 def test_v2_rescore_propagates_provenance_through_recursive_composite(
@@ -212,7 +231,7 @@ def test_v2_rescore_propagates_provenance_through_recursive_composite(
     assert result.source_result_schema_version == 2
     assert inner_result["source_result_schema_version"] == 2
     assert leaf_result["source_result_schema_version"] == 2
-    assert summary.schema_version == 3
+    assert summary.schema_version == 4
     assert summary.source_result_schema_version == 2
     assert canonical_hashes(run_path) == before
 

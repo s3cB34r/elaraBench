@@ -109,10 +109,7 @@ class JsonSchemaConfig(EvaluatorConfig):
 
     @model_validator(mode="after")
     def validate_schema(self) -> JsonSchemaConfig:
-        try:
-            Draft202012Validator.check_schema(self.schema_definition)
-        except SchemaError as error:
-            raise ValueError(f"invalid JSON Schema: {error.message}") from error
+        validate_json_schema_definition(self.schema_definition)
         return self
 
 
@@ -162,6 +159,27 @@ def regex_flags(flags: tuple[RegexFlag, ...]) -> re.RegexFlag:
     for flag in flags:
         result |= mapping[flag]
     return result
+
+
+def validate_json_schema_definition(
+    schema_definition: dict[str, JsonValue], *, label: str = "JSON Schema"
+) -> None:
+    """Validate a Draft 2020-12 schema for deterministic evaluator reuse."""
+    try:
+        Draft202012Validator.check_schema(schema_definition)
+    except SchemaError as error:
+        raise ValueError(f"invalid {label}: {error.message}") from error
+
+
+def json_schema_validation_errors(
+    instance: JsonValue, schema_definition: dict[str, JsonValue]
+) -> list[str]:
+    """Return deterministically ordered Draft 2020-12 validation messages."""
+    errors = sorted(
+        Draft202012Validator(schema_definition).iter_errors(instance),
+        key=lambda item: tuple(str(part) for part in item.absolute_path),
+    )
+    return [error.message for error in errors]
 
 
 def _configuration(
@@ -389,12 +407,8 @@ class JsonSchemaEvaluator(SimpleEvaluator):
                 passed=False,
                 explanation=f"output is not valid JSON: {error.msg}",
             )
-        errors = sorted(
-            Draft202012Validator(config.schema_definition).iter_errors(instance),
-            key=lambda item: tuple(str(part) for part in item.absolute_path),
-        )
-        passed = not errors
-        messages = [error.message for error in errors]
+        messages = json_schema_validation_errors(instance, config.schema_definition)
+        passed = not messages
         return make_result(
             context,
             evaluator_name=self.name,
@@ -402,9 +416,9 @@ class JsonSchemaEvaluator(SimpleEvaluator):
             status=EvaluationStatus.SCORED,
             score=float(passed),
             passed=passed,
-            metrics={"validation_error_count": float(len(errors))},
+            metrics={"validation_error_count": float(len(messages))},
             explanation="JSON satisfies schema" if passed else "JSON does not satisfy schema",
-            artifacts={"validation_errors": messages},
+            artifacts={"validation_errors": cast(JsonValue, messages)},
         )
 
 
@@ -491,6 +505,11 @@ class CompositeEvaluator:
         if not specification.components:
             raise EvaluatorConfigurationError("composite requires at least one component")
         for component in specification.components:
+            if component.specification.type == "refusal_compliance":
+                raise EvaluatorConfigurationError(
+                    "refusal_compliance evaluator must be top-level and cannot be "
+                    "nested inside composite evaluators"
+                )
             self._validate(component.specification)
 
     def evaluate(self, context: EvaluationContext) -> EvaluationResult:

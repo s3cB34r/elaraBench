@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
-from elarabench.aggregation import aggregate
+from elarabench.aggregation import AggregationError, aggregate
 from elarabench.evaluators.registry import evaluate
 from elarabench.evidence import RunIntegrityError as RunIntegrityError
 from elarabench.evidence import (
@@ -28,6 +28,7 @@ from elarabench.models import (
     RunEventType,
     SampleIdentity,
 )
+from elarabench.refusal_compliance import expectation_from_specification
 from elarabench.storage import ArtifactStoreError, RunArtifactStore
 
 Clock = Callable[[], datetime]
@@ -88,11 +89,22 @@ def regenerate_summary(
                 )
             )
     expected = len(snapshot.suite.cases) * manifest.configuration.repeats
-    summary = aggregate(
-        samples,
-        expected_samples=expected,
-        minimum_scored_coverage=manifest.configuration.minimum_scored_coverage,
-    ).model_copy(update={"source_result_schema_version": manifest.schema_version})
+    try:
+        summary = aggregate(
+            samples,
+            expected_samples=expected,
+            minimum_scored_coverage=manifest.configuration.minimum_scored_coverage,
+            refusal_case_expectations={
+                case.id: expectation
+                for case in snapshot.suite.cases
+                if (expectation := expectation_from_specification(case.evaluation))
+                is not None
+            },
+            expected_repeats=manifest.configuration.repeats,
+            source_result_schema_version=manifest.schema_version,
+        )
+    except AggregationError as error:
+        raise RunIntegrityError(f"invalid derived evaluation evidence: {error}") from error
     store.replace_summary(summary)
     store.record_event(
         timestamp=clock(),

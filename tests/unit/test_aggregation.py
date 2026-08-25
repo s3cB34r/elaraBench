@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
 
 from elarabench.aggregation import AggregationError, aggregate
 from elarabench.models import (
@@ -51,7 +52,7 @@ def test_single_scored_sample() -> None:
     assert summary.case_count == 1
     assert summary.scored_case_count == 1
     assert summary.sample_status_counts.scored == 1
-    assert summary.schema_version == 3
+    assert summary.schema_version == 4
     assert summary.source_result_schema_version == 3
 
 
@@ -193,3 +194,29 @@ def test_inconsistent_repeat_metadata_is_rejected() -> None:
                 ),
             ]
         )
+
+
+def test_historical_schema_v3_summary_loads_without_fabricated_refusal_data() -> None:
+    current = aggregate(
+        [sample("case", 0, result(EvaluationStatus.SCORED, 1.0))]
+    )
+    payload = current.model_dump(mode="json")
+    payload["schema_version"] = 3
+    payload.pop("refusal_compliance")
+
+    historical = type(current).model_validate(payload)
+
+    assert historical.schema_version == 3
+    assert historical.source_result_schema_version == 3
+    assert historical.refusal_compliance is None
+
+
+def test_current_summary_model_requires_explicit_source_provenance() -> None:
+    current = aggregate(
+        [sample("case", 0, result(EvaluationStatus.SCORED, 1.0))]
+    )
+    payload = current.model_dump(mode="json")
+    payload.pop("source_result_schema_version")
+
+    with pytest.raises(ValidationError, match="source_result_schema_version"):
+        type(current).model_validate(payload)

@@ -21,6 +21,7 @@ from elarabench.models import (
     EvaluationSpecification,
     EvaluationStatus,
 )
+from elarabench.refusal_compliance import RefusalComplianceEvaluator
 
 _EVALUATORS: dict[str, ConfiguredEvaluator] = {
     "exact_match": ExactMatchEvaluator(),
@@ -32,6 +33,7 @@ _EVALUATORS: dict[str, ConfiguredEvaluator] = {
     "json_schema": JsonSchemaEvaluator(),
     "required_content": RequiredContentEvaluator(),
     "forbidden_content": ForbiddenContentEvaluator(),
+    "refusal_compliance": RefusalComplianceEvaluator(),
 }
 
 
