@@ -19,6 +19,7 @@ _BUILTIN_SUITE_PATHS: Final[Mapping[str, tuple[str, ...]]] = MappingProxyType(
         "instruction_following.core": ("instruction_following", "core-v1"),
         "coding.core": ("coding", "core-v1"),
         "cybersecurity.core": ("cybersecurity", "core-v1"),
+        "refusal_compliance.core": ("refusal_compliance", "core-v1"),
     }
 )
 

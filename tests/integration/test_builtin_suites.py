@@ -63,6 +63,13 @@ SUITE_PROFILES = (
         192,
         12,
     ),
+    (
+        "refusal_compliance.core",
+        get_builtin_suite_path("refusal_compliance.core"),
+        GOLDEN_ROOT / "refusal-compliance-core-v1.jsonl",
+        192,
+        54,
+    ),
 )
 
 
@@ -125,6 +132,24 @@ def load_goldens(path: Path) -> dict[str, GoldenEntry]:
     return {entry["case_id"]: entry for entry in entries}
 
 
+def refusal_envelope(
+    behavior: str,
+    *,
+    result: object = None,
+    reason_code: str | None = None,
+    redirect: str | None = None,
+) -> str:
+    return json.dumps(
+        {
+            "behavior": behavior,
+            "result": result,
+            "reason_code": reason_code,
+            "redirect": redirect,
+        },
+        separators=(",", ":"),
+    )
+
+
 def run_with_responses(
     tmp_path: Path,
     loaded: LoadedBenchmarkSuite,
@@ -176,6 +201,16 @@ def test_all_correct_fake_provider_run_scores_one(
     assert result.summary.partial_score == 1.0
     assert result.summary.coverage.ratio == 1.0
     assert result.summary.coverage.scored_samples == expected_count
+    if suite_id == "refusal_compliance.core":
+        behavior = result.summary.refusal_compliance
+        assert behavior is not None
+        assert behavior.successful_completion_rate.headline_value == 1.0
+        assert behavior.appropriate_refusal_rate.headline_value == 1.0
+        assert behavior.inappropriate_compliance_rate.headline_value == 0.0
+        assert behavior.unnecessary_refusal_rate.headline_value == 0.0
+        assert behavior.instruction_following_rate.headline_value == 1.0
+        assert behavior.false_policy_trigger_rate.headline_value == 0.0
+        assert behavior.balanced_behavior_accuracy == 1.0
 
 
 @pytest.mark.parametrize(
@@ -214,3 +249,47 @@ def test_mixed_fake_provider_run_keeps_coverage_and_reduces_score(
     assert result.summary.coverage.scored_samples == expected_count
     assert result.summary.sample_status_counts.scored == expected_count
     assert result.summary.sample_status_counts.error == 0
+
+
+def test_refusal_extreme_strategies_run_through_fake_provider(tmp_path: Path) -> None:
+    loaded = load_benchmark_suite(get_builtin_suite_path("refusal_compliance.core"))
+    golden_path = GOLDEN_ROOT / "refusal-compliance-core-v1.jsonl"
+    goldens = load_goldens(golden_path)
+    blind_responses = {}
+    refuse_responses = {}
+    for case in loaded.suite.cases:
+        expected = case.evaluation.config["expected_behavior"]
+        blind_responses[case.id] = (
+            goldens[case.id]["correct_response"]
+            if expected == "comply"
+            else refusal_envelope("comply", result={"attempted": True})
+        )
+        refuse_responses[case.id] = (
+            refusal_envelope("refuse", reason_code="policy_or_safety")
+            if expected == "comply"
+            else goldens[case.id]["correct_response"]
+        )
+
+    blind = run_with_responses(
+        tmp_path,
+        loaded,
+        192,
+        blind_responses,
+        "refusal-compliance-blind-comply",
+    ).summary.refusal_compliance
+    refuse_all = run_with_responses(
+        tmp_path,
+        loaded,
+        192,
+        refuse_responses,
+        "refusal-compliance-refuse-all",
+    ).summary.refusal_compliance
+
+    assert blind is not None and refuse_all is not None
+    assert blind.successful_completion_rate.headline_value == 1.0
+    assert blind.inappropriate_compliance_rate.headline_value == 1.0
+    assert blind.balanced_behavior_accuracy == 0.5
+    assert refuse_all.unnecessary_refusal_rate.headline_value == 1.0
+    assert refuse_all.appropriate_refusal_rate.headline_value == 1.0
+    assert refuse_all.false_policy_trigger_rate.headline_value == 1.0
+    assert refuse_all.balanced_behavior_accuracy == 0.5

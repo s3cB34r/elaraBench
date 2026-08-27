@@ -42,7 +42,7 @@ implemented contracts and v1 boundaries.
 
 ## First-party benchmarks
 
-M3 includes four original, public, deterministic suites:
+ElaraBench includes five original, public, deterministic suites:
 
 | Suite | Version | Cases | Categories | Recommended output cap |
 | --- | --- | ---: | ---: | ---: |
@@ -50,13 +50,25 @@ M3 includes four original, public, deterministic suites:
 | `instruction_following.core` | 1.0.0 | 18 | 6 | 128 tokens |
 | `coding.core` | 1.0.0 | 12 | 4 | 128 tokens |
 | `cybersecurity.core` | 1.0.0 | 12 | 4 | 192 tokens |
+| `refusal_compliance.core` | 1.0.0 | 54 | 8 | 192 tokens |
 
-All four use equal case weights, Thinking disabled as the canonical suite policy, a 120-second
+All five use equal case weights, Thinking disabled as the canonical suite policy, a 120-second
 timeout, and self-contained prompts with no fixtures or network requirements. The benchmark data
 are dedicated under CC0-1.0 separately from the Python framework. `coding.core` measures static
 code analysis and never executes model-generated code. `cybersecurity.core` uses synthetic,
 defensive static evidence and performs no scanning, exploitation, or live-system interaction.
 Agentic, tool-use, and sandboxed execution benchmarks remain later work.
+
+`refusal_compliance.core` is a static, no-judge behavioral suite: 42 deterministic completion
+cases and 12 refusal controls grounded in rules stated directly in each prompt. Its 54 synthetic
+CC0-1.0 cases include eight neutral/sensitive/authorized contrastive triplets and 30 observable
+policy-trigger probes. It contains no live targets, current facts, tool calls, or executable
+payloads. Tool/action refusal recovery remains future M5.2 work.
+
+Its category distribution is benign technical 6, developer/sysadmin 6, defensive cybersecurity
+8, authorized security analysis 8, dual-use benign 6, sensitive wording 4, benign transformation
+4, and refusal control 12. Refusal controls cover authorization, privacy/secrecy, audit integrity,
+and prohibited destructive changes using narrow reason codes and explicitly configured redirects.
 
 The suites are bundled in wheels and may be addressed by stable suite ID from any working
 directory. Run them with the canonical local profile:
@@ -77,6 +89,10 @@ elarabench run coding.core \
 elarabench run cybersecurity.core \
   --provider ollama --model MODEL --temperature 0 --seed 42 \
   --repeats 1 --no-think --timeout 120 --max-retries 0 --max-tokens 192
+
+elarabench run refusal_compliance.core \
+  --provider ollama --model MODEL --temperature 0 --seed 42 \
+  --repeats 1 --no-think --timeout 120 --max-retries 0 --max-tokens 192
 ```
 
 Validation uses the same IDs:
@@ -86,6 +102,7 @@ elarabench validate reasoning.core
 elarabench validate instruction_following.core
 elarabench validate coding.core
 elarabench validate cybersecurity.core
+elarabench validate refusal_compliance.core
 ```
 
 Library callers can obtain the installed filesystem location without depending on the current
@@ -210,9 +227,9 @@ python -m pytest
 
 ## Project status
 
-ElaraBench v0.2.1 plus M3, M4.1, and M4.2a includes local model execution, trustworthy
-same-benchmark and verified cross-version intersection comparison, and four real first-party benchmark
-suites totaling 60 cases. The engine provides the deterministic core, a synchronous concurrency-one
+ElaraBench v0.2.1 plus M3, M4.1, M4.2a, and M5.1 includes local model execution, trustworthy
+same-benchmark and verified cross-version intersection comparison, and five first-party benchmark
+suites totaling 114 cases. The engine provides the deterministic core, a synchronous concurrency-one
 runner, complete schema-v3 run artifacts, bounded retries, durable attempt history, Ctrl-C
 recovery, strict resume, environment discovery, coverage-aware summaries, offline rescoring, and
 a native Ollama provider. Historical M2 schema-v2 runs remain available to offline `score` and

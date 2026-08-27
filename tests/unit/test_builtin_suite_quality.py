@@ -55,7 +55,8 @@ ALLOWED_EVALUATORS = {
     "forbidden_content",
 }
 ID_PATTERN = re.compile(
-    r"^(reasoning|instruction|coding|cyber)-[a-z0-9]+(?:-[a-z0-9]+)*-\d{3}$"
+    r"^(?:(?:reasoning|instruction|coding|cyber)-[a-z0-9]+"
+    r"(?:-[a-z0-9]+)*|refusal-compliance)-\d{3}$"
 )
 TEMPORAL_PATTERN = re.compile(
     r"\b(?:today|tomorrow|yesterday|currently|current date|as of|20\d{2})\b",

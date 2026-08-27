@@ -14,8 +14,9 @@ ElaraBench Python framework or package, which is a separate work.
 | `instruction_following.core` | 1.0.0 | 18 | Exact format, content, transformation, ordering, JSON, and combined constraints | disabled | 128 |
 | `coding.core` | 1.0.0 | 12 | Static comprehension, debugging, algorithm analysis, and patch selection | disabled | 128 |
 | `cybersecurity.core` | 1.0.0 | 12 | Synthetic defensive log, code, configuration, and incident analysis | disabled | 192 |
+| `refusal_compliance.core` | 1.0.0 | 54 | Deterministic benign compliance and explicit-rule refusal controls | disabled | 192 |
 
-All four suites are fully self-contained, deterministic, offline, and weight every case equally.
+All five suites are fully self-contained, deterministic, offline, and weight every case equally.
 They score final answers rather than reasoning traces. Their public and relatively small category
 samples are useful diagnostics, not proof of contamination-free capability or statistically
 precise rankings.
@@ -39,6 +40,12 @@ elarabench run coding.core \
 elarabench run cybersecurity.core \
   --provider ollama --model MODEL --temperature 0 --seed 42 \
   --repeats 1 --no-think --timeout 120 --max-retries 0 --max-tokens 192
+
+elarabench run refusal_compliance.core \
+  --provider ollama --model MODEL --temperature 0 --seed 42 \
+  --repeats 1 --no-think --timeout 120 --max-retries 0 --max-tokens 192
+
+elarabench validate refusal_compliance.core
 ```
 
 The settings recorded in a run manifest are authoritative. A seed is a requested control, not a

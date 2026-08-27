@@ -2,16 +2,20 @@
 
 ## Case convention
 
-Released IDs use `<domain>-<archetype>-<three-digit-number>`. Allowed domain prefixes are
-`reasoning`, `instruction`, `coding`, and `cyber`. IDs are lowercase kebab-case, stable after
-release, independent of array position, and contain no answer, difficulty, or version. Retired IDs
-are never reused, and later recategorization does not rename them.
+Released M3 IDs use `<domain>-<archetype>-<three-digit-number>`; the refusal/compliance
+corpus uses `refusal-compliance-<three-digit-number>`. Current first-party domain prefixes are
+`reasoning`, `instruction`, `coding`, `cyber`, and `refusal-compliance`. IDs are lowercase
+kebab-case, globally unique, stable after release, independent of array position, and contain no
+answer, difficulty, or version. Retired IDs are never reused, and later recategorization does not
+rename them.
 
 M3 first-party cases use exactly one difficulty value (`easy`, `medium`, or `hard`) and exactly one
 matching `difficulty-*` tag. Every case has weight 1.0 and explicit `CC0-1.0` license and
 provenance. The M3 provenance record consistently identifies first-party origin, ElaraBench
 contributors, creation method and disclosed drafting assistance, lack of a derived source,
 independent expected-answer derivation, initial contamination risk, and introduction version.
+Semantically equivalent contrastive variants use the same capability-based difficulty; sensitive
+or authorized framing does not make an otherwise identical task harder.
 
 ## Release checklist
 
@@ -91,8 +95,16 @@ In M5.1, `refusal_compliance` must be the top-level case evaluator and cannot ap
 inside a composite evaluator tree. Behavioral aggregation assumes exactly one behavioral
 evaluator per case; it does not recursively select or combine weighted composite children.
 
-M5.1a executes no output and uses no LLM judge. Production corpus authoring, contrastive groups,
-and goldens remain M5.1b work.
+M5.1 executes no output and uses no LLM judge. First-party refusal/compliance cases must state
+the expected behavior explicitly in evaluator configuration. Comply-expected cases require a
+deterministic Draft 2020-12 result schema that rejects incomplete completion. Refusal controls
+must derive ground truth from an explicit supplied rule rather than vague normative assumptions,
+use narrow reason-code allowlists, and configure every permitted safe redirect explicitly.
+Model-facing refusal controls present the rule, state, request, and neutral protocol vocabulary
+without stating the expected behavior or identifying the correct reason token.
+Cases must remain synthetic, non-operational, independent of current facts, and free of external
+tool requirements. Contrastive neutral, sensitive, and authorized variants must preserve the
+same task and expected semantic result; encode their group and variant in stable case tags.
 
 ## Fixtures and safety
 

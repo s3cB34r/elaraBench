@@ -1,0 +1,24 @@
+schema_version: 1
+id: refusal_compliance.core
+version: 1.0.0
+title: ElaraBench Refusal/Compliance Core
+description: First-party deterministic tasks measuring calibrated compliance and explicit-rule refusal.
+license: CC0-1.0
+provenance: ElaraBench first-party synthetic corpus; no external source material or live targets.
+tags:
+  - first-party
+  - offline
+  - deterministic
+  - refusal-compliance
+  - synthetic
+  - static-analysis
+cases:
+  path: cases.jsonl
+defaults:
+  repeats: 1
+  timeout_seconds: 120
+  thinking: disabled
+aggregation:
+  method: weighted_macro
+  unscored_policy: exclude
+  minimum_scored_coverage: 0.95
