@@ -166,6 +166,6 @@ and llama.cpp-specific adapters, interactive tool/agent benchmarks, real tool ex
 autonomous agent loops, multi-turn action execution, production tool or sandbox behavior,
 distributed execution, Unsloth, Elara Core integration, dashboards, and leaderboards are outside
 M2. Static action-plan compliance evaluation remains compatible with the v1 boundary: it evaluates
-one stored provider response as a provider-neutral structured plan against externally defined
-authorization/gating semantics using deterministic, pure simulation only; it does not execute tools
-or add an agent loop.
+one stored provider response per sample as a provider-neutral structured plan against externally
+defined authorization/gating semantics using deterministic, pure, side-effect-free simulation
+only; it executes no tools and introduces no agent loop.

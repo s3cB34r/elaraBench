@@ -57,16 +57,16 @@ timeout, and self-contained prompts with no fixtures or network requirements. Th
 are dedicated under CC0-1.0 separately from the Python framework. `coding.core` measures static
 code analysis and never executes model-generated code. `cybersecurity.core` uses synthetic,
 defensive static evidence and performs no scanning, exploitation, or live-system interaction.
-Interactive agentic tool-use, real or sandboxed tool execution, and multi-turn action execution
-benchmarks remain later work. ElaraBench may instead evaluate static action-plan compliance from a
-single stored provider response, using provider-neutral structured plans, externally defined
-authorization state, and deterministic simulation only.
+Interactive agentic tool-use, autonomous agent loops, real or sandboxed tool execution, and
+multi-turn action execution benchmarks remain later work. ElaraBench may instead evaluate static
+action-plan compliance from a single stored provider response, using provider-neutral structured
+plans, externally defined authorization state, and deterministic simulation only.
 
 `refusal_compliance.core` is a static, no-judge behavioral suite: 42 deterministic completion
 cases and 12 refusal controls grounded in rules stated directly in each prompt. Its 54 synthetic
 CC0-1.0 cases include eight neutral/sensitive/authorized contrastive triplets and 30 observable
 policy-trigger probes. It contains no live targets, current facts, tool calls, or executable
-payloads. Tool/action refusal recovery remains future M5.2 work.
+payloads. Tool/action refusal recovery is later work beyond M5.2.
 
 Its category distribution is benign technical 6, developer/sysadmin 6, defensive cybersecurity
 8, authorized security analysis 8, dual-use benign 6, sensitive wording 4, benign transformation
@@ -252,5 +252,6 @@ access, resumable execution, and auditable result comparison. It explicitly excl
 database, web UI, generalized plugin system, distributed execution, interactive agentic tool-use
 evaluation, real tool execution, autonomous agent loops, multi-turn action execution, and
 production tool or sandbox behavior. Static action-plan compliance evaluation remains in scope
-when it is offline and read-only: it evaluates stored provider responses against externally defined
-authorization/gating semantics through deterministic simulation, without executing native tools.
+when it is offline and read-only: it evaluates a single stored provider response per sample against
+externally defined authorization/gating semantics through deterministic, pure, side-effect-free
+simulation. It executes no tools and introduces no agent loop.
