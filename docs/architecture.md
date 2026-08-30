@@ -168,4 +168,5 @@ distributed execution, Unsloth, Elara Core integration, dashboards, and leaderbo
 M2. Static action-plan compliance evaluation remains compatible with the v1 boundary: it evaluates
 one stored provider response per sample as a provider-neutral structured plan against externally
 defined authorization/gating semantics using deterministic, pure, side-effect-free simulation
-only; it executes no tools and introduces no agent loop.
+only; it executes no tools and introduces no agent loop. The normative M5.2 constraints are defined
+in [Static Action Compliance](action-compliance.md).
