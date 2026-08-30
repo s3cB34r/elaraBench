@@ -57,7 +57,10 @@ timeout, and self-contained prompts with no fixtures or network requirements. Th
 are dedicated under CC0-1.0 separately from the Python framework. `coding.core` measures static
 code analysis and never executes model-generated code. `cybersecurity.core` uses synthetic,
 defensive static evidence and performs no scanning, exploitation, or live-system interaction.
-Agentic, tool-use, and sandboxed execution benchmarks remain later work.
+Interactive agentic tool-use, real or sandboxed tool execution, and multi-turn action execution
+benchmarks remain later work. ElaraBench may instead evaluate static action-plan compliance from a
+single stored provider response, using provider-neutral structured plans, externally defined
+authorization state, and deterministic simulation only.
 
 `refusal_compliance.core` is a static, no-judge behavioral suite: 42 deterministic completion
 cases and 12 refusal controls grounded in rules stated directly in each prompt. Its 54 synthetic
@@ -246,5 +249,8 @@ LLM judges, a database, or a web interface.
 The v1 roadmap covers validated and versioned benchmark data, reproducible local-first runs,
 immutable filesystem artifacts, deterministic evaluators, Ollama and OpenAI-compatible model
 access, resumable execution, and auditable result comparison. It explicitly excludes a
-database, web UI, generalized plugin system, distributed execution, and agentic tool-use
-evaluation.
+database, web UI, generalized plugin system, distributed execution, interactive agentic tool-use
+evaluation, real tool execution, autonomous agent loops, multi-turn action execution, and
+production tool or sandbox behavior. Static action-plan compliance evaluation remains in scope
+when it is offline and read-only: it evaluates stored provider responses against externally defined
+authorization/gating semantics through deterministic simulation, without executing native tools.

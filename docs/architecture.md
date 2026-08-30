@@ -162,5 +162,10 @@ diagnostics, not event-sourced recovery state—canonical sample files remain au
 
 Human/LLM-assisted judgment remains separate and unimplemented. Future executable coding or
 cybersecurity evaluators must use sandbox isolation; M2 never executes fixtures. OpenAI-compatible
-and llama.cpp-specific adapters, tool/agent benchmarks, distributed execution, Unsloth, Elara
-Core integration, dashboards, and leaderboards are outside M2.
+and llama.cpp-specific adapters, interactive tool/agent benchmarks, real tool execution,
+autonomous agent loops, multi-turn action execution, production tool or sandbox behavior,
+distributed execution, Unsloth, Elara Core integration, dashboards, and leaderboards are outside
+M2. Static action-plan compliance evaluation remains compatible with the v1 boundary: it evaluates
+one stored provider response as a provider-neutral structured plan against externally defined
+authorization/gating semantics using deterministic, pure simulation only; it does not execute tools
+or add an agent loop.
