@@ -20,6 +20,11 @@ Follow instructions in this order:
 4. Existing repository conventions and documentation
 5. Reasonable engineering defaults
 
+Where a domain-specific normative architecture document explicitly governs semantics within its
+domain, that document takes precedence for those domain-specific semantic questions over the
+general implementation guidance in this file. Repository-wide safety, security, and process
+requirements in this file remain fully applicable.
+
 If instructions conflict, follow the higher-priority instruction.
 
 Do not silently reinterpret explicit requirements.

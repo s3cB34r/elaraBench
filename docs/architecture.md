@@ -79,15 +79,21 @@ Ollama client cancellation cannot guarantee that server-side generation has alre
 
 Resume reads configuration only from stored canonical artifacts. Before lifecycle mutation it
 checks the manifest, self-contained snapshot, fingerprint, adapter/model/source identity,
-request plan, and all existing finalized JSON. Matching completed responses—including finalized
-provider errors—are never regenerated. Missing or stale evaluations are derived again. A
-matching request without a response continues, and a terminal attempt left just before response
-finalization can be recovered without another provider call. Request mismatch, fingerprint
-incompatibility, or corrupt finalized JSON aborts resume.
+request plan, and all existing finalized JSON. All already-finalized canonical and derived evidence
+that will be reused is validated before any provider or model preflight that could contact the
+provider or generate new samples. If existing persisted evidence is corrupt or incompatible,
+resume fails before any provider call and before writing any new response or attempt artifact.
+Matching completed responses—including finalized provider errors—are never regenerated. Missing
+evaluations are derived again. A matching request without a response continues, and a terminal
+attempt left just before response finalization can be recovered without another provider call.
+Request mismatch, fingerprint incompatibility, or corrupt finalized JSON aborts resume.
 
 `score` dispatches evaluators over canonical stored responses and replaces only derived
-evaluations and summary. `summarize` reads evaluations and replaces only the summary. Neither
-service constructs a provider, reads the original suite directory, or uses the network.
+evaluations and summary, so replaceable derived evaluation evidence may be regenerated from
+authoritative canonical evidence. `summarize` reads and strictly validates stored evaluations and
+replaces only the summary; resume likewise strictly validates finalized evidence that it will
+reuse. Neither service constructs a provider, reads the original suite directory, or uses the
+network.
 Evaluation context carries the physical source result-schema version; composite dispatch forwards
 it unchanged at every nesting level. Current summaries use their own artifact schema version 4
 and separately record whether their canonical source run was result schema 2 or 3.
