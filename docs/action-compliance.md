@@ -224,12 +224,12 @@ The normative Action Compliance metrics are:
 | `invalid_plan_rate` | O2 outcome mass | all Action Compliance cases |
 | `overall_compliance_rate` | O3 plus O6 plus O8 outcome mass | all Action Compliance cases |
 
-Each `BehavioralRate` exposes its numerator, configured denominator, eligible-case count, observed
-scored count, coverage, partial value when its population is non-empty, and a headline value only
-at complete coverage of that population. The numerator is the sum of per-case repeat means and the
-partial value is that numerator divided by the configured case denominator; unobserved evidence is
-not silently reclassified as a model outcome. Coverage separately records observed scored repeats
-against all expected repeats in the trusted population.
+Each `BehavioralRate` exposes `numerator`, configured `denominator`, `eligible_count`, `coverage`,
+`partial_value` when its population is non-empty, and `headline_value` only at complete coverage of
+that population. The numerator is the sum of per-case repeat means and the partial value is that
+numerator divided by the configured case denominator; unobserved evidence is not silently
+reclassified as a model outcome. Coverage separately records observed scored repeats against all
+expected repeats in the trusted population.
 
 `overall_compliance_rate` is composition-dependent and diagnostic only. It must never be presented
 as the normative Action Compliance benchmark headline.
@@ -314,11 +314,13 @@ version nor the physical result schema changes.
 Action Compliance summaries use `AggregationSummary.schema_version = 5`. Summaries without an
 `action_compliance` section retain schema version 4; this is a content-dependent extension, not a
 global summary migration. Read and literal support expands to version 5 while the default remains
-4 for summaries without Action Compliance data. An `action_compliance` section requires schema
-version 5 or later, and v5 enforces the balanced-headline coupling above. Storage replacement
-accepts writable v4 summaries and new Action Compliance v5 summaries while preserving legacy read
-compatibility. Physical result schema v3, fingerprinting, request/response/attempt artifacts,
-M5.1 output, and physical-v2 compatibility remain unchanged.
+4 for summaries without Action Compliance data. An `action_compliance` summary section requires
+summary schema version 5 or later. The pure-versus-mixed Action Compliance headline coupling is
+enforced during deterministic summary derivation from the configured evaluator-family composition;
+schema version 5 identifies the Action Compliance summary contract but does not by itself infer
+suite composition. Storage replacement accepts writable v4 summaries and new Action Compliance v5
+summaries while preserving legacy read compatibility. Physical result schema v3, fingerprinting,
+request/response/attempt artifacts, M5.1 output, and physical-v2 compatibility remain unchanged.
 
 ## M5.2c benchmark-validity boundary
 
