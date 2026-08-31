@@ -35,6 +35,12 @@ Provider failures, evaluator errors, invalid benchmark configurations, pending r
 missing samples do not become zero. The core suites require 95% scored coverage for a headline
 score and still expose a partial score and status counts below that threshold.
 
+Action Compliance applies a stricter normative headline gate: all three trusted authorization
+populations must be non-empty and completely covered, and their state-specific compliance rates
+are balanced equally. Its composition-dependent global pass rate is diagnostic only. A suite that
+mixes Action Compliance with another scored evaluator family has no generic headline or partial
+score, and sufficient generic coverage does not override either rule.
+
 Category and tag breakdowns are diagnostics. Each M3 category has only three cases, so its score
 is a coarse signal rather than a statistically precise estimate. ElaraBench does not manufacture
 confidence intervals from these small samples.

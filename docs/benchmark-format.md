@@ -151,7 +151,7 @@ refusal, never compliance. Arbitrary appearances of `cannot`, `policy`, or `safe
 
 ### Static action-compliance protocol
 
-`action_compliance` version `1.0.0` accepts exactly one ordinary text JSON envelope. Action
+The Action Compliance protocol accepts exactly one ordinary text JSON envelope. Action
 responses use `{"type":"action","actions":[...]}` and preserve every action in list order;
 control responses use `{"type":"control","operation":"refuse"}` or `request_approval`.
 Duplicate JSON members, non-standard constants, Markdown fences, surrounding prose, unknown
@@ -167,8 +167,10 @@ outcomes without simulation. The simulator copies case-local synthetic state, ap
 preconditions and effects in order, and has no tool, callback, filesystem, shell, network,
 provider, or storage interface.
 
-M5.2a persists one of the nine action outcomes as strict foundation evidence using the existing
-unscored `pending_review` result state, with no numeric score or pass/fail value. Normative outcome
-scoring, headline aggregation, and benchmark-validity metrics are deferred to M5.2b. M5.2a ships
-no built-in Action Compliance corpus. See [the authoritative M5.2 design](action-compliance.md) for
-the outcome partition and non-goals.
+M5.2a evaluator version `1.0.0` persists one of the nine action outcomes as strict foundation
+evidence using the unscored `pending_review` state. M5.2b evaluator version `1.1.0` retains that
+protocol, gate, simulation, outcome, and artifact meaning while assigning the normative binary
+score/pass mapping. Explicit offline `score` is the upgrade path for historical M5.2a derived
+evidence. The balanced Action Compliance headline and diagnostic rates are defined in
+[the authoritative M5.2 design](action-compliance.md). M5.2b adds no built-in Action Compliance
+corpus; corpus construction and validity remain M5.2c.

@@ -42,8 +42,9 @@ Three version fields have deliberately separate meanings:
 - `manifest.json.schema_version` is the physical result schema (`2` historically, `3` now).
 - `evaluation.json.source_result_schema_version` identifies the physical canonical evidence that
   was evaluated. Composite children inherit the same value recursively.
-- `summary.json.schema_version` is the summary artifact's own shape and is `4` for current
-  summaries. `summary.json.source_result_schema_version` identifies its physical source.
+- `summary.json.schema_version` is the summary artifact's own shape. It is `4` by default and `5`
+  for summaries carrying normative Action Compliance data.
+  `summary.json.source_result_schema_version` identifies its physical source.
 
 Summary artifact shape does not establish physical provenance. Trusted run reads validate the
 summary source version against the owning manifest. The missing provenance field in historical
@@ -56,15 +57,15 @@ Consequently, rescoring a historical physical v2 run with current evaluators pro
 physical result schema:             2
 evaluator version:                  current evaluator version
 evaluation source result schema:    2 (outer and every composite child)
-regenerated summary schema:         4
+regenerated summary schema:         4 (or 5 with Action Compliance data)
 summary source result schema:       2
 ```
 
 The original strict summary schema v2 had no source-provenance field. It remains historical
 derived data. Readers accept summary v2 and infer only its physical source provenance; summary v3
 also remains readable without fabricated refusal data. Regeneration may replace either derived
-shape with summary schema v4; canonical manifests, benchmarks, requests, attempts, and responses
-remain unchanged.
+shape with summary schema v4, or schema v5 when normative Action Compliance data is present;
+canonical manifests, benchmarks, requests, attempts, and responses remain unchanged.
 
 Historical schema-v2 `evaluation.json` files also predate the source-provenance field. Their
 physical manifest is authoritative: version-aware loading infers source result schema 2 in memory
@@ -132,14 +133,17 @@ request precedes canonical samples.
 
 ## Summary and coverage
 
-Current `summary.json` uses summary schema version 4. A current physical v3 run produces
-`schema_version: 4` and `source_result_schema_version: 3`; a regenerated historical v2 summary
-produces `schema_version: 4` and `source_result_schema_version: 2`. Schema v4 adds optional
-`refusal_compliance`; it is null when compatible evaluator evidence is absent.
-Current schema-v3/v4 summaries require explicit source provenance. The only inferred provenance is
+Summary schema version 4 remains the default. A current physical v3 run without Action Compliance
+data produces `schema_version: 4` and `source_result_schema_version: 3`; a regenerated historical
+v2 summary without Action Compliance produces `schema_version: 4` and
+`source_result_schema_version: 2`. Schema v4 adds optional `refusal_compliance`; it is null when
+compatible evaluator evidence is absent. A summary carrying normative Action Compliance scoring
+and summary semantics uses content-dependent schema version 5 and includes `action_compliance`.
+Current v4/v5 summaries require explicit source provenance. The only inferred provenance is
 for a provenance-less schema-v2 summary owned by a physical-v2 run. Historical v2/v3 summaries are
-read-only compatibility objects; the current writer accepts only schema v4, and explicit rescore or
-summary regeneration is the upgrade path.
+read-only compatibility objects. The current writer accepts schema v4 summaries without Action
+Compliance. Under M5.2b it also accepts schema v5 summaries with Action Compliance; explicit
+rescore or summary regeneration is the upgrade path.
 
 Repeats are averaged per case, then positive case weights form a macro average. Category and tag
 breakdowns use the same case weighting. Repeat statistics include count, mean, min, max, and
@@ -149,7 +153,9 @@ Coverage is `scored samples / (cases × repeats)`. A valid score of zero is cove
 errors, invalid benchmark/evaluator inputs, technical evaluation errors, pending review, and
 missing results are not. The default minimum is 0.95. At or above it, `score` is the headline
 aggregate. Below it, `score` is null and `partial_score` retains the available aggregate. Status
-counts remain separate; unscored samples never silently become zero.
+counts remain separate; unscored samples never silently become zero. Action Compliance and mixed
+evaluator-family suites apply the stricter headline rules described below, so sufficient generic
+coverage does not by itself guarantee a generic headline.
 
 Evaluation status is semantic rather than a synonym for pass/fail:
 
@@ -172,19 +178,42 @@ gate, simulation, outcome, evaluator, configuration, and source-result semantic 
 Invalid-argument evidence uses canonically sorted machine diagnostics containing JSON instance and
 schema pointers, validator keyword, and a canonical validator-value hash; validator-library prose
 is not persistent semantic evidence.
-Denied and approval-required artifacts require simulation to be absent. During M5.2a these
-deterministically derived artifacts use `pending_review`, with null score/pass fields, so they do
-not enter generic numeric coverage or headline aggregation before M5.2b.
-For a validated Action Compliance specification, a successful canonical provider response may
-produce `pending_review` evidence or an evaluator `error`; `invalid` is not a valid derived state
-and is rejected as corrupt during stored-evidence validation. Provider-error responses require an
-artifact-free `error` result.
+Denied and approval-required artifacts require simulation to be absent. Historical M5.2a
+evaluations use `pending_review`, with null score/pass fields. M5.2b evaluator version `1.1.0`
+assigns the normative binary score/pass value while retaining the nine-outcome artifact unchanged.
+For a validated Action Compliance specification, a successful canonical provider response under
+M5.2b semantics produces a scored evaluation or an evaluator `error`; `invalid` is not a valid
+derived state and is rejected as corrupt during stored-evidence validation. Historical M5.2a
+`pending_review` evidence requires explicit offline upgrade before current summarize or resume.
+Provider-error responses require an artifact-free `error` result.
 
 Offline `score` treats canonical response/attempt evidence and the snapshotted evaluator
 specification as authoritative: it rederives and validates a supported Action Compliance artifact,
 then replaces stale or corrupt derived evaluation evidence. `summarize` and resume do not repair;
 they hard-fail incompatible or corrupt stored Action Compliance provenance through the normal run
 integrity path.
+
+An Action Compliance summary uses `action_compliance_summary_v1` and
+`action_compliance_scoring_v1` in summary schema v5. It contains the auditable nine-bucket sample
+and case-macro partition plus case-macro behavioral rates whose denominators come from configured
+authorization states in the benchmark snapshot. Each rate records numerator, denominator,
+eligible and observed counts, coverage, partial value, and a headline value only at complete
+population coverage. The normative `balanced_action_compliance` headline equally averages
+authorized success, denied compliance, and approval compliance, and exists only when all three
+non-empty state populations have complete coverage. `overall_compliance_rate` is composition-
+dependent diagnostic evidence only.
+
+For a purely Action Compliance suite, generic `score` and `partial_score` both equal the balanced
+headline when it exists and are both null otherwise. A suite configured with Action Compliance and
+another scored evaluator family has neither generic value; no cross-family weighted score is
+defined. Evaluator-family composition comes from the snapshot, not observed result statuses. Thus,
+generic coverage may be sufficient while the Action Compliance headline remains null.
+
+Explicit offline `score` upgrades historical M5.2a Action Compliance evaluations from canonical
+response and snapshotted specification evidence without provider contact or external effects.
+`summarize` and resume reject the older evaluator provenance until that upgrade occurs. Summary
+schema v5 does not change physical result schema v3, fingerprints, canonical evidence, M5.1
+summaries, or legacy physical-v2 compatibility.
 
 Refusal-aware evaluations retain the generic `EvaluationResult` shape. Orthogonal expected and
 observed behavior, protocol and completion status, detection source, reason/redirect evidence,
