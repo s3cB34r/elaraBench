@@ -505,10 +505,13 @@ class CompositeEvaluator:
         if not specification.components:
             raise EvaluatorConfigurationError("composite requires at least one component")
         for component in specification.components:
-            if component.specification.type == "refusal_compliance":
+            if component.specification.type in {
+                "action_compliance",
+                "refusal_compliance",
+            }:
                 raise EvaluatorConfigurationError(
-                    "refusal_compliance evaluator must be top-level and cannot be "
-                    "nested inside composite evaluators"
+                    f"{component.specification.type} evaluator must be top-level and "
+                    "cannot be nested inside composite evaluators"
                 )
             self._validate(component.specification)
 

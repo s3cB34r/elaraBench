@@ -8,6 +8,11 @@ from collections import defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Literal
 
+from elarabench.action_compliance import (
+    ActionComplianceCaseExpectation,
+    ActionComplianceEvidenceError,
+    validate_action_compliance_population,
+)
 from elarabench.models import (
     AggregationSample,
     AggregationSummary,
@@ -81,6 +86,7 @@ def aggregate(
     expected_samples: int | None = None,
     minimum_scored_coverage: float = 0.95,
     refusal_case_expectations: Mapping[str, RefusalCaseExpectation] | None = None,
+    action_case_expectations: Mapping[str, ActionComplianceCaseExpectation] | None = None,
     expected_repeats: int | None = None,
     source_result_schema_version: Literal[2, 3] = 3,
 ) -> AggregationSummary:
@@ -139,12 +145,16 @@ def aggregate(
     coverage_ratio = scored_samples / expected
     coverage_sufficient = coverage_ratio >= minimum_scored_coverage
     try:
+        validate_action_compliance_population(
+            samples,
+            dict(action_case_expectations or {}),
+        )
         refusal_summary = derive_refusal_compliance_summary(
             samples,
             expectations=refusal_case_expectations,
             expected_repeats=expected_repeats,
         )
-    except RefusalAggregationError as error:
+    except (ActionComplianceEvidenceError, RefusalAggregationError) as error:
         raise AggregationError(str(error)) from error
     return AggregationSummary(
         score=partial_score if coverage_sufficient else None,

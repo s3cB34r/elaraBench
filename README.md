@@ -231,14 +231,20 @@ python -m pytest
 
 ## Project status
 
-ElaraBench v0.2.1 plus M3, M4.1, M4.2a, and M5.1 includes local model execution, trustworthy
-same-benchmark and verified cross-version intersection comparison, and five first-party benchmark
-suites totaling 114 cases. The engine provides the deterministic core, a synchronous concurrency-one
-runner, complete schema-v3 run artifacts, bounded retries, durable attempt history, Ctrl-C
+ElaraBench v0.2.1 plus M3, M4.1, M4.2a, M5.1, and the M5.2a foundation includes local model
+execution, trustworthy same-benchmark and verified cross-version intersection comparison, and five
+first-party benchmark suites totaling 114 cases. The engine provides the deterministic core, a
+synchronous concurrency-one runner, complete schema-v3 run artifacts, bounded retries, durable
+attempt history, Ctrl-C
 recovery, strict resume, environment discovery, coverage-aware summaries, offline rescoring, and
 a native Ollama provider. Historical M2 schema-v2 runs remain available to offline `score` and
 `summarize`, but cannot resume under v3 runtime semantics. A deterministic fake provider keeps the
 complete runner and first-party suite paths testable without network or model hardware.
+
+M5.2a derives and persists strict static Action Compliance proposal, authorization-gate,
+simulation, and nine-way outcome evidence. These results remain unscored until M5.2b defines
+normative scoring and aggregation. No Action Compliance suite is shipped in the five-suite
+first-party catalog at this foundation stage.
 
 M3 coding and cybersecurity coverage is intentionally static. It does not include executable
 benchmark sandboxes, arbitrary model-generated execution, live security targets, parallel or

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from elarabench.action_compliance import ActionComplianceEvaluator
 from elarabench.evaluators.base import ConfiguredEvaluator, EvaluatorConfigurationError, make_result
 from elarabench.evaluators.builtin import (
     CompositeEvaluator,
@@ -34,6 +35,7 @@ _EVALUATORS: dict[str, ConfiguredEvaluator] = {
     "required_content": RequiredContentEvaluator(),
     "forbidden_content": ForbiddenContentEvaluator(),
     "refusal_compliance": RefusalComplianceEvaluator(),
+    "action_compliance": ActionComplianceEvaluator(),
 }
 
 

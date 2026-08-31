@@ -11,6 +11,11 @@ from uuid import uuid4
 
 from pydantic import JsonValue
 
+from elarabench.action_compliance import (
+    ActionComplianceEvidenceError,
+    expectation_from_action_specification,
+    validate_action_compliance_result,
+)
 from elarabench.benchmark import (
     LoadedBenchmarkSuite,
     create_benchmark_snapshot,
@@ -277,6 +282,15 @@ class Runner:
                 raise RunnerError("schema-v3 manifest has an incompatible benchmark snapshot")
             repaired_event_tail = store.repair_event_log_tail()
             removed = store.cleanup_temporary_files()
+            requests = self._resolve_requests(snapshot, manifest.configuration)
+            expected_plan = tuple(
+                RequestPlanEntry(identity=identity, request_hash=hash_generation_request(request))
+                for identity, request in requests
+            )
+            if expected_plan != manifest.request_plan:
+                raise RunnerError("resolved request identity changed; resume rejected")
+            self._validate_existing_samples(store, requests, snapshot)
+            validate_physical_run_evidence(store, manifest)
             provider_metadata, model, seed_control, thinking_control = self._preflight(
                 manifest.configuration, snapshot
             )
@@ -293,15 +307,6 @@ class Runner:
             framework = self._framework or discover_framework_metadata()
             if framework != manifest.framework:
                 raise RunnerError("ElaraBench source identity changed; resume rejected")
-            requests = self._resolve_requests(snapshot, manifest.configuration)
-            expected_plan = tuple(
-                RequestPlanEntry(identity=identity, request_hash=hash_generation_request(request))
-                for identity, request in requests
-            )
-            if expected_plan != manifest.request_plan:
-                raise RunnerError("resolved request identity changed; resume rejected")
-            self._validate_existing_samples(store, requests)
-            validate_physical_run_evidence(store, manifest)
             fingerprint = compute_run_fingerprint(
                 snapshot=snapshot,
                 configuration=manifest.configuration,
@@ -545,18 +550,40 @@ class Runner:
         self,
         store: RunArtifactStore,
         requests: tuple[tuple[SampleIdentity, GenerationRequest], ...],
+        snapshot: BenchmarkSnapshot,
     ) -> None:
         """Read every finalized artifact before mutating lifecycle state on resume."""
+        cases = {case.id: case for case in snapshot.suite.cases}
         for identity, expected in requests:
             if store.request_exists(identity):
                 actual = store.read_request(identity)
                 if hash_generation_request(actual) != hash_generation_request(expected):
                     raise RunnerError(f"stored request mismatch for {identity}")
-            if store.response_exists(identity):
+            response = (
                 store.read_response(identity)
+                if store.response_exists(identity)
+                else None
+            )
             store.read_attempts(identity)
             if store.evaluation_exists(identity):
-                store.read_evaluation(identity, source_result_schema_version=3)
+                result = store.read_evaluation(
+                    identity,
+                    source_result_schema_version=3,
+                )
+                expectation = expectation_from_action_specification(
+                    cases[identity.case_id].evaluation
+                )
+                if expectation is not None and response is not None:
+                    try:
+                        validate_action_compliance_result(
+                            result,
+                            expectation,
+                            response=response,
+                        )
+                    except ActionComplianceEvidenceError as error:
+                        raise RunIntegrityError(
+                            f"invalid derived evaluation evidence: {error}"
+                        ) from error
         if store.summary_exists():
             store.read_summary()
 

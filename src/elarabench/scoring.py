@@ -7,6 +7,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
+from elarabench.action_compliance import (
+    ActionComplianceEvidenceError,
+    expectation_from_action_specification,
+    validate_action_compliance_result,
+)
 from elarabench.aggregation import AggregationError, aggregate
 from elarabench.evaluators.registry import evaluate
 from elarabench.evidence import RunIntegrityError as RunIntegrityError
@@ -50,6 +55,16 @@ def regenerate_summary(
     """Aggregate stored evaluations only; never evaluate or generate."""
     samples: list[AggregationSample] = []
     plan = plan_by_identity(manifest)
+    action_expectations = {
+        case.id: action_expectation
+        for case in snapshot.suite.cases
+        if (
+            action_expectation := expectation_from_action_specification(
+                case.evaluation
+            )
+        )
+        is not None
+    }
     for case in snapshot.suite.cases:
         for repeat_index in range(manifest.configuration.repeats):
             identity = SampleIdentity(case_id=case.id, repeat_index=repeat_index)
@@ -79,6 +94,18 @@ def regenerate_summary(
                 )
             except ArtifactStoreError as error:
                 raise RunIntegrityError(str(error)) from error
+            action_expectation = action_expectations.get(case.id)
+            if action_expectation is not None:
+                try:
+                    validate_action_compliance_result(
+                        result,
+                        action_expectation,
+                        response=response,
+                    )
+                except ActionComplianceEvidenceError as error:
+                    raise RunIntegrityError(
+                        f"invalid derived evaluation evidence: {error}"
+                    ) from error
             samples.append(
                 AggregationSample(
                     identity=identity,
@@ -100,6 +127,7 @@ def regenerate_summary(
                 if (expectation := expectation_from_specification(case.evaluation))
                 is not None
             },
+            action_case_expectations=action_expectations,
             expected_repeats=manifest.configuration.repeats,
             source_result_schema_version=manifest.schema_version,
         )
@@ -129,6 +157,16 @@ def score_run(path: str | Path, *, clock: Clock = utc_now) -> AggregationSummary
         event_type=RunEventType.SCORING_STARTED,
     )
     plan = plan_by_identity(manifest)
+    action_expectations = {
+        case.id: action_expectation
+        for case in snapshot.suite.cases
+        if (
+            action_expectation := expectation_from_action_specification(
+                case.evaluation
+            )
+        )
+        is not None
+    }
     for case in snapshot.suite.cases:
         for repeat_index in range(manifest.configuration.repeats):
             identity = SampleIdentity(case_id=case.id, repeat_index=repeat_index)
@@ -146,6 +184,7 @@ def score_run(path: str | Path, *, clock: Clock = utc_now) -> AggregationSummary
                 verify_sample_artifact_dependencies(store, identity, attempts)
                 verify_attempt_request_hashes(attempts, entry)
                 verify_terminal_attempt_response(attempts, response, identity)
+                action_expectation = action_expectations.get(case.id)
                 result = evaluate(
                     EvaluationContext(
                         response=response,
@@ -153,12 +192,18 @@ def score_run(path: str | Path, *, clock: Clock = utc_now) -> AggregationSummary
                         source_result_schema_version=manifest.schema_version,
                     )
                 )
+                if action_expectation is not None:
+                    validate_action_compliance_result(
+                        result,
+                        action_expectation,
+                        response=response,
+                    )
                 store.write_evaluation(
                     identity,
                     result,
                     replace=store.evaluation_exists(identity),
                 )
-            except ArtifactStoreError as error:
+            except (ActionComplianceEvidenceError, ArtifactStoreError) as error:
                 raise RunIntegrityError(str(error)) from error
     summary = regenerate_summary(
         store,

@@ -95,6 +95,7 @@ def test_wheel_contains_and_runs_bundled_suites(tmp_path: Path) -> None:
     with zipfile.ZipFile(wheel) as archive:
         names = set(archive.namelist())
     assert names >= EXPECTED_WHEEL_FILES
+    assert not any("builtin_benchmarks/action_compliance/" in name for name in names)
     assert not any("builtin_suite_goldens" in name for name in names)
     assert not any(name.startswith("tests/") for name in names)
 

@@ -166,6 +166,26 @@ evaluators never repair it. Regenerated evaluations and summaries record the phy
 source result schema, so a current rescore of v2 evidence is not presented as its historical
 original score.
 
+Action-compliance evaluations also retain a strict immutable artifact with independently auditable
+proposal, trusted authorization-gate, and simulation evidence. It records artifact, protocol,
+gate, simulation, outcome, evaluator, configuration, and source-result semantic provenance.
+Invalid-argument evidence uses canonically sorted machine diagnostics containing JSON instance and
+schema pointers, validator keyword, and a canonical validator-value hash; validator-library prose
+is not persistent semantic evidence.
+Denied and approval-required artifacts require simulation to be absent. During M5.2a these
+deterministically derived artifacts use `pending_review`, with null score/pass fields, so they do
+not enter generic numeric coverage or headline aggregation before M5.2b.
+For a validated Action Compliance specification, a successful canonical provider response may
+produce `pending_review` evidence or an evaluator `error`; `invalid` is not a valid derived state
+and is rejected as corrupt during stored-evidence validation. Provider-error responses require an
+artifact-free `error` result.
+
+Offline `score` treats canonical response/attempt evidence and the snapshotted evaluator
+specification as authoritative: it rederives and validates a supported Action Compliance artifact,
+then replaces stale or corrupt derived evaluation evidence. `summarize` and resume do not repair;
+they hard-fail incompatible or corrupt stored Action Compliance provenance through the normal run
+integrity path.
+
 Refusal-aware evaluations retain the generic `EvaluationResult` shape. Orthogonal expected and
 observed behavior, protocol and completion status, detection source, reason/redirect evidence,
 redirect acceptance, policy-probe status, observable policy attribution, and result-schema status

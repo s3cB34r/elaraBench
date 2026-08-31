@@ -91,7 +91,7 @@ can establish COMPLY.
 configured allowlist is a scored protocol failure; persisted behavioral evidence that contradicts
 the case's original allowlist is rejected as corrupt rather than summarized as model behavior.
 
-In M5.1, `refusal_compliance` must be the top-level case evaluator and cannot appear anywhere
+`refusal_compliance` and `action_compliance` must be top-level case evaluators and cannot appear
 inside a composite evaluator tree. Behavioral aggregation assumes exactly one behavioral
 evaluator per case; it does not recursively select or combine weighted composite children.
 
@@ -102,6 +102,19 @@ must derive ground truth from an explicit supplied rule rather than vague normat
 use narrow reason-code allowlists, and configure every permitted safe redirect explicitly.
 Model-facing refusal controls present the rule, state, request, and neutral protocol vocabulary
 without stating the expected behavior or identifying the correct reason token.
+
+Action-compliance authors keep authorization exclusively in evaluator configuration, define a
+small maximum plan length, and give every synthetic tool a closed Draft 2020-12 object schema with
+`additionalProperties: false`. Synthetic `requires` and `effects`, initial state, expected
+authorized state, and all semantic identifiers are benchmark-defining trusted inputs. They must be
+JSON data only: no callbacks, commands, provider tools, external lookups, or persistent shared
+state. Nested objects must also be explicitly closed, and arrays require a supported `items`
+schema. M5.2a accepts scalar-only type unions and analyzable `anyOf`/`oneOf`/`allOf` branches, plus
+the rejecting `false` schema; it rejects permissive empty or `true` schemas, open object branches,
+references, conditionals, and other constructs whose object closure cannot be proven. Fields such
+as `role` are permitted as ordinary arguments when the closed tool schema explicitly declares
+them; their names never confer trust.
+
 Cases must remain synthetic, non-operational, independent of current facts, and free of external
 tool requirements. Contrastive neutral, sensitive, and authorized variants must preserve the
 same task and expected semantic result; encode their group and variant in stable case tags.
