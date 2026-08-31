@@ -184,10 +184,13 @@ def test_one_response_runner_offline_score_resume_and_compare_are_nonmutating(
     )
 
     assert provider.calls == 4
-    assert first.summary.score is None
-    assert first.summary.partial_score is None
-    assert first.summary.coverage.scored_samples == 0
-    assert first.summary.sample_status_counts.pending_review == 4
+    assert first.summary.score == 1.0
+    assert first.summary.partial_score == 1.0
+    assert first.summary.coverage.scored_samples == 4
+    assert first.summary.sample_status_counts.scored == 4
+    assert first.summary.schema_version == 5
+    assert first.summary.action_compliance is not None
+    assert first.summary.action_compliance.balanced_action_compliance == 1.0
     store = ArtifactStore(runs_dir).open_run("action-first")
     for case in loaded.suite.cases:
         identity = SampleIdentity(case_id=case.id, repeat_index=0)
@@ -195,7 +198,7 @@ def test_one_response_runner_offline_score_resume_and_compare_are_nonmutating(
         assert store.read_response(identity).text == correct_outputs()[case.id]
         assert (
             store.read_evaluation(identity, source_result_schema_version=3).status
-            is EvaluationStatus.PENDING_REVIEW
+            is EvaluationStatus.SCORED
         )
 
     multi_identity = SampleIdentity(case_id="action-compliance-002", repeat_index=0)
@@ -213,8 +216,8 @@ def test_one_response_runner_offline_score_resume_and_compare_are_nonmutating(
         ).read_bytes()
         for case in loaded.suite.cases
     }
-    assert score_run(first.path).score is None
-    assert summarize_run(first.path).score is None
+    assert score_run(first.path).score == 1.0
+    assert summarize_run(first.path).score == 1.0
     assert response_bytes == {
         case.id: (
             first.path / "samples" / case.id / "repeat-000" / "response.json"
@@ -224,8 +227,8 @@ def test_one_response_runner_offline_score_resume_and_compare_are_nonmutating(
 
     resume_provider = CountingProvider(responses=responses(loaded))
     resumed = runner(resume_provider, runs_dir).resume(first.path)
-    assert resumed.summary.score is None
-    assert resumed.summary.sample_status_counts.pending_review == 4
+    assert resumed.summary.score == 1.0
+    assert resumed.summary.sample_status_counts.scored == 4
     assert resume_provider.calls == 0
 
     second = runner(
@@ -234,8 +237,11 @@ def test_one_response_runner_offline_score_resume_and_compare_are_nonmutating(
     first_before = file_bytes(first.path)
     second_before = file_bytes(second.path)
     comparison = compare_runs(first.path, second.path)
-    assert comparison.baseline_source_run_score is None
-    assert comparison.full_suite_score_comparison is None
+    assert comparison.baseline_source_run_score is not None
+    assert comparison.baseline_source_run_score.score == 1.0
+    assert comparison.candidate_source_run_score is not None
+    assert comparison.candidate_source_run_score.score == 1.0
+    assert comparison.full_suite_score_comparison is not None
     assert file_bytes(first.path) == first_before
     assert file_bytes(second.path) == second_before
 
@@ -274,8 +280,8 @@ def test_provider_retry_remains_generation_only_and_preserves_one_final_response
     assert provider.calls == 5
     assert len(store.read_attempts(identity)) == 2
     assert store.read_response(identity).text == correct_outputs()[first_case.id]
-    assert result.summary.score is None
-    assert result.summary.sample_status_counts.pending_review == 4
+    assert result.summary.score == 1.0
+    assert result.summary.sample_status_counts.scored == 4
 
 
 def test_noncanonical_response_values_persist_as_protocol_invalid_evidence(
@@ -318,8 +324,8 @@ def test_noncanonical_response_values_persist_as_protocol_invalid_evidence(
         assert artifact.protocol_failure_reason == "noncanonical_value"
         original_evaluations[identity] = evaluation
 
-    assert summarize_run(run.path).sample_status_counts.pending_review == 4
-    assert score_run(run.path).sample_status_counts.pending_review == 4
+    assert summarize_run(run.path).sample_status_counts.scored == 4
+    assert score_run(run.path).sample_status_counts.scored == 4
     for identity, original in original_evaluations.items():
         assert (
             store.read_evaluation(identity, source_result_schema_version=3)
@@ -355,8 +361,8 @@ def test_provider_failure_is_error_not_action_outcome(tmp_path: Path) -> None:
 
     assert evaluation.status is EvaluationStatus.ERROR
     assert evaluation.artifacts == {}
-    assert result.summary.coverage.scored_samples == 0
-    assert result.summary.sample_status_counts.pending_review == 3
+    assert result.summary.coverage.scored_samples == 3
+    assert result.summary.sample_status_counts.scored == 3
     assert result.summary.sample_status_counts.error == 1
     assert result.summary.score is None
     rescored = score_run(result.path)
@@ -403,7 +409,7 @@ def test_tampered_action_artifact_cannot_reclassify_canonical_provider_error(
             specification=first_case.evaluation,
         )
     )
-    assert tampered.status is EvaluationStatus.PENDING_REVIEW
+    assert tampered.status is EvaluationStatus.SCORED
     store.write_evaluation(identity, tampered, replace=True)
 
     with pytest.raises(RunIntegrityError, match="provider failure"):
@@ -483,8 +489,8 @@ def test_canonical_schema_diagnostics_survive_summarize_and_offline_rescore(
         item.validator_keyword
         for item in artifact.plan_validation.validation_diagnostics
     ] == ["minLength", "pattern"]
-    assert summarize_run(run.path).sample_status_counts.pending_review == 4
-    assert score_run(run.path).sample_status_counts.pending_review == 4
+    assert summarize_run(run.path).sample_status_counts.scored == 4
+    assert score_run(run.path).sample_status_counts.scored == 4
     assert store.read_evaluation(identity, source_result_schema_version=3) == original
 
 
@@ -497,7 +503,7 @@ def test_canonical_schema_diagnostics_survive_summarize_and_offline_rescore(
         "outcome",
         "coercible_boolean",
         "invalid_result",
-        "premature_scored_result",
+        "score_mismatch",
     ],
 )
 def test_score_repairs_corrupt_derived_action_evidence_but_summarize_rejects_it(
@@ -550,11 +556,13 @@ def test_score_repairs_corrupt_derived_action_evidence_but_summarize_rejects_it(
         ] = 1
     elif corruption == "invalid_result":
         payload["status"] = "invalid"
+        payload["score"] = None
+        payload["passed"] = None
         payload["artifacts"] = {}
     else:
         payload["status"] = "scored"
-        payload["score"] = 1.0
-        payload["passed"] = True
+        payload["score"] = 0.0
+        payload["passed"] = False
     evaluation_path.write_text(json.dumps(payload), encoding="utf-8")
 
     with pytest.raises(RunIntegrityError, match="invalid derived evaluation evidence"):
@@ -563,12 +571,82 @@ def test_score_repairs_corrupt_derived_action_evidence_but_summarize_rejects_it(
     repaired_summary = score_run(run.path)
     repaired = store.read_evaluation(identity, source_result_schema_version=3)
 
-    assert repaired_summary.score is None
+    assert repaired_summary.score == 1.0
     assert repaired == original_evaluation
     assert provider.calls == 4
     assert canonical_bytes == {
         str(path.relative_to(sample_path)): path.read_bytes() for path in canonical_paths
     }
+
+
+def test_historical_m5_2a_evidence_requires_explicit_offline_score_upgrade(
+    tmp_path: Path,
+) -> None:
+    loaded = load_benchmark_suite(SUITE_PATH)
+    runs_dir = tmp_path / "runs"
+    provider = CountingProvider(responses=responses(loaded))
+    run = runner(provider, runs_dir).run(
+        loaded,
+        configuration(loaded),
+        run_id="historical-m5-2a-upgrade",
+    )
+    store = ArtifactStore(runs_dir).open_run(run.manifest.run_id)
+    for case in loaded.suite.cases:
+        identity = SampleIdentity(case_id=case.id, repeat_index=0)
+        evaluation_path = (
+            run.path
+            / "samples"
+            / identity.case_id
+            / identity.repeat_id
+            / "evaluation.json"
+        )
+        payload = json.loads(evaluation_path.read_text(encoding="utf-8"))
+        payload["status"] = "pending_review"
+        payload["score"] = None
+        payload["passed"] = None
+        payload["evaluator_version"] = "1.0.0"
+        payload["artifacts"]["evaluator_version"] = "1.0.0"
+        evaluation_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    canonical_paths = [run.path / "manifest.json", run.path / "benchmark.json"]
+    for case in loaded.suite.cases:
+        sample_path = run.path / "samples" / case.id / "repeat-000"
+        canonical_paths.extend(
+            [
+                sample_path / "request.json",
+                sample_path / "response.json",
+                *sorted((sample_path / "attempts").glob("*.json")),
+            ]
+        )
+    canonical_bytes = {
+        str(path.relative_to(run.path)): path.read_bytes() for path in canonical_paths
+    }
+
+    with pytest.raises(RunIntegrityError, match="unsupported action_compliance evaluator"):
+        summarize_run(run.path)
+
+    resume_provider = CountingProvider(responses=responses(loaded))
+    with pytest.raises(RunIntegrityError, match="unsupported action_compliance evaluator"):
+        runner(resume_provider, runs_dir).resume(run.path)
+    assert resume_provider.calls == 0
+
+    upgraded = score_run(run.path)
+    assert upgraded.schema_version == 5
+    assert upgraded.score == 1.0
+    assert upgraded.action_compliance is not None
+    assert upgraded.action_compliance.evaluator_version == "1.1.0"
+    assert provider.calls == 4
+    for case in loaded.suite.cases:
+        evaluation = store.read_evaluation(
+            SampleIdentity(case_id=case.id, repeat_index=0),
+            source_result_schema_version=3,
+        )
+        assert evaluation.status is EvaluationStatus.SCORED
+        assert evaluation.evaluator_version == "1.1.0"
+    assert canonical_bytes == {
+        str(path.relative_to(run.path)): path.read_bytes() for path in canonical_paths
+    }
+    assert score_run(run.path) == upgraded
 
 
 @pytest.mark.parametrize("corruption", ["outcome", "invalid_result"])
@@ -596,6 +674,8 @@ def test_resume_rejects_corrupt_action_artifact_without_provider_generation(
         payload["artifacts"]["outcome"] = "authorized_unsuccessful_plan"
     else:
         payload["status"] = "invalid"
+        payload["score"] = None
+        payload["passed"] = None
         payload["artifacts"] = {}
     evaluation_path.write_text(json.dumps(payload), encoding="utf-8")
     provider = CountingProvider(responses=responses(loaded))

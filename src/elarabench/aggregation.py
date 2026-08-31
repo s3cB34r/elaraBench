@@ -11,7 +11,7 @@ from typing import Literal
 from elarabench.action_compliance import (
     ActionComplianceCaseExpectation,
     ActionComplianceEvidenceError,
-    validate_action_compliance_population,
+    derive_action_compliance_summary,
 )
 from elarabench.models import (
     AggregationSample,
@@ -87,6 +87,7 @@ def aggregate(
     minimum_scored_coverage: float = 0.95,
     refusal_case_expectations: Mapping[str, RefusalCaseExpectation] | None = None,
     action_case_expectations: Mapping[str, ActionComplianceCaseExpectation] | None = None,
+    configured_evaluator_types: Mapping[str, str] | None = None,
     expected_repeats: int | None = None,
     source_result_schema_version: Literal[2, 3] = 3,
 ) -> AggregationSummary:
@@ -144,10 +145,37 @@ def aggregate(
     )
     coverage_ratio = scored_samples / expected
     coverage_sufficient = coverage_ratio >= minimum_scored_coverage
+    action_expectations = dict(action_case_expectations or {})
+    has_action_results = any(
+        sample.result.evaluator_name == "action_compliance" for sample in samples
+    )
+    if action_expectations:
+        if configured_evaluator_types is None:
+            raise AggregationError(
+                "configured evaluator types are required for action-compliance aggregation"
+            )
+        configured_action_ids = {
+            case_id
+            for case_id, evaluator_type in configured_evaluator_types.items()
+            if evaluator_type == "action_compliance"
+        }
+        if configured_action_ids != set(action_expectations):
+            raise AggregationError(
+                "trusted action expectations disagree with configured evaluator types"
+            )
+    elif has_action_results or (
+        configured_evaluator_types is not None
+        and "action_compliance" in configured_evaluator_types.values()
+    ):
+        raise AggregationError(
+            "action-compliance aggregation requires trusted case expectations"
+        )
+
     try:
-        validate_action_compliance_population(
+        action_summary = derive_action_compliance_summary(
             samples,
-            dict(action_case_expectations or {}),
+            expectations=action_expectations,
+            expected_repeats=expected_repeats or 0,
         )
         refusal_summary = derive_refusal_compliance_summary(
             samples,
@@ -156,9 +184,21 @@ def aggregate(
         )
     except (ActionComplianceEvidenceError, RefusalAggregationError) as error:
         raise AggregationError(str(error)) from error
+    generic_score = partial_score if coverage_sufficient else None
+    generic_partial_score = partial_score
+    if action_summary is not None:
+        assert configured_evaluator_types is not None
+        configured_families = set(configured_evaluator_types.values())
+        if configured_families == {"action_compliance"}:
+            generic_score = action_summary.balanced_action_compliance
+            generic_partial_score = action_summary.balanced_action_compliance
+        else:
+            generic_score = None
+            generic_partial_score = None
     return AggregationSummary(
-        score=partial_score if coverage_sufficient else None,
-        partial_score=partial_score,
+        schema_version=5 if action_summary is not None else 4,
+        score=generic_score,
+        partial_score=generic_partial_score,
         coverage=CoverageSummary(
             expected_samples=expected,
             scored_samples=scored_samples,
@@ -174,4 +214,5 @@ def aggregate(
         tags={name: _breakdown(group) for name, group in sorted(tags.items())},
         source_result_schema_version=source_result_schema_version,
         refusal_compliance=refusal_summary,
+        action_compliance=action_summary,
     )

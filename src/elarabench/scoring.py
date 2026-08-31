@@ -128,6 +128,9 @@ def regenerate_summary(
                 is not None
             },
             action_case_expectations=action_expectations,
+            configured_evaluator_types={
+                case.id: case.evaluation.type for case in snapshot.suite.cases
+            },
             expected_repeats=manifest.configuration.repeats,
             source_result_schema_version=manifest.schema_version,
         )

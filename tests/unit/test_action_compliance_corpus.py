@@ -110,10 +110,13 @@ def test_goldens_cover_success_failure_malformed_and_ordered_multi_action() -> N
         assert correct_artifact.outcome is expected_correct[case.id]
         assert incorrect_artifact.outcome is not expected_correct[case.id]
         assert malformed_artifact.outcome is ActionComplianceOutcome.PROTOCOL_INVALID
-        for result in (correct, incorrect, malformed):
-            assert result.status is EvaluationStatus.PENDING_REVIEW
-            assert result.score is None
-            assert result.passed is None
+        assert correct.status is EvaluationStatus.SCORED
+        assert correct.score == 1.0
+        assert correct.passed is True
+        for result in (incorrect, malformed):
+            assert result.status is EvaluationStatus.SCORED
+            assert result.score == 0.0
+            assert result.passed is False
 
     multi_case = loaded.suite.cases[1]
     multi_result = evaluate(

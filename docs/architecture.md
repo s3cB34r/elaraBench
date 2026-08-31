@@ -95,8 +95,9 @@ replaces only the summary; resume likewise strictly validates finalized evidence
 reuse. Neither service constructs a provider, reads the original suite directory, or uses the
 network.
 Evaluation context carries the physical source result-schema version; composite dispatch forwards
-it unchanged at every nesting level. Current summaries use their own artifact schema version 4
-and separately record whether their canonical source run was result schema 2 or 3.
+it unchanged at every nesting level. Current summaries use artifact schema version 4 by default
+and version 5 when they carry Action Compliance summary semantics; both separately record whether
+their canonical source run was result schema 2 or 3.
 Artifact loading receives the physical manifest schema explicitly. A versionless historical v2
 evaluation is interpreted as source schema 2 in memory and is not silently migrated on read;
 current v3 evaluation writes carry the field explicitly. Summary reads and writes likewise

@@ -17,6 +17,7 @@ from elarabench.action_compliance import (
     PlanFailureReason,
     PlanValidationStatus,
     SimulationStatus,
+    action_compliance_outcome_passed,
     evaluate_action_compliance_artifact,
     expectation_from_action_specification,
     validate_action_compliance_result,
@@ -165,10 +166,12 @@ def result_for(
             specification=spec or specification(),
         )
     )
-    assert result.status is EvaluationStatus.PENDING_REVIEW
-    assert result.score is None
-    assert result.passed is None
-    return result, ActionComplianceEvaluationArtifact.model_validate(result.artifacts)
+    artifact = ActionComplianceEvaluationArtifact.model_validate(result.artifacts)
+    passed = action_compliance_outcome_passed(artifact.outcome)
+    assert result.status is EvaluationStatus.SCORED
+    assert result.score == float(passed)
+    assert result.passed is passed
+    return result, artifact
 
 
 @pytest.mark.parametrize(
@@ -194,7 +197,7 @@ def test_strict_protocol_rejects_noncanonical_inputs(text: str, reason: str) -> 
     assert artifact.outcome is ActionComplianceOutcome.PROTOCOL_INVALID
     assert artifact.protocol_failure_reason == reason
     assert artifact.proposal is None
-    assert result.score is None
+    assert result.score == 0.0
 
 
 @pytest.mark.parametrize(
@@ -313,7 +316,7 @@ def test_provider_errors_never_become_action_compliance_evidence(text: str) -> N
             specification=spec,
         )
     )
-    assert tampered.status is EvaluationStatus.PENDING_REVIEW
+    assert tampered.status is EvaluationStatus.SCORED
     expectation = expectation_from_action_specification(spec)
     assert expectation is not None
     with pytest.raises(ActionComplianceEvidenceError, match="provider failure"):
@@ -332,9 +335,9 @@ def test_valid_control_and_single_action_envelopes() -> None:
 
     assert action_artifact.outcome is ActionComplianceOutcome.AUTHORIZED_SUCCESSFUL_PLAN
     assert action_artifact.action_count == 1
-    assert action_result.passed is None
+    assert action_result.passed is True
     assert control_artifact.outcome is ActionComplianceOutcome.AUTHORIZED_UNNECESSARY_STOP
-    assert control_result.passed is None
+    assert control_result.passed is False
 
 
 def test_ordered_multi_action_plan_processes_every_occurrence() -> None:
@@ -789,7 +792,7 @@ def test_hard_plan_bound_and_unknown_semantics_are_invalid_configuration() -> No
         ),
     ],
 )
-def test_all_nine_outcomes_are_derived_without_m5_2b_scoring_semantics(
+def test_all_nine_outcomes_have_normative_m5_2b_scoring_semantics(
     spec: EvaluationSpecification,
     text: str,
     outcome: ActionComplianceOutcome,
@@ -802,9 +805,10 @@ def test_all_nine_outcomes_are_derived_without_m5_2b_scoring_semantics(
         cast(str, spec.config["authorization"])
     )
     assert artifact.simulation.performed is simulated
-    assert result.status is EvaluationStatus.PENDING_REVIEW
-    assert result.passed is None
-    assert result.score is None
+    passed = action_compliance_outcome_passed(outcome)
+    assert result.status is EvaluationStatus.SCORED
+    assert result.passed is passed
+    assert result.score == float(passed)
 
 
 @pytest.mark.parametrize("authorization", ["DENIED", "REQUIRES_APPROVAL"])

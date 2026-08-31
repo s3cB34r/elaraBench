@@ -10,7 +10,11 @@ import pytest
 
 from elarabench.aggregation import aggregate
 from elarabench.models import (
+    ActionComplianceCaseOutcomeMasses,
+    ActionComplianceSampleOutcomeCounts,
+    ActionComplianceSummary,
     AggregationSample,
+    BehavioralRate,
     EndpointMetadata,
     EnvironmentMetadata,
     EvaluationResult,
@@ -97,6 +101,47 @@ def evaluation(score: float) -> EvaluationResult:
     )
 
 
+def action_summary() -> ActionComplianceSummary:
+    def rate(numerator: float, denominator: int) -> BehavioralRate:
+        return BehavioralRate(
+            numerator=numerator,
+            denominator=denominator,
+            eligible_count=denominator,
+            coverage=1.0,
+            partial_value=numerator / denominator,
+            headline_value=numerator / denominator,
+        )
+
+    return ActionComplianceSummary(
+        eligible_case_ids=("a", "d", "p"),
+        expected_case_count=3,
+        observed_case_count=3,
+        expected_sample_count=3,
+        scored_sample_count=3,
+        coverage=1.0,
+        sample_outcomes=ActionComplianceSampleOutcomeCounts(
+            authorized_successful_plan=1,
+            denied_correct_stop=1,
+            requires_approval_correct_stop=1,
+        ),
+        case_outcomes=ActionComplianceCaseOutcomeMasses(
+            authorized_successful_plan=1,
+            denied_correct_stop=1,
+            requires_approval_correct_stop=1,
+        ),
+        authorized_success_rate=rate(1, 1),
+        authorized_unsuccessful_rate=rate(0, 1),
+        unnecessary_stop_rate=rate(0, 1),
+        denied_compliance_rate=rate(1, 1),
+        approval_compliance_rate=rate(1, 1),
+        boundary_violation_rate=rate(0, 2),
+        protocol_invalid_rate=rate(0, 3),
+        invalid_plan_rate=rate(0, 3),
+        overall_compliance_rate=rate(3, 3),
+        balanced_action_compliance=1.0,
+    )
+
+
 def test_canonical_and_derived_artifacts_round_trip(tmp_path: Path) -> None:
     run = ArtifactStore(tmp_path / "runs").run("run-001")
     identity = SampleIdentity(case_id="case-1", repeat_index=0)
@@ -130,6 +175,7 @@ def test_canonical_and_derived_artifacts_round_trip(tmp_path: Path) -> None:
     stored_summary = json.loads((run.path / "summary.json").read_text(encoding="utf-8"))
     assert stored_summary["schema_version"] == 4
     assert stored_summary["source_result_schema_version"] == 3
+    assert "action_compliance" not in stored_summary
     assert "café" in (run.path / "samples/case-1/repeat-000/request.json").read_text()
 
 
@@ -246,6 +292,48 @@ def test_current_summary_writer_rejects_historical_schema_objects(
     with pytest.raises(ArtifactStoreError, match="only accepts summary schema v4"):
         run.write_summary(historical)
     assert not (run.path / "summary.json").exists()
+
+
+def test_action_summary_schema_v5_round_trips_and_v4_rejects_action_data(
+    tmp_path: Path,
+) -> None:
+    run = ArtifactStore(tmp_path / "runs").run("action-summary")
+    run.write_manifest(manifest("action-summary"))
+    base = aggregate(
+        [
+            AggregationSample(
+                identity=SampleIdentity(case_id="case", repeat_index=0),
+                category="action",
+                result=evaluation(1.0),
+            )
+        ]
+    )
+    action = action_summary()
+    current = base.model_copy(
+        update={
+            "schema_version": 5,
+            "score": 1.0,
+            "partial_score": 1.0,
+            "action_compliance": action,
+        }
+    )
+
+    run.replace_summary(current)
+
+    assert run.read_summary() == current
+    payload = json.loads((run.path / "summary.json").read_text(encoding="utf-8"))
+    assert payload["schema_version"] == 5
+    assert payload["action_compliance"]["scoring_semantic"] == (
+        "action_compliance_scoring_v1"
+    )
+
+    invalid_v4 = current.model_copy(update={"schema_version": 4})
+    with pytest.raises(ArtifactStoreError, match="v4 cannot contain action"):
+        run.replace_summary(invalid_v4)
+
+    invalid_v5 = base.model_copy(update={"schema_version": 5})
+    with pytest.raises(ArtifactStoreError, match="v5 requires action"):
+        run.replace_summary(invalid_v5)
 
 
 @pytest.mark.parametrize("schema_version", [3, 4])
