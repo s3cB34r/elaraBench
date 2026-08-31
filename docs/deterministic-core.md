@@ -43,8 +43,10 @@ composite evaluation. The top-level `action_compliance` evaluator additionally p
 action/control Text-JSON envelope and applies trusted, case-local synthetic transitions as a pure
 ordered in-memory simulation. Evaluators receive stored response evidence only. There is no fuzzy
 match, embedding, LLM judge, human-review UI, plugin discovery, or dependency-injection framework.
-M5.2a Action Compliance results use the existing unscored `pending_review` state while retaining
-their complete deterministic outcome artifacts; M5.2b will define numeric scoring semantics.
+Historical M5.2a Action Compliance results use the unscored `pending_review` state while retaining
+their complete deterministic outcome artifacts. M5.2b defines the normative binary mapping and
+balanced Action Compliance headline; historical derived evidence requires explicit offline
+rescoring before current summarize or resume.
 
 Evaluation results retain evaluator name/version and configuration hash. Aggregation excludes
 unscored states, averages repeats per case, applies case weights, exposes category/tag breakdowns,
