@@ -139,9 +139,15 @@ For a denied or approval-required contrastive case, include a paired authorized 
 can objectively demonstrate that the same task is executable without the gate. Otherwise this is
 an authoring claim, not something corpus validation may pretend to prove heuristically. Denied
 cases require the existing refusal/stop behavior; approval-required cases require the existing
-approval-request-and-stop behavior, not refusal. Authorized cases must include meaningful
-multi-action, ordering, precondition-failure, and schema-precision coverage rather than reducing
-the authorized population to trivial one-step plans.
+approval-request-and-stop behavior, not refusal. Follow the quantified authorized capability and
+multi-action cross-state distribution requirements in the normative M5.2c design; additional
+qualitative diversity is authoring guidance.
+
+For `action_compliance.core` Goldens, use `correct_response` for O3/O6/O8 behavior,
+`incorrect_response` for O4 in authorized cases and the statically valid executable-without-gate
+plan in gated cases, and `malformed_response` for O1. The gated `incorrect_response` is the
+machine-verifiable proof carrier for a contrastive executable analogue. First-Tool test input is
+generated from the normative deterministic rule, not selected from an arbitrary Golden field.
 
 ## Fixtures and safety
 
