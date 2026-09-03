@@ -9,7 +9,8 @@ change requires an explicit architecture/design revision before behavior is modi
 
 This document defines capability boundaries and semantic invariants. It fixes the M5.2b outcome
 mapping, metric names and formulas, semantic identifiers, and content-dependent summary version,
-but does not otherwise prescribe physical model layout, evaluator class names, or corpus size.
+and the M5.2c first-party corpus-validity contract, but does not otherwise prescribe physical
+model layout or evaluator class names.
 
 ## Capability boundary
 
@@ -322,29 +323,149 @@ suite composition. Storage replacement accepts writable v4 summaries and new Act
 summaries while preserving legacy read compatibility. Physical result schema v3, fingerprinting,
 request/response/attempt artifacts, M5.1 output, and physical-v2 compatibility remain unchanged.
 
-## M5.2c benchmark-validity boundary
 
-M5.2c corpus review must use deterministic `FakeProvider` strategies to verify resistance to
-trivial behavior. Against an appropriately balanced corpus, each of these strategies must fail to
-achieve a headline metric greater than `0.5`:
+## M5.2c corpus-validity contract
 
-1. always execute / always return an execution plan;
-2. always refuse; and
-3. always return malformed output.
+M5.2c defines corpus validity and shortcut resistance for the final M5.2b scoring architecture.
+It does not redesign the protocol, trusted authorization, O1--O9 meanings, binary scoring,
+state-specific rates, `balanced_action_compliance`, summary schema v5, evidence lifecycle,
+runner/resume behavior, or fingerprint semantics. Benchmark validity remains separate from model
+performance summaries.
 
-Equivalently, every such strategy's headline value must be at most `0.5`. If one exceeds the
-threshold, the metric or corpus is structurally flawed and must be revised before release.
+### First-party production profile
 
-This is a benchmark-validity invariant for M5.2c, not merely a test of three fake models. Each
-strategy represents a degenerate policy that ignores material distinctions the benchmark claims
-to measure: authorization gates, permitted action completion, or the output protocol. A score
-above the threshold would show that class balance, weighting, or metric construction rewards
-non-reasoning behavior, so conclusions about real models would not be trustworthy.
+The first production Action Compliance built-in suite is `action_compliance.core` version `1.0.0`.
+It is the sixth built-in suite and is distinct from `action_compliance.foundation_test`, which
+remains a test fixture. The production profile requires 36 cases: 12 `AUTHORIZED`, 12 `DENIED`,
+and 12 `REQUIRES_APPROVAL`, including six contrastive triplets. It is hash-pinned,
+Golden-backed, wheel-distributed, and subject to the production validity gate.
 
-Balanced production corpus design, minimum case counts, within-state class and difficulty balance,
-empirical degenerate-strategy tests, corpus expansion, benchmark-validity claims, leaderboard
-interpretation, and difficulty calibration all remain M5.2c. None is encoded into the M5.2b
-scoring formula.
+Those counts are a first-party production-profile requirement, not a universal structural
+requirement for third-party Action Compliance suites. Small third-party state populations,
+limited diversity, or limited contrastive coverage may merit warnings or recommendations, but are
+not generic errors unless they violate an objectively necessary structural invariant. Case count
+alone does not establish statistical significance.
+
+The production profile includes meaningful `AUTHORIZED` coverage of ordered multi-action plans,
+order-sensitive execution, synthetic precondition failures, O3 success, O4 authorized
+unsuccessful execution, schema/argument precision, and planning choices that matter. This remains
+static Action Compliance, not general reactive-agent planning.
+
+### Contrastive task construction
+
+M5.2c uses existing tags; it adds no benchmark-format field. A contrastive group uses the tag
+`contrastive-group-ac-triplet-NN` and contains exactly three cases, with exactly one each of
+`contrastive-variant-authorized`, `contrastive-variant-denied`, and
+`contrastive-variant-requires-approval`. Existing `category` is the canonical machine-readable
+task-family identifier. Categories describe task family rather than authorization state; the
+production suite must not use state-revealing categories such as `authorized-action`,
+`denied-action`, or `approval-required`.
+
+For every triplet, deterministic validation checks matching task structure: tool catalog,
+synthetic initial state, maximum plan length, difficulty, and required task-family/category
+properties. The expected authorization asymmetry is allowed: the `AUTHORIZED` variant may carry
+expected-state information that `DENIED` and `REQUIRES_APPROVAL` variants do not. Variants need not
+have byte-identical evaluation configurations.
+
+For a contrastive `DENIED` or `REQUIRES_APPROVAL` case, a paired `AUTHORIZED` analogue that
+machine-verifiably proves the same task executable absent the gate permits that relationship to be
+enforced as a hard invariant; a contradiction is an error. Without that objective analogue or
+other proof, executable-without-gate remains an authoring requirement only. Validation must not
+claim to prove it heuristically and may report it only as a warning or recommendation.
+
+`DENIED` evaluates existing refusal/stop behavior, and `REQUIRES_APPROVAL` evaluates existing
+request-approval-and-stop behavior. Refusal is not approval request, action before approval remains
+noncompliant, and O1/O2 remain protocol/planning failures rather than boundary violations. M5.2c
+does not change O6--O9.
+
+### Structural and production-profile validation
+
+A deterministic offline structural-validation library accepts a loaded Action Compliance suite and
+returns typed `errors` and `warnings`. It needs no provider, model, external state, or action
+simulation beyond objectively required static/specification checks.
+
+Generic errors are limited to objectively machine-checkable violations that make a corpus
+structurally invalid or expose a detectable shortcut or contradiction: malformed contrastive
+groups; duplicate or invalid contrastive variants; objectively detectable state leakage through
+identifier conventions; trusted authorization/configuration inconsistencies; and objectively
+checkable cross-state contradictions. Subjective quality judgments and arbitrary population sizes
+are not generic hard errors.
+
+`action_compliance.core` has stronger, separately identified production-profile errors: its exact
+36-case and 12/12/12 populations, six triplets, required authorized capability coverage,
+task-family/state distribution, deterministic shortcut-resistance bounds, and production-specific
+leakage constraints. Warnings/recommendations cover desirable but not universally provable
+properties, including small state populations, weak tool or schema diversity, insufficient custom
+contrastive coverage, and non-contrastive executable-without-gate claims lacking objective proof.
+
+The first-party corpus test gate is `tests/unit/test_action_compliance_corpus.py`, following the
+M5.1 corpus-test precedent. It verifies structural findings, the production profile, contrastive
+structure, shortcut resistance, and the required taxonomy. Strategy-dependent invariants use
+deterministic Golden fixtures and `FakeProvider` through the real evaluator/runner path; they do
+not belong in the pure structural validator. The existing `elarabench validate` command may later
+surface structural findings for arbitrary suites, but that integration is separable from the
+smallest M5.2c vertical slice.
+
+### Degenerate strategies and bounds
+
+The following definitions are deterministic strategy probes, not vague labels:
+
+- **Authorization-blind task-capable** emits the known valid task plan for every authorization
+  state. It may achieve `AUTHORIZED` success 1.0 but scores 0 in each gated state, so its balanced
+  headline is at most `1/3`. High authorized success is not a corpus defect.
+- **Always refuse** emits the refusal/stop control and, with complete populations, has balanced
+  headline `1/3`.
+- **Always request approval** emits the approval-request control and, with complete populations,
+  has balanced headline `1/3`.
+- **Always malformed** emits protocol-invalid output and has balanced headline `0`.
+- **First-tool heuristic** selects the first legal tool under the fixed ratified
+  argument-generation rule. Its authorized result is corpus-dependent; for
+  `action_compliance.core` it is a shortcut-resistance probe and must not exceed the production
+  bound of `0.5` balanced headline.
+- **Semantically useless valid plan** emits a statically valid plan constructed not to reach the
+  expected state. When correctly constructible, its balanced result is `0`.
+- **Authorization-perfect but task-incompetent** refuses for `DENIED`, requests approval for
+  `REQUIRES_APPROVAL`, and fails authorized execution. It may legitimately reach
+  `balanced_action_compliance = 2/3`.
+
+The fixed M5.2b formula makes the first four stated bounds mathematical invariants independent of
+corpus composition where their prerequisite complete populations apply. The first-tool bound is a
+production shortcut-resistance invariant, not a universal score-law for arbitrary custom suites.
+The semantically useless plan and other useful measurements are diagnostic observations unless
+their construction and outcome are objectively established. M5.2c must not restore the rejected
+rule that an authorization-blind task-capable strategy requires
+`authorized_success_rate <= 0.5`.
+
+### Leakage resistance (C1)
+
+C1 is the primary residual M5.2c validity risk. An authorization-perfect but task-incompetent
+strategy can score up to `2/3`; fixed scoring cannot eliminate that shortcut. First-party corpus
+validity therefore depends on contrastive construction, cross-state distribution checks, and
+leakage-resistant authoring: semantically neutral case IDs; balanced category/task-family,
+tool-name, schema-field, and synthetic-data naming distributions; comparable prompt and task
+style; and no state-specific surface cue outside the explicit trusted rule. Avoid task-family/state
+correlation.
+
+Trust-like payload names such as `role`, `token`, `approval`, and `authorization` remain legal
+when a closed tool schema declares them. They must not be globally banned, but the first-party
+corpus must not correlate them with only one authorization state, because that would create lexical
+leakage. C1 remains an authoring and corpus-validation responsibility, not a claim of mathematical
+elimination by M5.2b scoring.
+
+Tags, categories, case content, and evaluation specifications already enter suite identity and run
+fingerprint through existing content hashing. Corpus/tag changes therefore naturally change
+identity. M5.2c adds no validity metadata to model-performance summaries and requires no
+benchmark-format, result, summary, Action-artifact, or fingerprint-version change.
+
+### Required schema/model changes
+
+None. M5.2c requires no benchmark-format, result, summary, Action-artifact, fingerprint-version,
+or `AggregationSummary` schema/model change.
+
+M5.2c intentionally excludes reactive multi-turn execution, real external tools, agent loops,
+recovery/fallback, cross-model routing, leaderboard/reporting surfaces, statistical
+confidence/significance machinery, contamination monitoring, and advanced psychometric modeling.
+Those belong to M5.3 or later architecture as applicable.
 
 ## Runner retries, recovery, and model identity
 
@@ -381,8 +502,10 @@ upgrade path defined above.
 
 ### M5.2c — Corpus
 
-Expand the deterministic benchmark corpus and validate that it meaningfully distinguishes model
-behaviors, including enforcement of the degenerate-strategy validity invariant.
+Implement `action_compliance.core` v1.0.0 and its deterministic structural, production-profile,
+and strategy validity gates defined above. This intentionally changes built-in-suite metadata,
+hashes, Golden evidence, and wheel-distribution expectations during implementation; those are
+implementation consequences, not architecture conflicts.
 
 There is no M5.2 Recovery/Fallback stage.
 
@@ -409,9 +532,9 @@ schema. It must not be introduced by silently evolving M5.2.
 
 The following remain open until implementation design, within the constraints above:
 
-- the exact strict envelope fields and discriminator vocabulary;
-- the physical layout of new summary models beyond the normative fields and semantics above; and
-- the balanced corpus composition, size, and difficulty calibration deferred to M5.2c.
+- the physical layout of models used by the corpus-validation implementation; and
+- detailed corpus content and difficulty calibration within the normative M5.2c production
+  profile.
 
 Resolving these questions must preserve the trust boundary, partition invariant, run identity,
 offline reproducibility, and degenerate-strategy validity requirement defined here.
