@@ -37,9 +37,10 @@ Derived summaries/comparisons
 See [Architecture](docs/architecture.md), [Deterministic core](docs/deterministic-core.md),
 [Benchmark format](docs/benchmark-format.md), [Benchmark methodology](docs/benchmark-methodology.md),
 [Benchmark authoring](docs/benchmark-authoring.md), [Result format](docs/result-format.md),
-[Reproducibility](docs/reproducibility.md), [Comparison](docs/comparison.md), and the
-[M5.2 Static Action Compliance design](docs/action-compliance.md) for implemented contracts,
-planned capability constraints, and v1 boundaries.
+[Reproducibility](docs/reproducibility.md), and [Comparison](docs/comparison.md) for implemented
+contracts. The [M5.2 Static Action Compliance design](docs/action-compliance.md) and planned
+[M5.3 Action Recovery design](docs/action-recovery.md) define their capability constraints and v1
+boundaries.
 
 ## First-party benchmarks
 

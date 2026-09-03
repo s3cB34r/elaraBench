@@ -177,3 +177,9 @@ one stored provider response per sample as a provider-neutral structured plan ag
 defined authorization/gating semantics using deterministic, pure, side-effect-free simulation
 only; it executes no tools and introduces no agent loop. The normative M5.2 constraints are defined
 in [Static Action Compliance](action-compliance.md).
+
+Planned M5.3 Action Recovery preserves the same one-request, one-response runner boundary. Its
+preceding attempt and observation are trusted benchmark-supplied case data, not the result of
+executing the current model's own plan. The normative design and its primary capability limitation
+are defined in [Action Recovery](action-recovery.md). A causal provider -> tool -> provider loop,
+runtime-generated observations, and additional model turns require a future M5.4 architecture.
