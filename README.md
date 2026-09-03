@@ -43,7 +43,7 @@ planned capability constraints, and v1 boundaries.
 
 ## First-party benchmarks
 
-ElaraBench includes five original, public, deterministic suites:
+ElaraBench includes six original, public, deterministic suites:
 
 | Suite | Version | Cases | Categories | Recommended output cap |
 | --- | --- | ---: | ---: | ---: |
@@ -52,8 +52,9 @@ ElaraBench includes five original, public, deterministic suites:
 | `coding.core` | 1.0.0 | 12 | 4 | 128 tokens |
 | `cybersecurity.core` | 1.0.0 | 12 | 4 | 192 tokens |
 | `refusal_compliance.core` | 1.0.0 | 54 | 8 | 192 tokens |
+| `action_compliance.core` | 1.0.0 | 36 | 6 | 192 tokens |
 
-All five use equal case weights, Thinking disabled as the canonical suite policy, a 120-second
+All six use equal case weights, Thinking disabled as the canonical suite policy, a 120-second
 timeout, and self-contained prompts with no fixtures or network requirements. The benchmark data
 are dedicated under CC0-1.0 separately from the Python framework. `coding.core` measures static
 code analysis and never executes model-generated code. `cybersecurity.core` uses synthetic,
@@ -231,9 +232,9 @@ python -m pytest
 
 ## Project status
 
-ElaraBench v0.2.1 plus M3, M4.1, M4.2a, M5.1, and the M5.2a foundation includes local model
-execution, trustworthy same-benchmark and verified cross-version intersection comparison, and five
-first-party benchmark suites totaling 114 cases. The engine provides the deterministic core, a
+ElaraBench v0.2.1 plus M3, M4.1, M4.2a, M5.1, and M5.2 includes local model
+execution, trustworthy same-benchmark and verified cross-version intersection comparison, and six
+first-party benchmark suites totaling 150 cases. The engine provides the deterministic core, a
 synchronous concurrency-one runner, complete schema-v3 run artifacts, bounded retries, durable
 attempt history, Ctrl-C
 recovery, strict resume, environment discovery, coverage-aware summaries, offline rescoring, and
@@ -241,10 +242,9 @@ a native Ollama provider. Historical M2 schema-v2 runs remain available to offli
 `summarize`, but cannot resume under v3 runtime semantics. A deterministic fake provider keeps the
 complete runner and first-party suite paths testable without network or model hardware.
 
-M5.2a derives and persists strict static Action Compliance proposal, authorization-gate,
-simulation, and nine-way outcome evidence. These results remain unscored until M5.2b defines
-normative scoring and aggregation. No Action Compliance suite is shipped in the five-suite
-first-party catalog at this foundation stage.
+M5.2 derives and scores strict static Action Compliance proposal, authorization-gate, simulation,
+and nine-way outcome evidence. The first-party `action_compliance.core` suite adds 36 balanced,
+contrastive cases with deterministic corpus-validity and shortcut-resistance gates.
 
 M3 coding and cybersecurity coverage is intentionally static. It does not include executable
 benchmark sandboxes, arbitrary model-generated execution, live security targets, parallel or

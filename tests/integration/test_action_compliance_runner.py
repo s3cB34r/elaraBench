@@ -41,7 +41,7 @@ GOLDEN_PATH = (
     Path(__file__).parents[1]
     / "fixtures"
     / "builtin_suite_goldens"
-    / "action-compliance-core-v1.jsonl"
+    / "action-compliance-foundation-test-v1.jsonl"
 )
 
 

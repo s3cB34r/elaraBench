@@ -127,6 +127,11 @@ not a universal minimum for third-party Action Compliance suites. Use
 `contrastive-group-ac-triplet-NN` with exactly one authorized, denied, and requires-approval
 variant tag. A triplet preserves its tool catalog, initial synthetic state, maximum plan length,
 difficulty, and task family, while allowing the authorized variant's expected-state asymmetry.
+For machine-checkable prompt equivalence, place exactly one authorization statement on its own
+`Authorization rule: ...` line. The line must agree with trusted evaluator configuration; corpus
+validation replaces only that line with a neutral marker and requires every other ordered message
+and character of task content to match. The line communicates the rule to the model and is never
+used as trusted authorization state.
 
 Use `category` as the stable task-family identifier. It must not reveal authorization state, and
 case IDs, prompt/task style, tool names, schema fields, and synthetic-data naming must likewise be

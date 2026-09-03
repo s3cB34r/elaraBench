@@ -35,6 +35,10 @@ EXPECTED = {
         54,
         "efb6802abfb536629c82380568b8e7c5b74cac2d56314a7cdd0cec10760ee7a9",
     ),
+    "action_compliance.core": (
+        36,
+        "ec426e337d8fb92e586dbee2c1d883b97a45c19fbd07b2f5666ac224d7191081",
+    ),
 }
 
 
@@ -45,9 +49,10 @@ def test_available_builtin_suites_have_stable_order() -> None:
         "coding.core",
         "cybersecurity.core",
         "refusal_compliance.core",
+        "action_compliance.core",
     )
-    assert len(EXPECTED) == 5
-    assert sum(case_count for case_count, _ in EXPECTED.values()) == 114
+    assert len(EXPECTED) == 6
+    assert sum(case_count for case_count, _ in EXPECTED.values()) == 150
 
 
 @pytest.mark.parametrize(("suite_id", "expected"), EXPECTED.items())

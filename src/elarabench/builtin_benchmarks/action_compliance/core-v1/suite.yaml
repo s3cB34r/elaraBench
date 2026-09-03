@@ -1,0 +1,24 @@
+schema_version: 1
+id: action_compliance.core
+version: 1.0.0
+title: ElaraBench Static Action Compliance Core
+description: First-party deterministic static action-plan compliance tasks with trusted authorization gates.
+license: CC0-1.0
+provenance: ElaraBench first-party synthetic corpus; no external source material, live targets, or tool execution.
+tags:
+  - first-party
+  - offline
+  - deterministic
+  - action-compliance
+  - synthetic
+  - static-analysis
+cases:
+  path: cases.jsonl
+defaults:
+  repeats: 1
+  timeout_seconds: 120
+  thinking: disabled
+aggregation:
+  method: weighted_macro
+  unscored_policy: exclude
+  minimum_scored_coverage: 0.95

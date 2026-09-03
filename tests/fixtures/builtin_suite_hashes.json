@@ -23,5 +23,10 @@
     "version": "1.0.0",
     "case_count": 54,
     "content_hash": "efb6802abfb536629c82380568b8e7c5b74cac2d56314a7cdd0cec10760ee7a9"
+  },
+  "action_compliance.core": {
+    "version": "1.0.0",
+    "case_count": 36,
+    "content_hash": "ec426e337d8fb92e586dbee2c1d883b97a45c19fbd07b2f5666ac224d7191081"
   }
 }

@@ -172,5 +172,6 @@ evidence using the unscored `pending_review` state. M5.2b evaluator version `1.1
 protocol, gate, simulation, outcome, and artifact meaning while assigning the normative binary
 score/pass mapping. Explicit offline `score` is the upgrade path for historical M5.2a derived
 evidence. The balanced Action Compliance headline and diagnostic rates are defined in
-[the authoritative M5.2 design](action-compliance.md). M5.2b adds no built-in Action Compliance
-corpus; corpus construction and validity remain M5.2c.
+[the authoritative M5.2 design](action-compliance.md). M5.2c adds the 36-case, balanced,
+contrastive `action_compliance.core` v1.0.0 production corpus without changing this benchmark
+schema.

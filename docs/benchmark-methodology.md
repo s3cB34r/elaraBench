@@ -105,7 +105,7 @@ The primary M3 profile uses temperature 0, seed 42 when supported, one repeat, T
 a 120-second timeout, no retries, and concurrency one. Top-p, top-k, and stop remain unset. The
 recommended output caps are 64 tokens for `reasoning.core`, 128 for
 `instruction_following.core` and `coding.core`, and 192 for `cybersecurity.core` and
-`refusal_compliance.core`. Output caps are
+`refusal_compliance.core` and `action_compliance.core`. Output caps are
 run-level recommendations because the current suite schema does not contain general generation
 parameters.
 

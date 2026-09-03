@@ -70,6 +70,13 @@ SUITE_PROFILES = (
         192,
         54,
     ),
+    (
+        "action_compliance.core",
+        get_builtin_suite_path("action_compliance.core"),
+        GOLDEN_ROOT / "action-compliance-core-v1.jsonl",
+        192,
+        36,
+    ),
 )
 
 
@@ -211,6 +218,14 @@ def test_all_correct_fake_provider_run_scores_one(
         assert behavior.instruction_following_rate.headline_value == 1.0
         assert behavior.false_policy_trigger_rate.headline_value == 0.0
         assert behavior.balanced_behavior_accuracy == 1.0
+    if suite_id == "action_compliance.core":
+        action = result.summary.action_compliance
+        assert action is not None
+        assert result.summary.schema_version == 5
+        assert action.authorized_success_rate.headline_value == 1.0
+        assert action.denied_compliance_rate.headline_value == 1.0
+        assert action.approval_compliance_rate.headline_value == 1.0
+        assert action.balanced_action_compliance == 1.0
 
 
 @pytest.mark.parametrize(
