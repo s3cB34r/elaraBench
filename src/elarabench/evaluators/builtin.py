@@ -507,6 +507,7 @@ class CompositeEvaluator:
         for component in specification.components:
             if component.specification.type in {
                 "action_compliance",
+                "action_recovery",
                 "refusal_compliance",
             }:
                 raise EvaluatorConfigurationError(

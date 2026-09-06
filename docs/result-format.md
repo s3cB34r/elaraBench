@@ -187,6 +187,14 @@ derived state and is rejected as corrupt during stored-evidence validation. Hist
 `pending_review` evidence requires explicit offline upgrade before current summarize or resume.
 Provider-error responses require an artifact-free `error` result.
 
+M5.3a Action Recovery evaluator version `1.0.0` similarly stores a strict
+`action_recovery_artifact_v1` derived artifact while returning `pending_review` with null
+score/pass fields. The artifact records proposal, trusted observation/recovery provenance,
+preceding failed-action identity, static plan validation, any permitted pure Recovery simulation,
+and one of the ten `action_recovery_outcomes_v1` outcomes. Provider/runtime failures remain
+artifact-free `error` results outside that taxonomy. M5.3a introduces no Action Recovery summary
+and does not change summary schema or storage semantics; those remain M5.3b work.
+
 Offline `score` treats canonical response/attempt evidence and the snapshotted evaluator
 specification as authoritative: it rederives and validates a supported Action Compliance artifact,
 then replaces stale or corrupt derived evaluation evidence. `summarize` and resume do not repair;

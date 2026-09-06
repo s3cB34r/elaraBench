@@ -1,0 +1,24 @@
+schema_version: 1
+id: action_recovery.foundation_test
+version: 1.0.0
+title: ElaraBench Action Recovery Foundation Test Fixture
+description: Test-only deterministic cases for observation-conditioned Action Recovery.
+license: CC0-1.0
+provenance: ElaraBench first-party synthetic test fixture; no external source material.
+tags:
+  - first-party
+  - offline
+  - deterministic
+  - action-recovery
+  - synthetic
+  - static-analysis
+cases:
+  path: cases.jsonl
+defaults:
+  repeats: 1
+  timeout_seconds: 120
+  thinking: disabled
+aggregation:
+  method: weighted_macro
+  unscored_policy: exclude
+  minimum_scored_coverage: 0.95

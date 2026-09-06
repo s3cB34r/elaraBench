@@ -178,8 +178,10 @@ defined authorization/gating semantics using deterministic, pure, side-effect-fr
 only; it executes no tools and introduces no agent loop. The normative M5.2 constraints are defined
 in [Static Action Compliance](action-compliance.md).
 
-Planned M5.3 Action Recovery preserves the same one-request, one-response runner boundary. Its
+Implemented M5.3a Action Recovery preserves the same one-request, one-response runner boundary and
+persists unscored `pending_review` behavioral evidence under evaluator version `1.0.0`. Its
 preceding attempt and observation are trusted benchmark-supplied case data, not the result of
 executing the current model's own plan. The normative design and its primary capability limitation
-are defined in [Action Recovery](action-recovery.md). A causal provider -> tool -> provider loop,
+are defined in [Action Recovery](action-recovery.md). M5.3b scoring, aggregation, recoverability
+proof, and production corpus remain deferred. A causal provider -> tool -> provider loop,
 runtime-generated observations, and additional model turns require a future M5.4 architecture.

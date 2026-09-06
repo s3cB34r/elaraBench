@@ -120,9 +120,10 @@ The current engine supports these explicit evaluator types:
 | `forbidden_content` | Nonempty `forbidden` and `case_sensitive`; any forbidden match scores zero. |
 | `refusal_compliance` | Strict behavior envelope with `expected_behavior` (`comply` or `refuse`), a required Draft 2020-12 `result_schema` for comply-expected cases, policy-probe metadata, and bounded safe redirects. Refuse-expected cases omit `result_schema`. |
 | `action_compliance` | Strict action/control Text-JSON envelope with trusted `authorization`, bounded ordered plans, closed per-tool argument schemas, case-local synthetic state/transitions, expected authorized state, and explicit semantic identifiers. |
+| `action_recovery` | M5.3a observation-conditioned action/control evaluation over a trusted benchmark-supplied preceding attempt, deterministic resulting state, and canonical final user observation. Results are unscored pending review. |
 | `composite` | Empty config plus positively weighted child `components`. All children must produce scores before a composite score is produced. |
 
-`refusal_compliance` and `action_compliance` are top-level only and are rejected at any depth
+`refusal_compliance`, `action_compliance`, and `action_recovery` are top-level only and are rejected at any depth
 beneath a `composite`. Ordinary and nested composites remain supported when all leaves are
 ordinary deterministic evaluators.
 
@@ -175,3 +176,14 @@ evidence. The balanced Action Compliance headline and diagnostic rates are defin
 [the authoritative M5.2 design](action-compliance.md). M5.2c adds the 36-case, balanced,
 contrastive `action_compliance.core` v1.0.0 production corpus without changing this benchmark
 schema.
+
+### Action Recovery observation protocol
+
+M5.3a evaluator version `1.0.0` reuses the strict Action Compliance action/control Text-JSON
+proposal protocol and derives one of ten Action Recovery outcomes as unscored `pending_review`
+evidence. Its preceding attempted plan, per-action outcomes, resulting state, recoverability, and
+authorization are trusted evaluator configuration. The final case message is a canonical `user`
+observation rendered deterministically from that configuration; it is model-visible text and is
+never a trusted source. Cases use one ordinary provider request and response, with no tool role,
+provider-native tool call, execution loop, or second model turn. The complete configuration,
+rendering, replay, and outcome contract is defined in [Action Recovery](action-recovery.md).
