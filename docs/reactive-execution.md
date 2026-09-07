@@ -98,6 +98,13 @@ extend `action_recovery`:
 - Provenance must distinguish benchmark-supplied Recovery evidence from model-caused Reactive
   Execution evidence.
 
+`reactive_execution` is top-level only. M5.4a extends the existing Composite configuration guard
+to reject it as a component in the same way as `refusal_compliance`, `action_compliance`, and
+`action_recovery`. The evaluator specification retains a consistent behavioral-family guard where
+the implementation architecture requires it. A Composite must never try to evaluate Reactive
+Execution through a single-response evaluator context or combine a partial Reactive result into a
+weighted Composite score. Rejection is a configuration failure, not a runtime behavioral outcome.
+
 M5.4a uses:
 
 - artifact: `reactive_execution_artifact_v1`;
@@ -116,15 +123,34 @@ preflight, sample/repeat iteration, provider retry policy, event and run lifecyc
 
 A dedicated Reactive Execution Turn Engine beneath the Runner owns:
 
-- the model-turn loop;
+- provider-turn orchestration through the Runner's provider retry policy;
+- canonical per-turn Request persistence;
+- canonical per-turn Response and Attempt persistence;
+- the model-turn loop and generation of each next canonical Request;
 - Action/Control parsing and static plan validation;
-- deterministic synthetic execution and runtime state;
+- deterministic synthetic execution and runtime state during the live run;
 - observation generation and transcript construction;
-- budget accounting and termination; and
-- Reactive artifact derivation.
+- budget accounting and runtime termination during execution; and
+- canonical turn evidence production.
 
 Non-reactive evaluator families continue through the existing path. M5.4 must not redesign the
 ordinary Runner path.
+
+The `reactive_execution` evaluator is the sole authority that derives and validates
+`reactive_execution_artifact_v1` and the E1--E10 behavioral outcome. It must do so from canonical
+evidence during the live run, during offline replay, and during a future M5.4b explicit rescore or
+upgrade, without provider contact.
+
+Existing `EvaluationContext` remains unchanged for all existing evaluator families. M5.4a adds a
+dedicated evaluator-facing Reactive evidence context, or an equivalent narrow interface, carrying
+the complete canonical turn evidence needed for deterministic derivation. It provides enough
+canonical information to reconstruct ordered Turn Requests, ordered Turn Responses, Attempt
+relationships needed for provenance, the transcript, deterministic execution and state chain,
+consumed budgets, the failed-action register, and final termination and outcome. The ordinary
+single-response `EvaluationContext` does not represent this multi-turn evidence, and existing
+evaluators are not broadened to accommodate Reactive Execution. The Reactive evaluator is pure and
+offline with respect to canonical evidence: it makes no provider calls and accesses no network or
+external tools.
 
 ## Provider-neutral transcript protocol
 
@@ -242,6 +268,14 @@ turns_remaining = max_model_turns - durable_model_responses
 actions_remaining = max_total_actions - invoked_actions
 ```
 
+`current_turn_index` is the zero-based index of the model Turn whose Response is currently being
+classified. The first Turn is 0 and the third Turn is 2. It is not `turns_remaining`. At Control
+classification time the current canonical Response has already consumed its model Turn:
+
+```text
+turns_remaining = max_model_turns - current_turn_index - 1
+```
+
 ## Runtime state
 
 `current_state` begins as trusted `initial_state` and evolves only through deterministic synthetic
@@ -273,7 +307,14 @@ depth bound = min(
 ```
 
 The depth bound is the counterfactual Action capacity available if the model had acted instead of
-stopping. The reachability result maps as follows:
+stopping on the current Turn. It deliberately includes the Action plan that could have been
+proposed instead of Control. With `max_model_turns = 1` and `current_turn_index = 0`, the model has
+no later turns but the counterfactual depth still permits one plan. Likewise, the final Turn of a
+three-Turn sample has `current_turn_index = 2` and
+`max_model_turns - current_turn_index = 1`. `turns_remaining` must never be substituted into this
+formula; doing so would automatically misclassify Control on the final permitted Turn as terminal.
+
+The reachability result maps as follows:
 
 - `recoverable` -> `premature_stop`;
 - `unrecoverable` -> `correct_terminal_stop`; and
@@ -285,8 +326,15 @@ proof and validation remain M5.4b work.
 ## Observation fairness
 
 The model-visible task prompt exposes tool names, argument schemas, every tool `requires` condition
-in understandable task text, and all configured budgets. Concrete initial runtime-state values may
-remain hidden before Turn 0. After execution, the runtime observation exposes `resulting_state`.
+in understandable task text, all configured budgets, and the complete behavioral objective in
+understandable task terms. Concrete initial runtime-state values may remain hidden before Turn 0.
+After execution, the runtime observation exposes `resulting_state`.
+
+The raw machine `expected_state` remains trusted evaluator-only data. It is the deterministic
+machine oracle used to verify whether the communicated behavioral objective has been achieved; the
+model is not required to infer its objective from hidden `expected_state`. Fairness requires both a
+complete model-visible behavioral objective and its hidden machine-verification representation.
+The raw expected-state object need not be exposed.
 
 The evaluator never exposes merely to help solve the task:
 
@@ -303,6 +351,12 @@ state does not trivially reveal the correct branch. After a precondition failure
 plus known `requires` semantics supplies enough information to derive a viable correction, and the
 correction fits within remaining budgets. M5.4b corpus validation enforces the machine-checkable
 parts of this fairness rule.
+
+For its small test fixture, M5.4a provides one deterministic helper or rendering convention for
+the model-visible synthetic tool description. It covers at least tool identifier, argument schema,
+`requires` conditions, configured budgets, and behavioral-objective placement. This prevents
+case-by-case manual paraphrases from creating accidental mismatches. It is not a production corpus
+renderer; production authoring and validation remain deferred to M5.4b.
 
 ## Canonical runtime observation
 
@@ -417,6 +471,25 @@ Result and manifest physical schemas support v4. Fingerprint schema remains vers
 implementation inspection proves a behavioral input escapes current identity hashing; physical
 layout change alone does not justify a fingerprint bump.
 
+For a physical schema-v4 run, `source_result_schema_version` is 4 in applicable
+`EvaluationResult` provenance, `AggregationSummary` provenance, and evaluator artifacts or models
+that persist the physical source version. All relevant schema and `Literal` domains widen
+additively from `{2, 3}` to `{2, 3, 4}`. This is provenance and layout compatibility only; it does
+not change M5.1, M5.2, or M5.3 behavior, evaluator taxonomies, scoring semantics, or existing
+Summary v4/v5/v6 meaning.
+
+Historical physical v2 and v3 evidence retains its original source-result-schema provenance and
+is never migrated or rewritten merely because v4 is supported. In a mixed physical-v4 run,
+ordinary, Action Compliance, Action Recovery, and Reactive Execution evaluations may coexist.
+Non-reactive evaluations retain their normal evaluator semantics while recording
+`source_result_schema_version = 4`, because their canonical evidence belongs to the v4 run.
+Validation, `score`, `summarize`, and applicable comparison/read paths must accept supported v4
+physical provenance rather than reject it because their previous domain was `{2, 3}`.
+
+Physical schema v4 is ratified here but is not implemented in the current repository.
+`docs/result-format.md` must be updated as part of M5.4a implementation when physical v4 becomes
+real.
+
 ## Request plan
 
 Under v4, manifest `request_plan` still contains exactly one entry per `(case_id, repeat_index)`.
@@ -424,11 +497,29 @@ That entry represents Turn-0 Request identity. It remains the only Request for n
 samples. Later Reactive Requests are causally derived from Turn 0, prior canonical Responses, and
 trusted configuration. Resume validates the Turn-0 `request_plan` before provider contact.
 
+The manifest `request_plan` binds Turn 0 only. Under physical schema v4, every `AttemptRecord` is
+validated against the Request hash of its own Turn, not against the manifest Turn-0 entry. Turn
+identity comes from its physical `turns/NNN/` location, that Turn's canonical Request, and
+`AttemptRecord.request_hash`. `AttemptRecord` remains unchanged. This binding detects Attempt
+transplantation between Turns.
+
 ## Canonical turn evidence and crash consistency
 
 Each turn's `request.json`, `response.json`, and `attempts/` are canonical. Persisted canonical
 evidence is immutable. A durable Request must never be deleted or overwritten merely because its
 Response does not yet exist. A turn completes when its canonical Response is durable.
+
+Canonical persistence order is fixed independently for every Turn:
+
+```text
+request -> attempt(s) -> response
+```
+
+A durable canonical Response is valid only when it is consistent with the terminal Attempt under
+the existing terminal-Attempt evidence rules. If a crash occurs after a terminal Attempt becomes
+durable but before canonical Response persistence, resume applies the existing terminal-Attempt
+recovery principle: it reconstructs and persists the canonical Response from that terminal Attempt
+and does not call the provider again for the completed provider attempt.
 
 Execution transcript, state chain, observation, termination, and behavioral classification are
 deterministically derived and validated. The exact observation bytes supplied to Turn N+1 are
@@ -439,7 +530,8 @@ If `request.json` exists without `response.json`, resume:
 1. rederives the Request deterministically;
 2. byte-compares it with the persisted Request;
 3. fails integrity validation on mismatch; and
-4. may continue provider generation for that same turn on a match, without rewriting the Request.
+4. on a match, recovers a Response from a durable terminal Attempt when one exists; otherwise it
+   may continue provider generation for that same Turn, without rewriting the Request.
 
 After a crash following Response persistence but before execution, deterministic execution is
 derived again. A crash during synthetic execution restarts pure in-memory execution. A crash after
@@ -488,11 +580,36 @@ M5.4a adds no Reactive aggregation or summary fields.
 
 ## M5.3 reachability extraction compatibility
 
-The neutral reachability extraction required by M5.4a must preserve M5.3 exactly.
-`action_recovery_corpus.py` retains its public and semantic behavior through thin wrappers or
-imports. The refactor must not alter M5.3 outcomes, scoring, corpus behavior, findings, Action
-Recovery suite contents, or hashes. Verification must prove all seven current production suite
-hashes remain identical and all existing M5.3 tests remain green.
+The committed `analyze_tool_invocability` currently depends on
+`ActionRecoveryConfig._action_view()` and is therefore not neutral. M5.4a extracts the
+reachability and invocability implementation so the neutral machinery does not import, depend on,
+or call `ActionRecoveryConfig` or any of its private methods.
+
+The neutral static-invocability primitive accepts the already-derived Action-validation view
+explicitly, conceptually:
+
+```text
+analyze_tool_invocability(action_config, tool_name, definition)
+```
+
+Here `action_config` is the `ActionComplianceConfig`-compatible view required by existing
+`validate_action_plan`. The neutral bounded-reachability primitive conceptually accepts tools,
+`start_state`, `goal_state`, `depth_bound`, and the explicit Action-validation view needed for
+witness revalidation.
+
+`action_recovery_corpus.analyze_bounded_recoverability(config)` remains a thin compatibility
+wrapper. It passes `config.tools`, `config.resulting_state`, `config.expected_state`,
+`config.max_plan_length`, and `config._action_view()` to the neutral primitive. Reactive Execution
+constructs its own equivalent Action-validation view from Reactive trusted configuration and
+passes that view explicitly. The private `_action_view()` dependency therefore ends at the M5.3
+wrapper boundary and never enters the neutral module.
+
+The extraction preserves deterministic BFS, lexicographic ordering, canonical visited-state
+identity, `ReachabilityResult` fields, `ToolInvocability` classifications,
+witness-under-approximation semantics, and Action Recovery findings behavior exactly. It is a
+behavior-preserving refactor only. The refactor must not alter M5.3 outcomes, scoring, corpus
+behavior, findings, Action Recovery suite contents, or hashes. Acceptance requires all existing
+M5.3 tests to remain green and all seven current built-in hashes to remain unchanged.
 
 ## Compatibility requirements
 
