@@ -40,12 +40,13 @@ See [Architecture](docs/architecture.md), [Deterministic core](docs/deterministi
 [Reproducibility](docs/reproducibility.md), and [Comparison](docs/comparison.md) for implemented
 contracts. The [M5.2 Static Action Compliance design](docs/action-compliance.md) and
 [M5.3 Action Recovery design](docs/action-recovery.md) define their capability constraints and v1
-boundaries. The M5.3a Action Recovery semantic foundation is implemented as an unscored
-single-response evaluator; M5.3b scoring, aggregation, and production corpus remain deferred.
+boundaries. M5.3b completes the one-request Action Recovery benchmark with evaluator `1.1.0`,
+bounded corpus proof, summary schema v6, and the production `action_recovery.core` suite. It does
+not add live reactive execution.
 
 ## First-party benchmarks
 
-ElaraBench includes six original, public, deterministic suites:
+ElaraBench includes seven original, public, deterministic suites:
 
 | Suite | Version | Cases | Categories | Recommended output cap |
 | --- | --- | ---: | ---: | ---: |
@@ -55,8 +56,9 @@ ElaraBench includes six original, public, deterministic suites:
 | `cybersecurity.core` | 1.0.0 | 12 | 4 | 192 tokens |
 | `refusal_compliance.core` | 1.0.0 | 54 | 8 | 192 tokens |
 | `action_compliance.core` | 1.0.0 | 36 | 6 | 192 tokens |
+| `action_recovery.core` | 1.0.0 | 36 | 6 | 256 tokens |
 
-All six use equal case weights, Thinking disabled as the canonical suite policy, a 120-second
+All seven use equal case weights, Thinking disabled as the canonical suite policy, a 120-second
 timeout, and self-contained prompts with no fixtures or network requirements. The benchmark data
 are dedicated under CC0-1.0 separately from the Python framework. `coding.core` measures static
 code analysis and never executes model-generated code. `cybersecurity.core` uses synthetic,
@@ -100,6 +102,10 @@ elarabench run cybersecurity.core \
 elarabench run refusal_compliance.core \
   --provider ollama --model MODEL --temperature 0 --seed 42 \
   --repeats 1 --no-think --timeout 120 --max-retries 0 --max-tokens 192
+
+elarabench run action_recovery.core \
+  --provider ollama --model MODEL --temperature 0 --seed 42 \
+  --repeats 1 --no-think --timeout 120 --max-retries 0 --max-tokens 256
 ```
 
 Validation uses the same IDs:
@@ -235,8 +241,8 @@ python -m pytest
 ## Project status
 
 ElaraBench v0.2.1 plus M3, M4.1, M4.2a, M5.1, and M5.2 includes local model
-execution, trustworthy same-benchmark and verified cross-version intersection comparison, and six
-first-party benchmark suites totaling 150 cases. The engine provides the deterministic core, a
+execution, trustworthy same-benchmark and verified cross-version intersection comparison, and
+seven first-party benchmark suites totaling 186 cases. The engine provides the deterministic core, a
 synchronous concurrency-one runner, complete schema-v3 run artifacts, bounded retries, durable
 attempt history, Ctrl-C
 recovery, strict resume, environment discovery, coverage-aware summaries, offline rescoring, and
@@ -247,6 +253,11 @@ complete runner and first-party suite paths testable without network or model ha
 M5.2 derives and scores strict static Action Compliance proposal, authorization-gate, simulation,
 and nine-way outcome evidence. The first-party `action_compliance.core` suite adds 36 balanced,
 contrastive cases with deterministic corpus-validity and shortcut-resistance gates.
+
+M5.3 derives and scores ten-way Action Recovery evidence from one benchmark-supplied failed-attempt
+observation. The 36-case `action_recovery.core` suite balances recoverable, bounded-unrecoverable,
+denied, and approval-required populations. Its proof and simulation are deterministic and offline;
+the preceding attempt is not generated or executed at runtime.
 
 M3 coding and cybersecurity coverage is intentionally static. It does not include executable
 benchmark sandboxes, arbitrary model-generated execution, live security targets, parallel or

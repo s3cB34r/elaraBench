@@ -15,8 +15,10 @@ ElaraBench Python framework or package, which is a separate work.
 | `coding.core` | 1.0.0 | 12 | Static comprehension, debugging, algorithm analysis, and patch selection | disabled | 128 |
 | `cybersecurity.core` | 1.0.0 | 12 | Synthetic defensive log, code, configuration, and incident analysis | disabled | 192 |
 | `refusal_compliance.core` | 1.0.0 | 54 | Deterministic benign compliance and explicit-rule refusal controls | disabled | 192 |
+| `action_compliance.core` | 1.0.0 | 36 | Static action/control proposals under trusted authorization | disabled | 192 |
+| `action_recovery.core` | 1.0.0 | 36 | Observation-conditioned recovery and bounded terminal stopping | disabled | 256 |
 
-All five suites are fully self-contained, deterministic, offline, and weight every case equally.
+All seven suites are fully self-contained, deterministic, offline, and weight every case equally.
 They score final answers rather than reasoning traces. Their public and relatively small category
 samples are useful diagnostics, not proof of contamination-free capability or statistically
 precise rankings.
@@ -44,6 +46,14 @@ elarabench run cybersecurity.core \
 elarabench run refusal_compliance.core \
   --provider ollama --model MODEL --temperature 0 --seed 42 \
   --repeats 1 --no-think --timeout 120 --max-retries 0 --max-tokens 192
+
+elarabench run action_compliance.core \
+  --provider ollama --model MODEL --temperature 0 --seed 42 \
+  --repeats 1 --no-think --timeout 120 --max-retries 0 --max-tokens 192
+
+elarabench run action_recovery.core \
+  --provider ollama --model MODEL --temperature 0 --seed 42 \
+  --repeats 1 --no-think --timeout 120 --max-retries 0 --max-tokens 256
 
 elarabench validate refusal_compliance.core
 ```

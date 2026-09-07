@@ -48,6 +48,12 @@ their complete deterministic outcome artifacts. M5.2b defines the normative bina
 balanced Action Compliance headline; historical derived evidence requires explicit offline
 rescoring before current summarize or resume.
 
+The top-level `action_recovery` evaluator applies the same strict proposal and transition semantics
+to one benchmark-supplied failed-attempt observation. Version `1.1.0` assigns the normative R1--R10
+binary mapping and schema-v6 Recovery summary. Offline corpus validation uses lexicographic,
+canonical-state BFS for bounded reachability and a conservative invocability classification;
+neither runtime evaluation nor proof invokes a provider, tool, network, shell, or external state.
+
 Evaluation results retain evaluator name/version and configuration hash. Aggregation excludes
 unscored states, averages repeats per case, applies case weights, exposes category/tag breakdowns,
 reports status counts and repeat variance, and gates the headline score on sample coverage.

@@ -16,6 +16,11 @@ from elarabench.action_compliance import (
     expectation_from_action_specification,
     validate_action_compliance_result,
 )
+from elarabench.action_recovery import (
+    ActionRecoveryEvidenceError,
+    expectation_from_recovery_specification,
+    validate_action_recovery_result,
+)
 from elarabench.benchmark import (
     LoadedBenchmarkSuite,
     create_benchmark_snapshot,
@@ -581,6 +586,20 @@ class Runner:
                             response=response,
                         )
                     except ActionComplianceEvidenceError as error:
+                        raise RunIntegrityError(
+                            f"invalid derived evaluation evidence: {error}"
+                        ) from error
+                recovery_expectation = expectation_from_recovery_specification(
+                    cases[identity.case_id].evaluation
+                )
+                if recovery_expectation is not None and response is not None:
+                    try:
+                        validate_action_recovery_result(
+                            result,
+                            recovery_expectation,
+                            response=response,
+                        )
+                    except ActionRecoveryEvidenceError as error:
                         raise RunIntegrityError(
                             f"invalid derived evaluation evidence: {error}"
                         ) from error

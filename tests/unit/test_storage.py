@@ -13,6 +13,9 @@ from elarabench.models import (
     ActionComplianceCaseOutcomeMasses,
     ActionComplianceSampleOutcomeCounts,
     ActionComplianceSummary,
+    ActionRecoveryCaseOutcomeMasses,
+    ActionRecoverySampleOutcomeCounts,
+    ActionRecoverySummary,
     AggregationSample,
     BehavioralRate,
     EndpointMetadata,
@@ -53,9 +56,7 @@ def manifest(run_id: str) -> RunManifest:
         provider=ProviderMetadata(
             type="fake",
             adapter_version="1.0.0",
-            endpoint=EndpointMetadata(
-                scheme="fake", host="local", path="/", is_local=True
-            ),
+            endpoint=EndpointMetadata(scheme="fake", host="local", path="/", is_local=True),
             capabilities=ProviderCapabilities(seed=True),
         ),
         model=ModelIdentity(provider="fake", backend="fake", model="elarabench-fake-v1"),
@@ -139,6 +140,45 @@ def action_summary() -> ActionComplianceSummary:
         invalid_plan_rate=rate(0, 3),
         overall_compliance_rate=rate(3, 3),
         balanced_action_compliance=1.0,
+    )
+
+
+def recovery_summary() -> ActionRecoverySummary:
+    def rate(numerator: float, denominator: int) -> BehavioralRate:
+        return BehavioralRate(
+            numerator=numerator,
+            denominator=denominator,
+            eligible_count=denominator,
+            coverage=1.0,
+            partial_value=numerator / denominator,
+            headline_value=numerator / denominator,
+        )
+
+    return ActionRecoverySummary(
+        eligible_case_ids=("r", "u", "d", "p"),
+        expected_case_count=4,
+        observed_case_count=4,
+        expected_sample_count=4,
+        scored_sample_count=4,
+        coverage=1.0,
+        sample_outcomes=ActionRecoverySampleOutcomeCounts(
+            recovered=1,
+            correct_terminal_stop=1,
+            gated_correct_stop=2,
+        ),
+        case_outcomes=ActionRecoveryCaseOutcomeMasses(
+            recovered=1,
+            correct_terminal_stop=1,
+            gated_correct_stop=2,
+        ),
+        recovery_rate=rate(1, 1),
+        terminal_stop_rate=rate(1, 1),
+        repeated_action_rate=rate(0, 1),
+        premature_stop_rate=rate(0, 1),
+        futile_attempt_rate=rate(0, 1),
+        denied_compliance_rate=rate(1, 1),
+        approval_compliance_rate=rate(1, 1),
+        balanced_action_recovery=1.0,
     )
 
 
@@ -323,9 +363,7 @@ def test_action_summary_schema_v5_round_trips_and_v4_rejects_action_data(
     assert run.read_summary() == current
     payload = json.loads((run.path / "summary.json").read_text(encoding="utf-8"))
     assert payload["schema_version"] == 5
-    assert payload["action_compliance"]["scoring_semantic"] == (
-        "action_compliance_scoring_v1"
-    )
+    assert payload["action_compliance"]["scoring_semantic"] == ("action_compliance_scoring_v1")
 
     invalid_v4 = current.model_copy(update={"schema_version": 4})
     with pytest.raises(ArtifactStoreError, match="v4 cannot contain action"):
@@ -334,6 +372,41 @@ def test_action_summary_schema_v5_round_trips_and_v4_rejects_action_data(
     invalid_v5 = base.model_copy(update={"schema_version": 5})
     with pytest.raises(ArtifactStoreError, match="v5 requires action"):
         run.replace_summary(invalid_v5)
+
+
+def test_recovery_summary_schema_v6_round_trips_and_older_writes_reject_it(
+    tmp_path: Path,
+) -> None:
+    run = ArtifactStore(tmp_path / "runs").run("recovery-summary")
+    run.write_manifest(manifest("recovery-summary"))
+    base = aggregate(
+        [
+            AggregationSample(
+                identity=SampleIdentity(case_id="case", repeat_index=0),
+                category="recovery",
+                result=evaluation(1.0),
+            )
+        ]
+    )
+    current = base.model_copy(
+        update={
+            "schema_version": 6,
+            "score": 1.0,
+            "partial_score": 1.0,
+            "action_recovery": recovery_summary(),
+        }
+    )
+    run.replace_summary(current)
+    assert run.read_summary() == current
+    payload = json.loads((run.path / "summary.json").read_text())
+    assert payload["schema_version"] == 6
+    assert payload["action_recovery"]["scoring_semantic"] == ("action_recovery_scoring_v1")
+    invalid_v5 = current.model_copy(update={"schema_version": 5})
+    with pytest.raises(ArtifactStoreError, match="before v6"):
+        run.replace_summary(invalid_v5)
+    invalid_v6 = base.model_copy(update={"schema_version": 6})
+    with pytest.raises(ArtifactStoreError, match="v6 requires Recovery"):
+        run.replace_summary(invalid_v6)
 
 
 @pytest.mark.parametrize("schema_version", [3, 4])

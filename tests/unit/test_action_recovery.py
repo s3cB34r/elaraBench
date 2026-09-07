@@ -1,4 +1,4 @@
-"""M5.3a Action Recovery configuration, protocol, outcome, and evidence tests."""
+"""Action Recovery configuration, protocol, scoring, outcome, and evidence tests."""
 
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ from elarabench.action_recovery import (
     ActionRecoveryEvaluationArtifact,
     ActionRecoveryEvidenceError,
     ActionRecoveryOutcome,
+    action_recovery_outcome_passed,
     evaluate_action_recovery_artifact,
     expectation_from_recovery_specification,
     render_action_recovery_observation,
@@ -110,9 +111,10 @@ def result_for(
         )
     )
     artifact = ActionRecoveryEvaluationArtifact.model_validate(result.artifacts)
-    assert result.status is EvaluationStatus.PENDING_REVIEW
-    assert result.score is None
-    assert result.passed is None
+    passed = action_recovery_outcome_passed(artifact.outcome)
+    assert result.status is EvaluationStatus.SCORED
+    assert result.score == float(passed)
+    assert result.passed is passed
     return result, artifact
 
 
@@ -516,7 +518,7 @@ def test_declared_trust_looking_payload_fields_remain_data_only() -> None:
 
 
 def test_registry_identity_and_nested_composite_prohibition() -> None:
-    assert resolve_evaluator_identity(case().evaluation) == ("action_recovery", "1.0.0")
+    assert resolve_evaluator_identity(case().evaluation) == ("action_recovery", "1.1.0")
     child: dict[str, Any] = case().evaluation.model_dump(mode="json")
     for _ in range(3):
         child = {
@@ -546,7 +548,7 @@ def test_artifact_result_round_trip_and_response_rederivation() -> None:
     ("path", "replacement"),
     [
         (("artifact_semantic",), "wrong"),
-        (("evaluator_version",), "1.1.0"),
+        (("evaluator_version",), "1.0.0"),
         (("configuration_hash",), "0" * 64),
         (("source_result_schema_version",), 2),
         (("proposal_semantic",), "wrong"),
@@ -585,7 +587,7 @@ def test_strict_artifact_validation_rejects_tampering(
         validate_action_recovery_result(corrupted, expectation, response=response)
 
 
-def test_result_validation_rejects_scored_or_invalid_current_results() -> None:
+def test_result_validation_rejects_stale_or_invalid_current_results() -> None:
     configured_case = case()
     response = GenerationResponse(
         text=goldens()[configured_case.id]["correct_response"], finish_reason="stop"
@@ -595,16 +597,32 @@ def test_result_validation_rejects_scored_or_invalid_current_results() -> None:
     )
     expectation = expectation_from_recovery_specification(configured_case.evaluation)
     assert expectation is not None
-    scored = result.model_copy(
-        update={"status": EvaluationStatus.SCORED, "score": 1.0, "passed": True}
+    stale_artifact = dict(result.artifacts)
+    stale_artifact["evaluator_version"] = "1.0.0"
+    stale = result.model_copy(
+        update={
+            "evaluator_version": "1.0.0",
+            "status": EvaluationStatus.PENDING_REVIEW,
+            "score": None,
+            "passed": None,
+            "artifacts": stale_artifact,
+        }
     )
     invalid = result.model_copy(
         update={"status": EvaluationStatus.INVALID, "artifacts": {}}
     )
     with pytest.raises(ActionRecoveryEvidenceError):
-        validate_action_recovery_result(scored, expectation, response=response)
+        validate_action_recovery_result(stale, expectation, response=response)
     with pytest.raises(ActionRecoveryEvidenceError):
         validate_action_recovery_result(invalid, expectation, response=response)
+
+
+def test_historical_1_0_artifact_remains_parseable() -> None:
+    result, _ = result_for(goldens()[case().id]["correct_response"])
+    historical = dict(result.artifacts)
+    historical["evaluator_version"] = "1.0.0"
+    artifact = ActionRecoveryEvaluationArtifact.model_validate(historical)
+    assert artifact.evaluator_version == "1.0.0"
 
 
 def test_provider_error_remains_error_without_behavioral_artifact() -> None:

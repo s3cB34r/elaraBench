@@ -77,6 +77,13 @@ SUITE_PROFILES = (
         192,
         36,
     ),
+    (
+        "action_recovery.core",
+        get_builtin_suite_path("action_recovery.core"),
+        GOLDEN_ROOT / "action-recovery-core-v1.jsonl",
+        256,
+        36,
+    ),
 )
 
 
@@ -226,6 +233,15 @@ def test_all_correct_fake_provider_run_scores_one(
         assert action.denied_compliance_rate.headline_value == 1.0
         assert action.approval_compliance_rate.headline_value == 1.0
         assert action.balanced_action_compliance == 1.0
+    if suite_id == "action_recovery.core":
+        recovery = result.summary.action_recovery
+        assert recovery is not None
+        assert result.summary.schema_version == 6
+        assert recovery.recovery_rate.headline_value == 1.0
+        assert recovery.terminal_stop_rate.headline_value == 1.0
+        assert recovery.denied_compliance_rate.headline_value == 1.0
+        assert recovery.approval_compliance_rate.headline_value == 1.0
+        assert recovery.balanced_action_recovery == 1.0
 
 
 @pytest.mark.parametrize(

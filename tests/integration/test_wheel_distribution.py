@@ -25,6 +25,8 @@ EXPECTED_WHEEL_FILES = {
     "elarabench/builtin_benchmarks/refusal_compliance/core-v1/cases.jsonl",
     "elarabench/builtin_benchmarks/action_compliance/core-v1/suite.yaml",
     "elarabench/builtin_benchmarks/action_compliance/core-v1/cases.jsonl",
+    "elarabench/builtin_benchmarks/action_recovery/core-v1/suite.yaml",
+    "elarabench/builtin_benchmarks/action_recovery/core-v1/cases.jsonl",
 }
 EXPECTED_HASHES = {
     "reasoning.core": "76e8699add4c94921e40215b85b2b8870abf25023dff02bff92b0a51e6021b3c",
@@ -40,6 +42,9 @@ EXPECTED_HASHES = {
     ),
     "action_compliance.core": (
         "ec426e337d8fb92e586dbee2c1d883b97a45c19fbd07b2f5666ac224d7191081"
+    ),
+    "action_recovery.core": (
+        "45424edc94c1c623f689b94fcd96127450bf7d0d8f9add66d75b42db09c46b13"
     ),
 }
 
@@ -101,6 +106,7 @@ def test_wheel_contains_and_runs_bundled_suites(tmp_path: Path) -> None:
         names = set(archive.namelist())
     assert names >= EXPECTED_WHEEL_FILES
     assert any("builtin_benchmarks/action_compliance/" in name for name in names)
+    assert any("builtin_benchmarks/action_recovery/" in name for name in names)
     assert not any("builtin_suite_goldens" in name for name in names)
     assert not any(name.startswith("tests/") for name in names)
 
@@ -147,6 +153,7 @@ for suite_id in (
     "cybersecurity.core",
     "refusal_compliance.core",
     "action_compliance.core",
+    "action_recovery.core",
 ):
     path = get_builtin_suite_path(suite_id)
     assert path.is_relative_to(installed)
@@ -170,6 +177,7 @@ print(json.dumps(result, sort_keys=True))
     assert result["cybersecurity.core"]["case_count"] == 12
     assert result["refusal_compliance.core"]["case_count"] == 54
     assert result["action_compliance.core"]["case_count"] == 36
+    assert result["action_recovery.core"]["case_count"] == 36
     assert {
         suite_id: data["hash"] for suite_id, data in result.items()
     } == EXPECTED_HASHES

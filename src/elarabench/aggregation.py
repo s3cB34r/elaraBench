@@ -13,6 +13,11 @@ from elarabench.action_compliance import (
     ActionComplianceEvidenceError,
     derive_action_compliance_summary,
 )
+from elarabench.action_recovery import (
+    ActionRecoveryCaseExpectation,
+    ActionRecoveryEvidenceError,
+    derive_action_recovery_summary,
+)
 from elarabench.models import (
     AggregationSample,
     AggregationSummary,
@@ -87,6 +92,7 @@ def aggregate(
     minimum_scored_coverage: float = 0.95,
     refusal_case_expectations: Mapping[str, RefusalCaseExpectation] | None = None,
     action_case_expectations: Mapping[str, ActionComplianceCaseExpectation] | None = None,
+    recovery_case_expectations: Mapping[str, ActionRecoveryCaseExpectation] | None = None,
     configured_evaluator_types: Mapping[str, str] | None = None,
     expected_repeats: int | None = None,
     source_result_schema_version: Literal[2, 3] = 3,
@@ -171,6 +177,32 @@ def aggregate(
             "action-compliance aggregation requires trusted case expectations"
         )
 
+    recovery_expectations = dict(recovery_case_expectations or {})
+    has_recovery_results = any(
+        sample.result.evaluator_name == "action_recovery" for sample in samples
+    )
+    if recovery_expectations:
+        if configured_evaluator_types is None:
+            raise AggregationError(
+                "configured evaluator types are required for action-recovery aggregation"
+            )
+        configured_recovery_ids = {
+            case_id
+            for case_id, evaluator_type in configured_evaluator_types.items()
+            if evaluator_type == "action_recovery"
+        }
+        if configured_recovery_ids != set(recovery_expectations):
+            raise AggregationError(
+                "trusted Recovery expectations disagree with configured evaluator types"
+            )
+    elif has_recovery_results or (
+        configured_evaluator_types is not None
+        and "action_recovery" in configured_evaluator_types.values()
+    ):
+        raise AggregationError(
+            "action-recovery aggregation requires trusted case expectations"
+        )
+
     try:
         action_summary = derive_action_compliance_summary(
             samples,
@@ -182,11 +214,29 @@ def aggregate(
             expectations=refusal_case_expectations,
             expected_repeats=expected_repeats,
         )
-    except (ActionComplianceEvidenceError, RefusalAggregationError) as error:
+        recovery_summary = derive_action_recovery_summary(
+            samples,
+            expectations=recovery_expectations,
+            expected_repeats=expected_repeats or 0,
+        )
+    except (
+        ActionComplianceEvidenceError,
+        ActionRecoveryEvidenceError,
+        RefusalAggregationError,
+    ) as error:
         raise AggregationError(str(error)) from error
     generic_score = partial_score if coverage_sufficient else None
     generic_partial_score = partial_score
-    if action_summary is not None:
+    if recovery_summary is not None:
+        assert configured_evaluator_types is not None
+        configured_families = set(configured_evaluator_types.values())
+        if configured_families == {"action_recovery"}:
+            generic_score = recovery_summary.balanced_action_recovery
+            generic_partial_score = recovery_summary.balanced_action_recovery
+        else:
+            generic_score = None
+            generic_partial_score = None
+    elif action_summary is not None:
         assert configured_evaluator_types is not None
         configured_families = set(configured_evaluator_types.values())
         if configured_families == {"action_compliance"}:
@@ -196,7 +246,13 @@ def aggregate(
             generic_score = None
             generic_partial_score = None
     return AggregationSummary(
-        schema_version=5 if action_summary is not None else 4,
+        schema_version=(
+            6
+            if recovery_summary is not None
+            else 5
+            if action_summary is not None
+            else 4
+        ),
         score=generic_score,
         partial_score=generic_partial_score,
         coverage=CoverageSummary(
@@ -215,4 +271,5 @@ def aggregate(
         source_result_schema_version=source_result_schema_version,
         refusal_compliance=refusal_summary,
         action_compliance=action_summary,
+        action_recovery=recovery_summary,
     )

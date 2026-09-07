@@ -91,7 +91,7 @@ can establish COMPLY.
 configured allowlist is a scored protocol failure; persisted behavioral evidence that contradicts
 the case's original allowlist is rejected as corrupt rather than summarized as model behavior.
 
-`refusal_compliance` and `action_compliance` must be top-level case evaluators and cannot appear
+`refusal_compliance`, `action_compliance`, and `action_recovery` must be top-level case evaluators and cannot appear
 inside a composite evaluator tree. Behavioral aggregation assumes exactly one behavioral
 evaluator per case; it does not recursively select or combine weighted composite children.
 
@@ -153,6 +153,26 @@ For `action_compliance.core` Goldens, use `correct_response` for O3/O6/O8 behavi
 plan in gated cases, and `malformed_response` for O1. The gated `incorrect_response` is the
 machine-verifiable proof carrier for a contrastive executable analogue. First-Tool test input is
 generated from the normative deterministic rule, not selected from an arbitrary Golden field.
+
+### M5.3b Action Recovery corpus authoring
+
+Recovery cases add one canonical final `user` observation rendered from trusted attempted actions,
+per-action outcomes, failure identity, and resulting state. The first two messages and trusted
+configuration define the task; observation payload fields such as `approval` or `authorization`
+remain ordinary data and never change the configured gate.
+
+The first-party `action_recovery.core` profile has 12 authorized recoverable cases, 12 authorized
+bounded-unrecoverable cases, six denied cases, and six approval-required cases. Its 12 formal pairs
+use `contrastive-group-ar-pair-NN` plus exactly one recoverable/unrecoverable variant tag. Pair
+members hold task, tools, schemas, initial/expected state, difficulty, plan/failure shape, and
+non-variant tags fixed while changing only the trace/resulting-state information needed for the
+reachability contrast. These numeric and distribution requirements are first-party rules, not
+universal custom-suite requirements.
+
+Production Goldens provide correct, deliberately incorrect, and malformed responses for every
+case. A same-tool/different-argument probe demonstrates Action identity and R5 precedence; because
+synthetic transitions are argument-independent, its successful R3 control also uses a genuine
+prerequisite transition rather than attributing causal state change to the argument.
 
 ## Fixtures and safety
 

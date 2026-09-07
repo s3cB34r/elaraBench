@@ -42,8 +42,9 @@ Three version fields have deliberately separate meanings:
 - `manifest.json.schema_version` is the physical result schema (`2` historically, `3` now).
 - `evaluation.json.source_result_schema_version` identifies the physical canonical evidence that
   was evaluated. Composite children inherit the same value recursively.
-- `summary.json.schema_version` is the summary artifact's own shape. It is `4` by default and `5`
-  for summaries carrying normative Action Compliance data.
+- `summary.json.schema_version` is the summary artifact's own shape. It is `4` by default, `5`
+  for summaries carrying normative Action Compliance data, and `6` for summaries carrying Action
+  Recovery data.
   `summary.json.source_result_schema_version` identifies its physical source.
 
 Summary artifact shape does not establish physical provenance. Trusted run reads validate the
@@ -57,14 +58,15 @@ Consequently, rescoring a historical physical v2 run with current evaluators pro
 physical result schema:             2
 evaluator version:                  current evaluator version
 evaluation source result schema:    2 (outer and every composite child)
-regenerated summary schema:         4 (or 5 with Action Compliance data)
+regenerated summary schema:         4 (5 with Action Compliance; 6 with Action Recovery)
 summary source result schema:       2
 ```
 
 The original strict summary schema v2 had no source-provenance field. It remains historical
 derived data. Readers accept summary v2 and infer only its physical source provenance; summary v3
 also remains readable without fabricated refusal data. Regeneration may replace either derived
-shape with summary schema v4, or schema v5 when normative Action Compliance data is present;
+shape with summary schema v4, schema v5 when normative Action Compliance data is present, or
+schema v6 when Action Recovery data is present;
 canonical manifests, benchmarks, requests, attempts, and responses remain unchanged.
 
 Historical schema-v2 `evaluation.json` files also predate the source-provenance field. Their
@@ -139,11 +141,13 @@ v2 summary without Action Compliance produces `schema_version: 4` and
 `source_result_schema_version: 2`. Schema v4 adds optional `refusal_compliance`; it is null when
 compatible evaluator evidence is absent. A summary carrying normative Action Compliance scoring
 and summary semantics uses content-dependent schema version 5 and includes `action_compliance`.
-Current v4/v5 summaries require explicit source provenance. The only inferred provenance is
+A summary carrying Action Recovery uses v6 and includes `action_recovery`; mixed suites may also
+carry Action Compliance diagnostics in v6. Current v4/v5/v6 summaries require explicit source provenance. The only inferred provenance is
 for a provenance-less schema-v2 summary owned by a physical-v2 run. Historical v2/v3 summaries are
-read-only compatibility objects. The current writer accepts schema v4 summaries without Action
-Compliance. Under M5.2b it also accepts schema v5 summaries with Action Compliance; explicit
-rescore or summary regeneration is the upgrade path.
+read-only compatibility objects. The current writer accepts v4 summaries without Action or
+Recovery data, v5 summaries with Action Compliance, and v6 summaries with Action Recovery. Absent
+Recovery data is omitted, so v4/v5 payloads do not gain `action_recovery: null`. Explicit rescore
+or summary regeneration is the upgrade path.
 
 Repeats are averaged per case, then positive case weights form a macro average. Category and tag
 breakdowns use the same case weighting. Repeat statistics include count, mean, min, max, and
@@ -187,19 +191,19 @@ derived state and is rejected as corrupt during stored-evidence validation. Hist
 `pending_review` evidence requires explicit offline upgrade before current summarize or resume.
 Provider-error responses require an artifact-free `error` result.
 
-M5.3a Action Recovery evaluator version `1.0.0` similarly stores a strict
-`action_recovery_artifact_v1` derived artifact while returning `pending_review` with null
-score/pass fields. The artifact records proposal, trusted observation/recovery provenance,
+Historical M5.3a Action Recovery evaluator version `1.0.0` stores a strict
+`action_recovery_artifact_v1` artifact with `pending_review` and null score/pass. M5.3b evaluator
+version `1.1.0` retains the artifact and ten-outcome meanings and assigns binary scores: R3, R7,
+and R9 pass; the other behavioral outcomes fail. The artifact records proposal, trusted observation/recovery provenance,
 preceding failed-action identity, static plan validation, any permitted pure Recovery simulation,
 and one of the ten `action_recovery_outcomes_v1` outcomes. Provider/runtime failures remain
-artifact-free `error` results outside that taxonomy. M5.3a introduces no Action Recovery summary
-and does not change summary schema or storage semantics; those remain M5.3b work.
+artifact-free `error` results outside that taxonomy.
 
 Offline `score` treats canonical response/attempt evidence and the snapshotted evaluator
-specification as authoritative: it rederives and validates a supported Action Compliance artifact,
-then replaces stale or corrupt derived evaluation evidence. `summarize` and resume do not repair;
-they hard-fail incompatible or corrupt stored Action Compliance provenance through the normal run
-integrity path.
+specification as authoritative: it rederives and validates supported Action Compliance and Action
+Recovery artifacts, then replaces stale or corrupt derived evaluation evidence. `summarize` and
+resume do not repair; they hard-fail incompatible or corrupt behavioral provenance through the
+normal run-integrity path before resume contacts a provider.
 
 An Action Compliance summary uses `action_compliance_summary_v1` and
 `action_compliance_scoring_v1` in summary schema v5. It contains the auditable nine-bucket sample
@@ -222,6 +226,15 @@ response and snapshotted specification evidence without provider contact or exte
 `summarize` and resume reject the older evaluator provenance until that upgrade occurs. Summary
 schema v5 does not change physical result schema v3, fingerprints, canonical evidence, M5.1
 summaries, or legacy physical-v2 compatibility.
+
+An Action Recovery summary uses `action_recovery_summary_v1` and
+`action_recovery_scoring_v1` in content-dependent summary schema v6. Its ten sample buckets and ten
+repeat-first case-macro masses retain R1--R10. `recovery_rate` covers configured authorized
+recoverable cases and `terminal_stop_rate` covers configured authorized bounded-unrecoverable
+cases. Their complete-population headline values are equally averaged as
+`balanced_action_recovery`. Separate denied and approval compliance rates remain diagnostics and
+never enter that headline. Pure Recovery suites expose the balanced value as generic score and
+partial score; mixed evaluator-family suites expose neither generic value.
 
 Refusal-aware evaluations retain the generic `EvaluationResult` shape. Orthogonal expected and
 observed behavior, protocol and completion status, detection source, reason/redirect evidence,

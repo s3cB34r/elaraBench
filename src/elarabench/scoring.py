@@ -12,6 +12,11 @@ from elarabench.action_compliance import (
     expectation_from_action_specification,
     validate_action_compliance_result,
 )
+from elarabench.action_recovery import (
+    ActionRecoveryEvidenceError,
+    expectation_from_recovery_specification,
+    validate_action_recovery_result,
+)
 from elarabench.aggregation import AggregationError, aggregate
 from elarabench.evaluators.registry import evaluate
 from elarabench.evidence import RunIntegrityError as RunIntegrityError
@@ -65,6 +70,16 @@ def regenerate_summary(
         )
         is not None
     }
+    recovery_expectations = {
+        case.id: recovery_expectation
+        for case in snapshot.suite.cases
+        if (
+            recovery_expectation := expectation_from_recovery_specification(
+                case.evaluation
+            )
+        )
+        is not None
+    }
     for case in snapshot.suite.cases:
         for repeat_index in range(manifest.configuration.repeats):
             identity = SampleIdentity(case_id=case.id, repeat_index=repeat_index)
@@ -106,6 +121,18 @@ def regenerate_summary(
                     raise RunIntegrityError(
                         f"invalid derived evaluation evidence: {error}"
                     ) from error
+            recovery_expectation = recovery_expectations.get(case.id)
+            if recovery_expectation is not None:
+                try:
+                    validate_action_recovery_result(
+                        result,
+                        recovery_expectation,
+                        response=response,
+                    )
+                except ActionRecoveryEvidenceError as error:
+                    raise RunIntegrityError(
+                        f"invalid derived evaluation evidence: {error}"
+                    ) from error
             samples.append(
                 AggregationSample(
                     identity=identity,
@@ -128,6 +155,7 @@ def regenerate_summary(
                 is not None
             },
             action_case_expectations=action_expectations,
+            recovery_case_expectations=recovery_expectations,
             configured_evaluator_types={
                 case.id: case.evaluation.type for case in snapshot.suite.cases
             },
@@ -170,6 +198,16 @@ def score_run(path: str | Path, *, clock: Clock = utc_now) -> AggregationSummary
         )
         is not None
     }
+    recovery_expectations = {
+        case.id: recovery_expectation
+        for case in snapshot.suite.cases
+        if (
+            recovery_expectation := expectation_from_recovery_specification(
+                case.evaluation
+            )
+        )
+        is not None
+    }
     for case in snapshot.suite.cases:
         for repeat_index in range(manifest.configuration.repeats):
             identity = SampleIdentity(case_id=case.id, repeat_index=repeat_index)
@@ -188,6 +226,7 @@ def score_run(path: str | Path, *, clock: Clock = utc_now) -> AggregationSummary
                 verify_attempt_request_hashes(attempts, entry)
                 verify_terminal_attempt_response(attempts, response, identity)
                 action_expectation = action_expectations.get(case.id)
+                recovery_expectation = recovery_expectations.get(case.id)
                 result = evaluate(
                     EvaluationContext(
                         response=response,
@@ -201,12 +240,22 @@ def score_run(path: str | Path, *, clock: Clock = utc_now) -> AggregationSummary
                         action_expectation,
                         response=response,
                     )
+                if recovery_expectation is not None:
+                    validate_action_recovery_result(
+                        result,
+                        recovery_expectation,
+                        response=response,
+                    )
                 store.write_evaluation(
                     identity,
                     result,
                     replace=store.evaluation_exists(identity),
                 )
-            except (ActionComplianceEvidenceError, ArtifactStoreError) as error:
+            except (
+                ActionComplianceEvidenceError,
+                ActionRecoveryEvidenceError,
+                ArtifactStoreError,
+            ) as error:
                 raise RunIntegrityError(str(error)) from error
     summary = regenerate_summary(
         store,

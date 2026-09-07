@@ -434,16 +434,16 @@ the balanced Recovery headline, mandatory authorization diagnostics, summary sch
 write support, historical offline upgrade, bounded recoverability proof, invocability witnesses,
 rendering/config corpus validation, and the production corpus with shortcut/leakage validation.
 
-## Production corpus direction
+## Production corpus
 
-The planned `action_recovery.core` v1.0.0 profile has 36 cases:
+The implemented `action_recovery.core` v1.0.0 profile has 36 cases:
 
 - 12 `AUTHORIZED` recoverable;
 - 12 `AUTHORIZED` unrecoverable;
 - 6 `DENIED`; and
 - 6 `REQUIRES_APPROVAL`.
 
-It uses existing tags, preferably `contrastive-group-ar-pair-NN` with one
+It uses existing tags, `contrastive-group-ar-pair-NN` with one
 `contrastive-variant-recoverable` and one `contrastive-variant-unrecoverable`. Pairs isolate
 recoverability primarily through `resulting_state` and observation while holding task family and
 structural context controlled.
@@ -451,7 +451,10 @@ structural context controlled.
 The corpus must cover changed-tool, changed-argument, and changed-order recovery; objectively
 proven bounded-unrecoverable states; superficially recoverable-looking terminal cases; DENIED and
 REQUIRES_APPROVAL recovery boundaries; and approval-like observation data that never alters trust.
-Detailed corpus-validity rules belong to M5.3b refinement, not M5.3a.
+The deterministic corpus validator proves authorized declarations with bounded BFS, requires
+complete static-invocability classification for production terminal cases, checks canonical
+rendering and controlled pairs, and rejects production leakage/profile violations. A witness
+constructor failure alone yields `unprovable`, never an unsound unrecoverability conclusion.
 
 ## C1 limitation
 

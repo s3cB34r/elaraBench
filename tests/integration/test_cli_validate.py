@@ -51,6 +51,7 @@ def test_validate_fails_cleanly_for_invalid_suite(tmp_path: Path) -> None:
         ("cybersecurity.core", 12),
         ("refusal_compliance.core", 54),
         ("action_compliance.core", 36),
+        ("action_recovery.core", 36),
     ),
 )
 def test_validate_resolves_bundled_suite_id(suite_id: str, case_count: int) -> None:
