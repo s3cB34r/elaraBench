@@ -140,6 +140,7 @@ class RunArtifactStore:
 
     def __init__(self, root: Path, run_id: str) -> None:
         self.run_id = run_id
+        self._turn_index = 0
         self.path = root / run_id
         if not self.path.is_dir():
             raise ArtifactNotFoundError(f"run not found: {self.path}")
@@ -155,6 +156,74 @@ class RunArtifactStore:
                 f"sample directory must not be redirected by a symlink: {candidate}"
             )
         return candidate
+
+    def for_turn(self, turn_index: int) -> RunArtifactStore:
+        """A narrow generation-path view; sample identity and evaluation stay unchanged."""
+        if isinstance(turn_index, bool) or not isinstance(turn_index, int) or turn_index < 0:
+            raise ArtifactStoreError("turn index must be a nonnegative integer")
+        if self._physical_result_schema_version() != 4 and turn_index != 0:
+            raise ArtifactStoreError("multiple turns require physical schema v4")
+        view = RunArtifactStore(self.path.parent, self.run_id)
+        view._turn_index = turn_index
+        return view
+
+    def _generation_path(self, identity: SampleIdentity) -> Path:
+        candidate = self._sample_path(identity)
+        # Standalone storage callers historically may write before creating a manifest.
+        if (self.path / "manifest.json").exists() and self._physical_result_schema_version() == 4:
+            candidate = candidate / "turns" / f"{self._turn_index:03d}"
+        if candidate.resolve() != candidate:
+            raise ArtifactStoreError(f"turn directory must not be redirected: {candidate}")
+        return candidate
+
+    def read_request_bytes(self, identity: SampleIdentity) -> bytes:
+        return self._safe_generation_file(identity, "request.json").read_bytes()
+
+    def _safe_generation_file(self, identity: SampleIdentity, name: str) -> Path:
+        path = self._generation_path(identity) / name
+        if path.resolve() != path:
+            raise ArtifactStoreError(f"generation evidence must not be redirected: {path}")
+        return path
+
+    def validate_request_bytes(self, identity: SampleIdentity, request: GenerationRequest) -> None:
+        """v4 canonical Requests cannot be rewritten, even when only formatting changed."""
+        if self.read_request_bytes(identity) != _json_bytes(request):
+            raise ArtifactStoreError(f"canonical Request bytes mismatch for {identity.case_id}")
+
+    def turn_indices(self, identity: SampleIdentity, *, reactive: bool) -> tuple[int, ...]:
+        """Validate v4 directory shape before any evidence is consumed or generated."""
+        if self._physical_result_schema_version() != 4:
+            return (0,) if self.request_exists(identity) else ()
+        sample = self._sample_path(identity)
+        for name in ("request.json", "response.json", "attempts"):
+            path = sample / name
+            if path.exists() or path.is_symlink():
+                raise ArtifactStoreError(f"flat generation evidence in v4: {path}")
+        directory = sample / "turns"
+        if directory.resolve() != directory:
+            raise ArtifactStoreError(f"turns directory must not be redirected: {directory}")
+        if not directory.exists():
+            return ()
+        indices = []
+        for path in directory.iterdir():
+            if path.name.startswith(".elarabench-") and path.is_file():
+                continue
+            if (not path.is_dir() or path.is_symlink() or not path.name.isascii()
+                    or not path.name.isdecimal() or path.name != f"{int(path.name):03d}"):
+                raise ArtifactStoreError(f"invalid canonical turn directory: {path}")
+            indices.append(int(path.name))
+        indices.sort()
+        if indices != list(range(len(indices))):
+            raise ArtifactStoreError("turn directories are not contiguous from 000")
+        if not reactive and len(indices) > 1:
+            raise ArtifactStoreError("non-Reactive v4 sample must contain only turns/000")
+        for index in indices:
+            view = self.for_turn(index)
+            if not view.request_exists(identity):
+                raise ArtifactStoreError("turn directory requires canonical Request")
+            if index != indices[-1] and not view.response_exists(identity):
+                raise ArtifactStoreError("only the final Turn may be unfinished")
+        return tuple(indices)
 
     def write_manifest(self, manifest: RunManifest) -> None:
         """Write the canonical run manifest exactly once."""
@@ -238,34 +307,36 @@ class RunArtifactStore:
     def write_request(self, identity: SampleIdentity, request: GenerationRequest) -> None:
         """Write a canonical materialized request exactly once."""
         _atomic_write(
-            self._sample_path(identity) / "request.json",
+            self._safe_generation_file(identity, "request.json"),
             _json_bytes(request),
             replace=False,
         )
 
     def read_request(self, identity: SampleIdentity) -> GenerationRequest:
-        return _read_model(self._sample_path(identity) / "request.json", GenerationRequest)
+        return _read_model(self._safe_generation_file(identity, "request.json"), GenerationRequest)
 
     def read_request_data(self, identity: SampleIdentity) -> dict[str, Any]:
         """Read an unmodified request object for historical hash verification."""
-        return _read_json_object(self._sample_path(identity) / "request.json")
+        return _read_json_object(self._safe_generation_file(identity, "request.json"))
 
     def write_response(self, identity: SampleIdentity, response: GenerationResponse) -> None:
         """Write a canonical raw/normalized response exactly once."""
         _atomic_write(
-            self._sample_path(identity) / "response.json",
+            self._safe_generation_file(identity, "response.json"),
             _json_bytes(response),
             replace=False,
         )
 
     def read_response(self, identity: SampleIdentity) -> GenerationResponse:
-        return _read_model(self._sample_path(identity) / "response.json", GenerationResponse)
+        return _read_model(
+            self._safe_generation_file(identity, "response.json"), GenerationResponse
+        )
 
     def response_exists(self, identity: SampleIdentity) -> bool:
-        return (self._sample_path(identity) / "response.json").exists()
+        return (self._safe_generation_file(identity, "response.json")).exists()
 
     def request_exists(self, identity: SampleIdentity) -> bool:
-        return (self._sample_path(identity) / "request.json").exists()
+        return (self._safe_generation_file(identity, "request.json")).exists()
 
     def evaluation_exists(self, identity: SampleIdentity) -> bool:
         return (self._sample_path(identity) / "evaluation.json").exists()
@@ -276,18 +347,19 @@ class RunArtifactStore:
     def write_attempt(self, attempt: AttemptRecord) -> None:
         """Write one immutable provider attempt."""
         path = (
-            self._sample_path(attempt.identity)
-            / "attempts"
+            self._safe_generation_file(attempt.identity, "attempts")
             / f"attempt-{attempt.attempt_index:03d}.json"
         )
         _atomic_write(path, _json_bytes(attempt), replace=False)
 
     def read_attempts(self, identity: SampleIdentity) -> tuple[AttemptRecord, ...]:
-        directory = self._sample_path(identity) / "attempts"
+        directory = self._safe_generation_file(identity, "attempts")
         if not directory.exists():
             return ()
         attempts: list[AttemptRecord] = []
         for path in sorted(directory.glob("attempt-*.json")):
+            if path.resolve() != path:
+                raise ArtifactStoreError(f"attempt evidence must not be redirected: {path}")
             attempt = _read_model(path, AttemptRecord)
             if attempt.identity != identity:
                 raise ArtifactStoreError(f"attempt sample identity mismatch: {path}")
@@ -314,7 +386,7 @@ class RunArtifactStore:
         self,
         identity: SampleIdentity,
         *,
-        source_result_schema_version: Literal[2, 3],
+        source_result_schema_version: Literal[2, 3, 4],
     ) -> EvaluationResult:
         """Load derived evaluation data using the physical run schema as provenance."""
         path = self._sample_path(identity) / "evaluation.json"
@@ -381,13 +453,13 @@ class RunArtifactStore:
         self._validate_summary_provenance(summary)
         return summary
 
-    def _physical_result_schema_version(self) -> Literal[2, 3]:
+    def _physical_result_schema_version(self) -> Literal[2, 3, 4]:
         value = self.read_manifest_data().get("schema_version")
-        if value not in {2, 3}:
+        if value not in {2, 3, 4}:
             raise ArtifactStoreError(
                 f"invalid physical result schema version in {self.path / 'manifest.json'}"
             )
-        return cast(Literal[2, 3], value)
+        return cast(Literal[2, 3, 4], value)
 
     def _validate_summary_provenance(self, summary: AggregationSummary) -> None:
         physical_schema = self._physical_result_schema_version()

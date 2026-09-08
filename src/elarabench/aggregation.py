@@ -95,7 +95,7 @@ def aggregate(
     recovery_case_expectations: Mapping[str, ActionRecoveryCaseExpectation] | None = None,
     configured_evaluator_types: Mapping[str, str] | None = None,
     expected_repeats: int | None = None,
-    source_result_schema_version: Literal[2, 3] = 3,
+    source_result_schema_version: Literal[2, 3, 4] = 3,
 ) -> AggregationSummary:
     """Aggregate scored samples without converting other statuses into zeroes."""
     expected = len(samples) if expected_samples is None else expected_samples

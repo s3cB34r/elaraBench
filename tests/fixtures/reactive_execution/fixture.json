@@ -1,0 +1,49 @@
+{
+  "objective": "Open the gate, then finish the job.",
+  "config": {
+    "authorization": "AUTHORIZED",
+    "tools": {
+      "open": {
+        "arguments_schema": {
+          "type": "object",
+          "additionalProperties": false
+        },
+        "effects": {
+          "open": true
+        }
+      },
+      "finish": {
+        "arguments_schema": {
+          "type": "object",
+          "properties": {
+            "label": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "requires": {
+          "open": true
+        },
+        "effects": {
+          "done": true
+        }
+      }
+    },
+    "initial_state": {},
+    "expected_state": {
+      "open": true,
+      "done": true
+    },
+    "max_plan_length": 2,
+    "max_model_turns": 4,
+    "max_total_actions": 6,
+    "proposal_semantic": "action_control_envelope_v1",
+    "gate_semantic": "static_authorization_gate_v1",
+    "simulation_semantic": "synthetic_transition_v1",
+    "outcome_semantic": "reactive_execution_outcomes_v1",
+    "transcript_semantic": "reactive_transcript_v1",
+    "observation_semantic": "reactive_observation_v1",
+    "rendering_semantic": "reactive_observation_rendering_v1"
+  }
+}

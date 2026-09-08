@@ -274,7 +274,7 @@ class EvaluationResult(DomainModel):
     evaluator_version: str
     configuration_hash: Sha256Digest
     artifacts: dict[str, JsonValue] = Field(default_factory=dict)
-    source_result_schema_version: Literal[2, 3]
+    source_result_schema_version: Literal[2, 3, 4]
 
     @model_validator(mode="after")
     def validate_score_status(self) -> Self:
@@ -508,7 +508,7 @@ class RequestPlanEntry(DomainModel):
 class RunManifest(DomainModel):
     """Result schema v3 identity/configuration plus guarded lifecycle state."""
 
-    schema_version: Literal[3] = 3
+    schema_version: Literal[3, 4] = 3
     run_id: Identifier
     run_fingerprint: Sha256Digest
     framework: FrameworkMetadata
@@ -609,7 +609,7 @@ class EvaluationContext(DomainModel):
 
     response: GenerationResponse
     specification: EvaluationSpecification
-    source_result_schema_version: Literal[2, 3] = 3
+    source_result_schema_version: Literal[2, 3, 4] = 3
 
 
 class AggregationSample(DomainModel):
@@ -1385,7 +1385,7 @@ class AggregationSummary(DomainModel):
     cases: tuple[CaseSummary, ...]
     categories: dict[str, BreakdownSummary]
     tags: dict[str, BreakdownSummary]
-    source_result_schema_version: Literal[2, 3]
+    source_result_schema_version: Literal[2, 3, 4]
     refusal_compliance: RefusalComplianceSummary | None = None
     action_compliance: ActionComplianceSummary | None = Field(
         default=None,

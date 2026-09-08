@@ -18,7 +18,7 @@ from elarabench.action_recovery import (
     validate_action_recovery_result,
 )
 from elarabench.aggregation import AggregationError, aggregate
-from elarabench.evaluators.registry import evaluate
+from elarabench.evaluators.registry import evaluate, evaluate_reactive
 from elarabench.evidence import RunIntegrityError as RunIntegrityError
 from elarabench.evidence import (
     StoredManifest,
@@ -31,17 +31,50 @@ from elarabench.evidence import (
 )
 from elarabench.evidence import open_run_path as open_run_path
 from elarabench.evidence import validate_stored_run as validate_stored_run
+from elarabench.hashing import hash_generation_request
 from elarabench.models import (
     AggregationSample,
     AggregationSummary,
     EvaluationContext,
+    EvaluationSpecification,
     RunEventType,
     SampleIdentity,
+)
+from elarabench.reactive_execution import (
+    ReactiveEvaluationContext,
+    ReactiveTurnEvidence,
+    validate_reactive_evaluation,
 )
 from elarabench.refusal_compliance import expectation_from_specification
 from elarabench.storage import ArtifactStoreError, RunArtifactStore
 
 Clock = Callable[[], datetime]
+
+
+def _reactive_context(
+    store: RunArtifactStore,
+    identity: SampleIdentity,
+    case_specification: EvaluationSpecification,
+) -> ReactiveEvaluationContext:
+    indices = store.turn_indices(identity, reactive=True)
+    if not indices:
+        raise RunIntegrityError(f"Reactive sample has no canonical turns: {identity}")
+    turns = []
+    for index in indices:
+        view = store.for_turn(index)
+        turns.append(
+            ReactiveTurnEvidence(
+                request=view.read_request(identity),
+                response=view.read_response(identity) if view.response_exists(identity) else None,
+                attempts=view.read_attempts(identity),
+            )
+        )
+    return ReactiveEvaluationContext(
+        specification=case_specification,
+        identity=identity,
+        initial_request=turns[0].request,
+        turns=tuple(turns),
+    )
 
 
 def utc_now() -> datetime:
@@ -84,6 +117,28 @@ def regenerate_summary(
         for repeat_index in range(manifest.configuration.repeats):
             identity = SampleIdentity(case_id=case.id, repeat_index=repeat_index)
             if not store.evaluation_exists(identity):
+                continue
+            if case.evaluation.type == "reactive_execution":
+                try:
+                    reactive_context = _reactive_context(store, identity, case.evaluation)
+                    result = store.read_evaluation(
+                        identity,
+                        source_result_schema_version=manifest.schema_version,
+                    )
+                    validate_reactive_evaluation(result, reactive_context)
+                except (ArtifactStoreError, ValueError) as error:
+                    raise RunIntegrityError(
+                        f"invalid Reactive evaluation evidence: {error}"
+                    ) from error
+                samples.append(
+                    AggregationSample(
+                        identity=identity,
+                        category=case.category,
+                        tags=case.tags,
+                        case_weight=case.weight,
+                        result=result,
+                    )
+                )
                 continue
             try:
                 attempts = store.read_attempts(identity)
@@ -132,6 +187,15 @@ def regenerate_summary(
                 except ActionRecoveryEvidenceError as error:
                     raise RunIntegrityError(
                         f"invalid derived evaluation evidence: {error}"
+                    ) from error
+            if case.evaluation.type == "reactive_execution":
+                try:
+                    validate_reactive_evaluation(
+                        result, _reactive_context(store, identity, case.evaluation)
+                    )
+                except (ArtifactStoreError, ValueError) as error:
+                    raise RunIntegrityError(
+                        f"invalid Reactive evaluation evidence: {error}"
                     ) from error
             samples.append(
                 AggregationSample(
@@ -211,29 +275,59 @@ def score_run(path: str | Path, *, clock: Clock = utc_now) -> AggregationSummary
     for case in snapshot.suite.cases:
         for repeat_index in range(manifest.configuration.repeats):
             identity = SampleIdentity(case_id=case.id, repeat_index=repeat_index)
-            if not store.response_exists(identity):
+            reactive = (
+                manifest.schema_version == 4
+                and case.evaluation.type == "reactive_execution"
+            )
+            if reactive:
+                response_available = bool(store.turn_indices(identity, reactive=True))
+            else:
+                response_available = store.response_exists(identity)
+            if not response_available:
                 continue
             entry = plan[(case.id, repeat_index)]
-            verify_stored_request(
-                store,
-                entry,
-                result_schema_version=manifest.schema_version,
-            )
+            if reactive:
+                first_view = store.for_turn(0)
+                if not first_view.request_exists(identity):
+                    raise RunIntegrityError(f"missing Reactive Turn-0 Request for {identity}")
+                if hash_generation_request(first_view.read_request(identity)) != entry.request_hash:
+                    raise RunIntegrityError(f"Reactive Turn-0 Request hash mismatch for {identity}")
+            else:
+                verify_stored_request(
+                    store,
+                    entry,
+                    result_schema_version=manifest.schema_version,
+                )
             try:
-                attempts = store.read_attempts(identity)
-                response = store.read_response(identity)
-                verify_sample_artifact_dependencies(store, identity, attempts)
-                verify_attempt_request_hashes(attempts, entry)
-                verify_terminal_attempt_response(attempts, response, identity)
+                if reactive:
+                    reactive_context = _reactive_context(store, identity, case.evaluation)
+                    response = reactive_context.turns[-1].response
+                    assert response is not None
+                    attempts = tuple(
+                        attempt
+                        for turn in reactive_context.turns
+                        for attempt in turn.attempts
+                    )
+                else:
+                    attempts = store.read_attempts(identity)
+                    response = store.read_response(identity)
+                    verify_sample_artifact_dependencies(store, identity, attempts)
+                    verify_attempt_request_hashes(attempts, entry)
+                    verify_terminal_attempt_response(attempts, response, identity)
                 action_expectation = action_expectations.get(case.id)
                 recovery_expectation = recovery_expectations.get(case.id)
-                result = evaluate(
-                    EvaluationContext(
-                        response=response,
-                        specification=case.evaluation,
-                        source_result_schema_version=manifest.schema_version,
+                if case.evaluation.type == "reactive_execution":
+                    result = evaluate_reactive(
+                        _reactive_context(store, identity, case.evaluation)
                     )
-                )
+                else:
+                    result = evaluate(
+                        EvaluationContext(
+                            response=response,
+                            specification=case.evaluation,
+                            source_result_schema_version=manifest.schema_version,
+                        )
+                    )
                 if action_expectation is not None:
                     validate_action_compliance_result(
                         result,

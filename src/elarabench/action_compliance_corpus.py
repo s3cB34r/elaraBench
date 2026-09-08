@@ -9,7 +9,6 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import cast
 
-from jsonschema import Draft202012Validator
 from pydantic import JsonValue
 
 from elarabench.action_compliance import (
@@ -23,6 +22,9 @@ from elarabench.action_compliance import (
 from elarabench.benchmark import LoadedBenchmarkSuite
 from elarabench.hashing import canonical_json_bytes, hash_canonical
 from elarabench.models import BenchmarkCase
+from elarabench.synthetic_reachability import (
+    _generated_schema_value as _neutral_generated_schema_value,
+)
 
 CORE_SUITE_ID = "action_compliance.core"
 CORE_SUITE_VERSION = "1.0.0"
@@ -638,68 +640,8 @@ def _json_copy(value: JsonValue) -> JsonValue:
 
 
 def _generated_schema_value(schema: JsonValue) -> tuple[bool, JsonValue]:
-    if schema is False:
-        return False, None
-    if schema is True or not isinstance(schema, dict):
-        return False, None
-    if "const" in schema:
-        constant_value = _json_copy(schema["const"])
-        return Draft202012Validator(schema).is_valid(constant_value), constant_value
-    enum = schema.get("enum")
-    if isinstance(enum, list) and enum:
-        enum_value = _json_copy(enum[0])
-        return Draft202012Validator(schema).is_valid(enum_value), enum_value
-    raw_type = schema.get("type")
-    if not isinstance(raw_type, str):
-        return False, None
-    if raw_type == "string":
-        generated_value: JsonValue = "x"
-    elif raw_type == "integer":
-        generated_value = 0
-    elif raw_type == "number":
-        generated_value = 0.0
-    elif raw_type == "boolean":
-        generated_value = False
-    elif raw_type == "null":
-        generated_value = None
-    elif raw_type == "array":
-        minimum = schema.get("minItems", 0)
-        items = schema.get("items")
-        if not isinstance(minimum, int) or minimum < 0 or items is None:
-            return False, None
-        generated: list[JsonValue] = []
-        for _ in range(minimum):
-            eligible, item = _generated_schema_value(cast(JsonValue, items))
-            if not eligible:
-                return False, None
-            generated.append(item)
-        generated_value = generated
-    elif raw_type == "object":
-        if schema.get("additionalProperties") is not False:
-            return False, None
-        properties = schema.get("properties", {})
-        required = schema.get("required", [])
-        if (
-            not isinstance(properties, dict)
-            or not isinstance(required, list)
-            or not all(isinstance(name, str) for name in required)
-        ):
-            return False, None
-        required_names = cast(list[str], required)
-        property_schemas = properties
-        generated_object: dict[str, JsonValue] = {}
-        for name in sorted(required_names):
-            child = property_schemas.get(name)
-            if child is None:
-                return False, None
-            eligible, item = _generated_schema_value(child)
-            if not eligible:
-                return False, None
-            generated_object[name] = item
-        generated_value = generated_object
-    else:
-        return False, None
-    return Draft202012Validator(schema).is_valid(generated_value), generated_value
+    """Compatibility entry point for the unchanged conservative witness constructor."""
+    return _neutral_generated_schema_value(schema)
 
 
 def build_first_tool_proposal(case: BenchmarkCase) -> ActionPlanEnvelope | None:

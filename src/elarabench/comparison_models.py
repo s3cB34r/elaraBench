@@ -312,7 +312,7 @@ class BenchmarkIdentityEvidence(DomainModel):
 class RunComparisonReference(DomainModel):
     run_id: str
     run_fingerprint: Sha256Digest
-    result_schema_version: Literal[2, 3]
+    result_schema_version: Literal[2, 3, 4]
     evidence_hash: Sha256Digest
     benchmark: BenchmarkIdentityEvidence
 
@@ -330,7 +330,7 @@ class EvaluatorProvenance(DomainModel):
     evaluator_name: str
     evaluator_version: str
     configuration_hash: Sha256Digest
-    source_result_schema_version: Literal[2, 3]
+    source_result_schema_version: Literal[2, 3, 4]
 
 
 class CoverageComparison(DomainModel):

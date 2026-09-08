@@ -53,7 +53,7 @@ from elarabench.comparison_performance import (
     SamplePerformanceEvidence,
     analyze_performance,
 )
-from elarabench.evaluators.registry import evaluate, resolve_evaluator_identity
+from elarabench.evaluators.registry import evaluate, evaluate_reactive, resolve_evaluator_identity
 from elarabench.evidence import (
     RunIntegrityError,
     StoredManifest,
@@ -70,6 +70,7 @@ from elarabench.hashing import (
     hash_canonical,
     hash_case_with_fixture_hashes,
     hash_evaluation_specification,
+    hash_generation_request,
 )
 from elarabench.legacy_v2 import LegacyV2RunManifest
 from elarabench.models import (
@@ -85,6 +86,7 @@ from elarabench.models import (
     ThinkingPolicy,
     TimingMetadata,
 )
+from elarabench.reactive_execution import ReactiveEvaluationContext, ReactiveTurnEvidence
 from elarabench.refusal_compliance import (
     RefusalCaseExpectation,
     derive_refusal_compliance_summary,
@@ -414,24 +416,61 @@ def _load_evidence(
             for repeat_index in range(manifest.configuration.repeats):
                 identity = SampleIdentity(case_id=case.id, repeat_index=repeat_index)
                 entry = plan[(case.id, repeat_index)]
-                attempts = store.read_attempts(identity)
+                reactive = (
+                    manifest.schema_version == 4
+                    and case.evaluation.type == "reactive_execution"
+                )
+                turn_evidence: tuple[ReactiveTurnEvidence, ...] = ()
+                if reactive:
+                    turn_list: list[ReactiveTurnEvidence] = []
+                    for index in store.turn_indices(identity, reactive=True):
+                        view = store.for_turn(index)
+                        turn_list.append(
+                            ReactiveTurnEvidence(
+                                view.read_request(identity),
+                                view.read_response(identity)
+                                if view.response_exists(identity)
+                                else None,
+                                view.read_attempts(identity),
+                            )
+                        )
+                    turn_evidence = tuple(turn_list)
+                    attempts = tuple(
+                        attempt for turn in turn_evidence for attempt in turn.attempts
+                    )
+                else:
+                    attempts = store.read_attempts(identity)
                 performance_samples[identity] = SamplePerformanceEvidence(
                     identity=identity,
                     attempts=attempts,
                     response=None,
                     source_result_schema_version=manifest.schema_version,
                 )
-                response_exists = store.response_exists(identity)
-                request_exists = store.request_exists(identity)
-                verify_sample_artifact_dependencies(store, identity, attempts)
+                response_exists = (
+                    bool(turn_evidence) and turn_evidence[-1].response is not None
+                    if reactive
+                    else store.response_exists(identity)
+                )
+                request_exists = bool(turn_evidence) if reactive else store.request_exists(identity)
+                if not reactive:
+                    verify_sample_artifact_dependencies(store, identity, attempts)
                 if not request_exists:
                     attempt_hashes.append(())
                     response_hashes.append(None)
                     continue
-                verify_stored_request(
-                    store, entry, result_schema_version=manifest.schema_version
-                )
-                verify_attempt_request_hashes(attempts, entry)
+                if reactive:
+                    if not turn_evidence or hash_generation_request(
+                        turn_evidence[0].request
+                    ) != entry.request_hash:
+                        raise RunIntegrityError(
+                            f"Reactive Turn-0 Request hash mismatch for {identity}"
+                        )
+                else:
+                    verify_stored_request(
+                        store, entry, result_schema_version=manifest.schema_version
+                    )
+                if not reactive:
+                    verify_attempt_request_hashes(attempts, entry)
                 attempt_hashes.append(
                     tuple(
                         hash_canonical(
@@ -450,8 +489,12 @@ def _load_evidence(
                 if not response_exists:
                     response_hashes.append(None)
                     continue
-                response = store.read_response(identity)
-                verify_terminal_attempt_response(attempts, response, identity)
+                if reactive:
+                    assert turn_evidence[-1].response is not None
+                    response = turn_evidence[-1].response
+                else:
+                    response = store.read_response(identity)
+                    verify_terminal_attempt_response(attempts, response, identity)
                 performance_samples[identity] = SamplePerformanceEvidence(
                     identity=identity,
                     attempts=attempts,
@@ -461,13 +504,23 @@ def _load_evidence(
                 response_hashes.append(hash_canonical(response))
                 if case_evaluator_unavailable:
                     continue
-                result = evaluate(
-                    EvaluationContext(
-                        response=response,
-                        specification=case.evaluation,
-                        source_result_schema_version=manifest.schema_version,
+                if reactive:
+                    result = evaluate_reactive(
+                        ReactiveEvaluationContext(
+                            specification=case.evaluation,
+                            identity=identity,
+                            initial_request=turn_evidence[0].request,
+                            turns=turn_evidence,
+                        )
                     )
-                )
+                else:
+                    result = evaluate(
+                        EvaluationContext(
+                            response=response,
+                            specification=case.evaluation,
+                            source_result_schema_version=manifest.schema_version,
+                        )
+                    )
                 results[repeat_index] = result
             cases[case.id] = _CaseEvidence(
                 case,
@@ -1298,7 +1351,13 @@ def _responses_for_results(
     responses: list[GenerationResponse] = []
     for repeat_index in range(run.manifest.configuration.repeats):
         identity = SampleIdentity(case_id=case.case.id, repeat_index=repeat_index)
-        if run.store.response_exists(identity):
+        if run.manifest.schema_version == 4 and case.case.evaluation.type == "reactive_execution":
+            indices = run.store.turn_indices(identity, reactive=True)
+            if indices:
+                view = run.store.for_turn(indices[-1])
+                if view.response_exists(identity):
+                    responses.append(view.read_response(identity))
+        elif run.store.response_exists(identity):
             responses.append(run.store.read_response(identity))
     return tuple(responses)
 

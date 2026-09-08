@@ -184,5 +184,6 @@ preceding attempt and observation are trusted benchmark-supplied case data, not 
 executing the current model's own plan. The normative design and its primary capability limitation
 are defined in [Action Recovery](action-recovery.md). Bounded proof and the production corpus are
 offline validation machinery, not runtime tool execution. A causal provider -> tool -> provider loop,
-runtime-generated observations, and additional model turns require M5.4. The ratified, not-yet-
-implemented architecture is defined in [Reactive Execution](reactive-execution.md).
+runtime-generated observations, and additional model turns require M5.4. The implemented M5.4a
+bounded causal runtime and physical-v4 evidence foundation is defined in [Reactive Execution](reactive-execution.md).
+M5.4b scoring, aggregation, and production corpus work remain deferred.

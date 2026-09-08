@@ -41,9 +41,10 @@ See [Architecture](docs/architecture.md), [Deterministic core](docs/deterministi
 contracts. The [M5.2 Static Action Compliance design](docs/action-compliance.md) and
 [M5.3 Action Recovery design](docs/action-recovery.md) define their capability constraints and v1
 boundaries. M5.3b completes the one-request Action Recovery benchmark with evaluator `1.1.0`,
-bounded corpus proof, summary schema v6, and the production `action_recovery.core` suite. It does
-not add live reactive execution. The ratified [M5.4 Reactive Execution design](docs/reactive-execution.md)
-defines the bounded causal multi-turn architecture; it is not yet implemented.
+bounded corpus proof, summary schema v6, and the production `action_recovery.core` suite. The
+implemented M5.4a [Reactive Execution architecture](docs/reactive-execution.md) provides bounded
+causal multi-turn synthetic execution and physical-v4 evidence. M5.4b scoring, aggregation, and
+production corpus work remain deferred.
 
 ## First-party benchmarks
 

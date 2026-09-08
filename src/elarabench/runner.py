@@ -7,6 +7,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Literal, cast
 from uuid import uuid4
 
 from pydantic import JsonValue
@@ -27,7 +28,7 @@ from elarabench.benchmark import (
     validate_benchmark_snapshot,
 )
 from elarabench.environment import discover_environment, discover_framework_metadata
-from elarabench.evaluators.registry import evaluate
+from elarabench.evaluators.registry import evaluate, evaluate_reactive
 from elarabench.evidence import validate_physical_run_evidence
 from elarabench.hashing import hash_evaluation_specification, hash_generation_request
 from elarabench.legacy_v2 import LegacyV2RunManifest
@@ -60,6 +61,12 @@ from elarabench.models import (
     ThinkingPolicy,
 )
 from elarabench.providers.base import ModelProvider, ProviderConfigurationError
+from elarabench.reactive_engine import ReactiveTurnEngine
+from elarabench.reactive_execution import (
+    ReactiveEvaluationContext,
+    ReactiveExecutionConfig,
+    ReactiveTurnEvidence,
+)
 from elarabench.run_identity import compute_run_fingerprint, generate_run_id
 from elarabench.scoring import (
     RunIntegrityError,
@@ -192,6 +199,9 @@ class Runner:
                 minimum_scored_coverage=configuration.minimum_scored_coverage,
             )
             validate_benchmark_snapshot(snapshot)
+            physical_schema = 4 if any(
+                case.evaluation.type == "reactive_execution" for case in snapshot.suite.cases
+            ) else 3
             provider_metadata, model, seed_control, thinking_control = self._preflight(
                 configuration, snapshot
             )
@@ -235,6 +245,7 @@ class Runner:
                 thinking_control=thinking_control,
                 environment=environment,
                 request_plan=request_plan,
+                schema_version=cast(Literal[3, 4], physical_schema),
                 lifecycle=lifecycle,
             )
             store.write_manifest(manifest)
@@ -455,6 +466,12 @@ class Runner:
     ) -> RunResult:
         cases = {case.id: case for case in snapshot.suite.cases}
         for identity, request in requests:
+            case = cases[identity.case_id]
+            if case.evaluation.type == "reactive_execution":
+                self._execute_reactive_sample(
+                    store, identity, request, case, manifest, invocation_id
+                )
+                continue
             self._ensure_request(store, identity, request, invocation_id)
             if not store.response_exists(identity):
                 recovered = self._recover_terminal_attempt(store, identity, manifest)
@@ -488,7 +505,7 @@ class Runner:
             self._ensure_evaluation(
                 store,
                 identity,
-                cases[identity.case_id],
+                case,
                 invocation_id,
             )
 
@@ -499,9 +516,20 @@ class Runner:
             invocation_id=invocation_id,
             clock=self._clock,
         )
-        has_provider_errors = any(
-            store.read_response(identity).error is not None for identity, _ in requests
-        )
+        has_provider_errors = False
+        for identity, _ in requests:
+            case = cases[identity.case_id]
+            if case.evaluation.type == "reactive_execution":
+                indices = store.turn_indices(identity, reactive=True)
+                if indices:
+                    view = store.for_turn(indices[-1])
+                    has_provider_errors = has_provider_errors or (
+                        view.read_response(identity).error is not None
+                        if view.response_exists(identity)
+                        else False
+                    )
+            elif store.read_response(identity).error is not None:
+                has_provider_errors = True
         completed_at = self._clock()
         status = (
             RunLifecycleStatus.COMPLETED_WITH_ERRORS
@@ -529,6 +557,74 @@ class Runner:
         )
         return RunResult(path=store.path, manifest=final_manifest, summary=summary)
 
+    def _execute_reactive_sample(
+        self,
+        store: RunArtifactStore,
+        identity: SampleIdentity,
+        request: GenerationRequest,
+        case: BenchmarkCase,
+        manifest: RunManifest,
+        invocation_id: str,
+    ) -> None:
+        config = ReactiveExecutionConfig.model_validate(case.evaluation.config)
+        turns: list[ReactiveTurnEvidence] = []
+        expected_request = request
+        runtime = None
+        # Existing canonical turns are replayed before deciding whether a provider call is needed.
+        for index in store.turn_indices(identity, reactive=True):
+            view = store.for_turn(index)
+            persisted_request = view.read_request(identity)
+            response = view.read_response(identity) if view.response_exists(identity) else None
+            turns.append(
+                ReactiveTurnEvidence(persisted_request, response, view.read_attempts(identity))
+            )
+        context = ReactiveEvaluationContext(
+            specification=case.evaluation,
+            identity=identity,
+            initial_request=request,
+            turns=tuple(turns),
+        )
+        runtime, expected_request = ReactiveTurnEngine.replay(context)
+        # Replay validated the unfinished tail; the live loop completes that same Turn.
+        # Keep its canonical Request/Attempts on disk for normal resume validation.
+        if turns and turns[-1].response is None:
+            turns.pop()
+        while runtime.status is None:
+            index = runtime.durable_model_responses
+            view = store.for_turn(index)
+            self._ensure_request(view, identity, expected_request, invocation_id)
+            if view.response_exists(identity):
+                response = view.read_response(identity)
+            else:
+                recovered = self._recover_terminal_attempt(view, identity, manifest)
+                if recovered is not None:
+                    response = recovered
+                else:
+                    response = self._generate(
+                        view, identity, expected_request, manifest, invocation_id=invocation_id
+                    )
+                view.write_response(identity, response)
+                self._event(view, invocation_id, RunEventType.RESPONSE_STORED, sample=identity)
+            turns.append(
+                ReactiveTurnEvidence(
+                    view.read_request(identity), response, view.read_attempts(identity)
+                )
+            )
+            engine = ReactiveTurnEngine(config, runtime)
+            engine.consume(response)
+            runtime = engine.runtime
+            if runtime.status is None:
+                expected_request = engine.next_request(expected_request, response)
+        evaluation = evaluate_reactive(ReactiveEvaluationContext(
+            specification=case.evaluation,
+            identity=identity,
+            initial_request=request,
+            turns=tuple(turns),
+        ))
+        store.write_evaluation(identity, evaluation, replace=store.evaluation_exists(identity))
+        self._event(store, invocation_id, RunEventType.SAMPLE_EVALUATED, sample=identity,
+                    data={"status": evaluation.status.value})
+
     def _ensure_request(
         self,
         store: RunArtifactStore,
@@ -541,6 +637,11 @@ class Runner:
             actual = store.read_request(identity)
             if hash_generation_request(actual) != expected_hash:
                 raise RunnerError(f"stored request mismatch for {identity}")
+            if store._physical_result_schema_version() == 4:
+                try:
+                    store.validate_request_bytes(identity, expected)
+                except ArtifactStoreError as error:
+                    raise RunnerError(str(error)) from error
             return
         store.write_request(identity, expected)
         self._event(
@@ -573,7 +674,7 @@ class Runner:
             if store.evaluation_exists(identity):
                 result = store.read_evaluation(
                     identity,
-                    source_result_schema_version=3,
+                    source_result_schema_version=store._physical_result_schema_version(),
                 )
                 expectation = expectation_from_action_specification(
                     cases[identity.case_id].evaluation
@@ -780,11 +881,20 @@ class Runner:
     ) -> None:
         expected_hash = hash_evaluation_specification(case.evaluation)
         if store.evaluation_exists(identity):
-            existing = store.read_evaluation(identity, source_result_schema_version=3)
+            existing = store.read_evaluation(
+                identity,
+                source_result_schema_version=store._physical_result_schema_version(),
+            )
             if existing.configuration_hash == expected_hash:
                 return
         response = store.read_response(identity)
-        result = evaluate(EvaluationContext(response=response, specification=case.evaluation))
+        result = evaluate(
+            EvaluationContext(
+                response=response,
+                specification=case.evaluation,
+                source_result_schema_version=store._physical_result_schema_version(),
+            )
+        )
         store.write_evaluation(
             identity,
             result,

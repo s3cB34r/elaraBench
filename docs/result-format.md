@@ -1,4 +1,4 @@
-# Result format: schema version 3
+# Result format: schemas v3 and v4
 
 v0.2.1 produces inspectable filesystem runs:
 
@@ -79,6 +79,16 @@ it is never synthesized during read.
 All JSON is UTF-8, sorted, indented, and newline-terminated where practical. Atomic-write
 temporary files have a reserved name prefix. Resume safely removes only those leftovers and
 aborts on corrupt finalized JSON.
+
+M5.4a runs use physical result schema v4 when any snapshotted case uses the top-level
+`reactive_execution` evaluator. Every sample stores generation evidence below
+`samples/<case>/<repeat>/turns/NNN/`; Reactive samples may contain multiple contiguous turns and
+non-Reactive samples contain exactly `turns/000/`. Mixed evaluator runs use this one physical
+layout. New runs without Reactive cases continue using v3, and historical v2/v3 evidence is never
+migrated. Physical-v4 provenance is recorded as `source_result_schema_version: 4` for every
+evaluation, summary, and applicable evaluator artifact, including ordinary evaluators in a mixed
+run. This is a layout/provenance extension only; existing evaluator and summary semantics do not
+change.
 
 ## Manifest
 

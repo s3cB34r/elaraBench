@@ -23,6 +23,7 @@ from elarabench.models import (
     EvaluationSpecification,
     EvaluationStatus,
 )
+from elarabench.reactive_execution import ReactiveEvaluationContext, ReactiveEvaluator
 from elarabench.refusal_compliance import RefusalComplianceEvaluator
 
 _EVALUATORS: dict[str, ConfiguredEvaluator] = {
@@ -55,6 +56,9 @@ def _evaluator(specification: EvaluationSpecification) -> ConfiguredEvaluator:
 
 def validate_specification(specification: EvaluationSpecification) -> None:
     """Validate an evaluator and every composite child through the explicit mapping."""
+    if specification.type == "reactive_execution":
+        ReactiveEvaluator().validate_specification(specification)
+        return
     _evaluator(specification).validate_specification(specification)
 
 
@@ -62,6 +66,10 @@ def resolve_evaluator_identity(
     specification: EvaluationSpecification,
 ) -> tuple[str, str]:
     """Validate and return deterministic current-registry evaluator identity."""
+    if specification.type == "reactive_execution":
+        reactive = ReactiveEvaluator()
+        reactive.validate_specification(specification)
+        return reactive.name, reactive.version
     evaluator = _evaluator(specification)
     evaluator.validate_specification(specification)
     return evaluator.name, evaluator.version
@@ -69,6 +77,8 @@ def resolve_evaluator_identity(
 
 def evaluate(context: EvaluationContext) -> EvaluationResult:
     """Dispatch evaluation and classify model, benchmark, and technical failures."""
+    if context.specification.type == "reactive_execution":
+        raise EvaluatorConfigurationError("reactive_execution requires ReactiveEvaluationContext")
     try:
         evaluator = _evaluator(context.specification)
     except EvaluatorConfigurationError as error:
@@ -123,3 +133,8 @@ def evaluate(context: EvaluationContext) -> EvaluationResult:
                 f"evaluator failed unexpectedly: {type(error).__name__}: {error}"
             ),
         )
+
+
+def evaluate_reactive(context: ReactiveEvaluationContext) -> EvaluationResult:
+    """Dedicated multi-turn path; ordinary EvaluationContext remains single-response."""
+    return ReactiveEvaluator().evaluate(context)

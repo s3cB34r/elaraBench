@@ -3,7 +3,8 @@
 ## Status and authority
 
 This document is the architectural source of truth for M5.4 Reactive Execution. The architecture
-is ratified but not implemented. Its requirements are normative for M5.4 implementation;
+M5.4a is implemented; M5.4b remains deferred. Its requirements are normative for maintenance and
+future implementation;
 implementation work must not silently violate them. A required semantic change must be handled as
 an explicit architecture revision before behavior is modified.
 
@@ -486,9 +487,8 @@ Non-reactive evaluations retain their normal evaluator semantics while recording
 Validation, `score`, `summarize`, and applicable comparison/read paths must accept supported v4
 physical provenance rather than reject it because their previous domain was `{2, 3}`.
 
-Physical schema v4 is ratified here but is not implemented in the current repository.
-`docs/result-format.md` must be updated as part of M5.4a implementation when physical v4 becomes
-real.
+Physical schema v4 is implemented by M5.4a. `docs/result-format.md` documents the resulting
+layout and provenance rules.
 
 ## Request plan
 

@@ -59,7 +59,7 @@ def validate_stored_run(
         manifest_data = store.read_manifest_data()
         snapshot_data = store.read_benchmark_data()
         schema_version = manifest_data.get("schema_version")
-        if schema_version == 3:
+        if schema_version in {3, 4}:
             current_manifest = RunManifest.model_validate(manifest_data)
             current_snapshot = BenchmarkSnapshot.model_validate(snapshot_data)
             validate_benchmark_snapshot(current_snapshot)
@@ -73,7 +73,7 @@ def validate_stored_run(
             snapshot = legacy_snapshot
         else:
             raise RunIntegrityError(
-                f"unsupported result schema version {schema_version!r}; supported versions: 2, 3"
+                f"unsupported result schema version {schema_version!r}; supported versions: 2, 3, 4"
             )
     except (ArtifactStoreError, ValidationError, ValueError) as error:
         if isinstance(error, RunIntegrityError):
@@ -201,7 +201,7 @@ def validate_attempt_history(
 ) -> None:
     """Validate every v3 attempt and the retry sequence Runner can persist."""
     verify_attempt_request_hashes(attempts, entry)
-    if result_schema_version != 3:
+    if result_schema_version == 2:
         return
 
     prior_failures = 0
@@ -274,8 +274,19 @@ def validate_physical_run_evidence(
     manifest: StoredManifest,
 ) -> None:
     """Read and validate all materialized sample evidence without modifying it."""
+    snapshot = store.read_benchmark() if manifest.schema_version == 4 else None
+    reactive_case_ids = {
+        case.id
+        for case in snapshot.suite.cases
+        if case.evaluation.type == "reactive_execution"
+    } if snapshot is not None else set()
     for entry in manifest.request_plan:
         identity = entry.identity
+        if manifest.schema_version == 4:
+            _validate_v4_sample(
+                store, manifest, entry, reactive=identity.case_id in reactive_case_ids
+            )
+            continue
         try:
             attempts = store.read_attempts(identity)
         except ArtifactStoreError as error:
@@ -314,6 +325,50 @@ def validate_physical_run_evidence(
                     f"canonical response prematurely terminates retryable failure for "
                     f"{identity} at attempt {terminal.attempt_index}"
                 )
+
+
+def _validate_v4_sample(
+    store: RunArtifactStore,
+    manifest: StoredManifest,
+    entry: RequestPlanEntry,
+    *,
+    reactive: bool,
+) -> None:
+    """Validate each turn against its own canonical Request in a physical-v4 sample."""
+    # The physical validator need not infer evaluator family from the manifest. Shape validation
+    # is strict for both mixed non-Reactive and Reactive samples; Runner performs causal replay.
+    try:
+        indices = store.turn_indices(entry.identity, reactive=reactive)
+    except ArtifactStoreError as error:
+        raise RunIntegrityError(str(error)) from error
+    if not indices:
+        return
+    for index in indices:
+        view = store.for_turn(index)
+        try:
+            request = view.read_request(entry.identity)
+            request_entry = RequestPlanEntry(
+                identity=entry.identity,
+                request_hash=hash_generation_request(request),
+            )
+            attempts = view.read_attempts(entry.identity)
+            verify_sample_artifact_dependencies(view, entry.identity, attempts)
+            validate_attempt_history(
+                attempts, request_entry,
+                retry_policy=manifest.configuration.retry_policy,
+                result_schema_version=4,
+            )
+            if view.response_exists(entry.identity):
+                response = view.read_response(entry.identity)
+                verify_terminal_attempt_response(attempts, response, entry.identity)
+        except (ArtifactStoreError, ValidationError) as error:
+            raise RunIntegrityError(str(error)) from error
+    # Turn 0 remains the sole manifest request-plan identity.
+    first = store.for_turn(0)
+    if not first.request_exists(entry.identity):
+        raise RunIntegrityError(f"missing canonical Turn-0 Request for {entry.identity}")
+    if hash_generation_request(first.read_request(entry.identity)) != entry.request_hash:
+        raise RunIntegrityError(f"canonical Turn-0 Request hash mismatch for {entry.identity}")
 
 
 def verify_terminal_attempt_response(

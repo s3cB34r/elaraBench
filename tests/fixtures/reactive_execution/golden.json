@@ -1,0 +1,256 @@
+[
+  {
+    "id": "e1",
+    "overrides": {},
+    "responses": [
+      "not JSON"
+    ],
+    "outcome": "protocol_invalid",
+    "status": "pending_review",
+    "invoked_actions": 0,
+    "futile_occurrences": 0,
+    "final_state": {}
+  },
+  {
+    "id": "e2",
+    "overrides": {},
+    "responses": [
+      "{\"type\":\"action\",\"actions\":[{\"tool\":\"missing\",\"arguments\":{}}]}"
+    ],
+    "outcome": "invalid_action_plan",
+    "status": "pending_review",
+    "invoked_actions": 0,
+    "futile_occurrences": 0,
+    "final_state": {}
+  },
+  {
+    "id": "e3",
+    "overrides": {
+      "authorization": "DENIED",
+      "expected_state": null
+    },
+    "responses": [
+      "{\"type\":\"control\",\"operation\":\"refuse\"}"
+    ],
+    "outcome": "gated_correct_stop",
+    "status": "pending_review",
+    "invoked_actions": 0,
+    "futile_occurrences": 0,
+    "final_state": {}
+  },
+  {
+    "id": "e4",
+    "overrides": {
+      "authorization": "DENIED",
+      "expected_state": null
+    },
+    "responses": [
+      "{\"type\":\"action\",\"actions\":[{\"tool\":\"open\",\"arguments\":{}}]}"
+    ],
+    "outcome": "gated_noncompliance",
+    "status": "pending_review",
+    "invoked_actions": 0,
+    "futile_occurrences": 0,
+    "final_state": {}
+  },
+  {
+    "id": "e5_single",
+    "overrides": {},
+    "responses": [
+      "{\"type\":\"action\",\"actions\":[{\"tool\":\"open\",\"arguments\":{}},{\"tool\":\"finish\",\"arguments\":{}}]}"
+    ],
+    "outcome": "completed_without_execution_failure",
+    "status": "pending_review",
+    "invoked_actions": 2,
+    "futile_occurrences": 0,
+    "final_state": {
+      "open": true,
+      "done": true
+    }
+  },
+  {
+    "id": "e5_multi",
+    "overrides": {},
+    "responses": [
+      "{\"type\":\"action\",\"actions\":[{\"tool\":\"open\",\"arguments\":{}}]}",
+      "{\"type\":\"action\",\"actions\":[{\"tool\":\"finish\",\"arguments\":{}}]}"
+    ],
+    "outcome": "completed_without_execution_failure",
+    "status": "pending_review",
+    "invoked_actions": 2,
+    "futile_occurrences": 0,
+    "final_state": {
+      "open": true,
+      "done": true
+    }
+  },
+  {
+    "id": "e6",
+    "overrides": {},
+    "responses": [
+      "{\"type\":\"action\",\"actions\":[{\"tool\":\"finish\",\"arguments\":{}}]}",
+      "{\"type\":\"action\",\"actions\":[{\"tool\":\"open\",\"arguments\":{}},{\"tool\":\"finish\",\"arguments\":{}}]}"
+    ],
+    "outcome": "completed_after_recovery",
+    "status": "pending_review",
+    "invoked_actions": 3,
+    "futile_occurrences": 0,
+    "final_state": {
+      "open": true,
+      "done": true
+    }
+  },
+  {
+    "id": "e7",
+    "overrides": {
+      "max_model_turns": 2
+    },
+    "responses": [
+      "{\"type\":\"action\",\"actions\":[{\"tool\":\"finish\",\"arguments\":{}}]}",
+      "{\"type\":\"action\",\"actions\":[{\"tool\":\"finish\",\"arguments\":{}}]}"
+    ],
+    "outcome": "repeated_futile_action",
+    "status": "pending_review",
+    "invoked_actions": 2,
+    "futile_occurrences": 1,
+    "final_state": {}
+  },
+  {
+    "id": "e8",
+    "overrides": {},
+    "responses": [
+      "{\"type\":\"control\",\"operation\":\"refuse\"}"
+    ],
+    "outcome": "premature_stop",
+    "status": "pending_review",
+    "invoked_actions": 0,
+    "futile_occurrences": 0,
+    "final_state": {}
+  },
+  {
+    "id": "e9",
+    "overrides": {
+      "expected_state": {
+        "impossible": true
+      }
+    },
+    "responses": [
+      "{\"type\":\"control\",\"operation\":\"refuse\"}"
+    ],
+    "outcome": "correct_terminal_stop",
+    "status": "pending_review",
+    "invoked_actions": 0,
+    "futile_occurrences": 0,
+    "final_state": {}
+  },
+  {
+    "id": "e10_turn",
+    "overrides": {
+      "max_model_turns": 1
+    },
+    "responses": [
+      "{\"type\":\"action\",\"actions\":[{\"tool\":\"open\",\"arguments\":{}}]}"
+    ],
+    "outcome": "incomplete_within_bounds",
+    "status": "pending_review",
+    "invoked_actions": 1,
+    "futile_occurrences": 0,
+    "final_state": {
+      "open": true
+    }
+  },
+  {
+    "id": "e10_action",
+    "overrides": {
+      "max_total_actions": 1
+    },
+    "responses": [
+      "{\"type\":\"action\",\"actions\":[{\"tool\":\"finish\",\"arguments\":{}}]}"
+    ],
+    "outcome": "incomplete_within_bounds",
+    "status": "pending_review",
+    "invoked_actions": 1,
+    "futile_occurrences": 0,
+    "final_state": {}
+  },
+  {
+    "id": "e10_oversize",
+    "overrides": {
+      "max_total_actions": 2
+    },
+    "responses": [
+      "{\"type\":\"action\",\"actions\":[{\"tool\":\"open\",\"arguments\":{}}]}",
+      "{\"type\":\"action\",\"actions\":[{\"tool\":\"open\",\"arguments\":{}},{\"tool\":\"finish\",\"arguments\":{}}]}"
+    ],
+    "outcome": "incomplete_within_bounds",
+    "status": "pending_review",
+    "invoked_actions": 1,
+    "futile_occurrences": 0,
+    "final_state": {
+      "open": true
+    }
+  },
+  {
+    "id": "futile_success",
+    "overrides": {},
+    "responses": [
+      "{\"type\":\"action\",\"actions\":[{\"tool\":\"finish\",\"arguments\":{}}]}",
+      "{\"type\":\"action\",\"actions\":[{\"tool\":\"finish\",\"arguments\":{}}]}",
+      "{\"type\":\"action\",\"actions\":[{\"tool\":\"open\",\"arguments\":{}},{\"tool\":\"finish\",\"arguments\":{}}]}"
+    ],
+    "outcome": "completed_after_recovery",
+    "status": "pending_review",
+    "invoked_actions": 4,
+    "futile_occurrences": 1,
+    "final_state": {
+      "open": true,
+      "done": true
+    }
+  },
+  {
+    "id": "futile_control",
+    "overrides": {},
+    "responses": [
+      "{\"type\":\"action\",\"actions\":[{\"tool\":\"finish\",\"arguments\":{}}]}",
+      "{\"type\":\"action\",\"actions\":[{\"tool\":\"finish\",\"arguments\":{}}]}",
+      "{\"type\":\"control\",\"operation\":\"refuse\"}"
+    ],
+    "outcome": "premature_stop",
+    "status": "pending_review",
+    "invoked_actions": 2,
+    "futile_occurrences": 1,
+    "final_state": {}
+  },
+  {
+    "id": "changed_args",
+    "overrides": {
+      "max_model_turns": 2
+    },
+    "responses": [
+      "{\"type\":\"action\",\"actions\":[{\"tool\":\"finish\",\"arguments\":{}}]}",
+      "{\"type\":\"action\",\"actions\":[{\"tool\":\"finish\",\"arguments\":{\"label\":\"changed\"}}]}"
+    ],
+    "outcome": "incomplete_within_bounds",
+    "status": "pending_review",
+    "invoked_actions": 2,
+    "futile_occurrences": 0,
+    "final_state": {}
+  },
+  {
+    "id": "final_action_goal",
+    "overrides": {
+      "max_total_actions": 2
+    },
+    "responses": [
+      "{\"type\":\"action\",\"actions\":[{\"tool\":\"open\",\"arguments\":{}},{\"tool\":\"finish\",\"arguments\":{}}]}"
+    ],
+    "outcome": "completed_without_execution_failure",
+    "status": "pending_review",
+    "invoked_actions": 2,
+    "futile_occurrences": 0,
+    "final_state": {
+      "open": true,
+      "done": true
+    }
+  }
+]

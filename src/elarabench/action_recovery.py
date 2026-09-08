@@ -350,7 +350,7 @@ class ActionRecoveryEvaluationArtifact(DomainModel):
     evaluator_name: Literal["action_recovery"]
     evaluator_version: Literal["1.0.0", "1.1.0"]
     configuration_hash: Sha256Digest
-    source_result_schema_version: Literal[2, 3]
+    source_result_schema_version: Literal[2, 3, 4]
     proposal_semantic: Literal["action_control_envelope_v1"]
     observation_semantic: Literal["action_recovery_observation_v1"]
     rendering_semantic: Literal["action_recovery_observation_rendering_v1"]
@@ -465,7 +465,7 @@ class ActionRecoveryCaseExpectation(DomainModel):
 def _artifact(
     *,
     specification: EvaluationSpecification,
-    source_result_schema_version: Literal[2, 3],
+    source_result_schema_version: Literal[2, 3, 4],
     config: ActionRecoveryConfig,
     proposal: ProposalEnvelope | None,
     protocol_failure: ProtocolFailureReason | None,
@@ -525,7 +525,7 @@ def evaluate_action_recovery_artifact(
     *,
     response: GenerationResponse,
     specification: EvaluationSpecification,
-    source_result_schema_version: Literal[2, 3],
+    source_result_schema_version: Literal[2, 3, 4],
 ) -> ActionRecoveryEvaluationArtifact:
     """Derive immutable Recovery evidence from one response and trusted config."""
     if response.error is not None:

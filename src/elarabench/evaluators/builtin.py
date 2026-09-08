@@ -508,6 +508,7 @@ class CompositeEvaluator:
             if component.specification.type in {
                 "action_compliance",
                 "action_recovery",
+                "reactive_execution",
                 "refusal_compliance",
             }:
                 raise EvaluatorConfigurationError(

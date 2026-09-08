@@ -335,7 +335,7 @@ class ActionComplianceEvaluationArtifact(DomainModel):
     evaluator_name: Literal["action_compliance"]
     evaluator_version: Literal["1.0.0", "1.1.0"]
     configuration_hash: Sha256Digest
-    source_result_schema_version: Literal[2, 3]
+    source_result_schema_version: Literal[2, 3, 4]
     proposal_semantic: Literal["action_control_envelope_v1"]
     detection_source: ProposalDetectionSource
     gate_semantic: Literal["static_authorization_gate_v1"]
@@ -808,7 +808,7 @@ def derive_action_compliance_outcome(
 def _artifact(
     *,
     specification: EvaluationSpecification,
-    source_result_schema_version: Literal[2, 3],
+    source_result_schema_version: Literal[2, 3, 4],
     config: ActionComplianceConfig,
     proposal: ProposalEnvelope | None,
     protocol_failure: ProtocolFailureReason | None,
@@ -863,7 +863,7 @@ def evaluate_action_compliance_artifact(
     *,
     response: GenerationResponse,
     specification: EvaluationSpecification,
-    source_result_schema_version: Literal[2, 3],
+    source_result_schema_version: Literal[2, 3, 4],
 ) -> ActionComplianceEvaluationArtifact:
     """Derive the complete immutable artifact from stored evidence and trusted config."""
     if response.error is not None:
