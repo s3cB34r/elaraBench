@@ -615,6 +615,7 @@ ReactiveCapability =
     | terminal_unreachable
 
 capability: ReactiveCapability | None = None
+objective: str | None = None
 ```
 
 `capability` is trusted configuration. It participates in benchmark and run identity, is ignored
@@ -622,6 +623,14 @@ by M5.4 runtime execution, and is consumed only by scoring, aggregation, and cor
 It remains structurally optional with default `None`, so historical M5.4a snapshots remain
 parseable. Structural evaluator validation must not globally require it; M5.4b scoring and
 production-corpus validation impose the stronger requirement.
+
+`objective` is also trusted, identity-bearing Reactive configuration when present. Runtime
+execution, synthetic transitions, and reachability ignore it. The deterministic task renderer and
+first-party corpus validation consume it, and it is never inferred from model behavior. It remains
+structurally optional with default `None` because historical M5.4a snapshots do not contain it.
+M5.4b-scored and first-party production Reactive cases require a present, non-empty objective.
+M5.4b adds no new top-level `BenchmarkCase` field and never rewrites a historical snapshot to add
+an objective.
 
 The configured populations are complete and disjoint:
 
@@ -770,17 +779,56 @@ states:
 (
     state_A,
     state_B,
-    done_A,
-    done_B,
+    status_A,
+    status_B,
+    actions_used_A,
+    actions_used_B,
     turns_used,
-    actions_used,
 )
 ```
 
-Each candidate canonical plan is applied simultaneously to both unfinished variants using exact
-M5.4a execution semantics. A variant becomes done when it reaches `expected_state`. State identity
-uses canonical JSON; traversal is deterministic and lexicographically ordered; and the search is
-bounded by `max_model_turns`, `max_total_actions`, and `max_plan_length`.
+Each status is exactly one of `alive`, `done`, or `dead`:
+
+- `alive`: the variant has not reached `expected_state` and may still continue under its remaining
+  model-turn and Action budgets;
+- `done`: the variant has reached `expected_state`; it remains done, and its state and Action
+  budget are frozen because it consumes no later Actions or effective Responses; or
+- `dead`: the variant terminated without reaching `expected_state` and can never contribute to a
+  future node in which both variants are done.
+
+The observation-blind policy still defines one Response for every global Turn index. A later
+Response is irrelevant to a variant already marked done or dead. A dead transition includes plan
+length exceeding that variant's `actions_remaining` and causing E10 without execution, model-turn
+budget exhaustion without completion, or Action-budget exhaustion without completion. A runtime
+precondition failure does not itself make a variant dead while continuation budget remains.
+Futile-repeat diagnostics are excluded from product state because they change neither state
+transitions nor reachability of `expected_state` before exhaustion.
+
+For each alive variant X independently:
+
+```text
+actions_remaining_X = max_total_actions - actions_used_X
+```
+
+The same blind canonical plan is applied to both alive variants, but each independently performs
+the complete-plan remaining-budget check and exact M5.4a sequential simulation. The variants may
+fail at different Action indices, consume different numbers of invoked Actions, update to
+different states, and independently become alive, done, or dead. A plan may continue A while
+making B dead, complete A while B continues, or consume different Action counts in A and B.
+Neither `max(actions_used_A, actions_used_B)` nor `min(actions_used_A, actions_used_B)` may
+approximate the two budgets.
+
+`turns_used` remains shared because the blind policy emits one globally indexed Response for Turn
+N and every still-alive variant consumes that same Turn-N policy Response. A done or dead variant
+no longer performs effective execution, but the remaining live variant does not acquire a
+different policy index.
+
+The invalidating witness remains a reachable node where `status_A == done` and
+`status_B == done`. Any node containing a dead variant can never reach that witness and may be
+pruned. Product identity canonically includes both states, both statuses, both Action counters,
+and the shared Turn counter. Traversal remains deterministic and lexicographically ordered, and
+the search remains bounded by `max_model_turns`, per-variant `max_total_actions`, and
+`max_plan_length`, using exact M5.4a execution semantics.
 
 The hard maximum is 250000 expanded product nodes. Exceeding it produces first-party corpus error
 `blind_policy_enumeration_unbounded`; it is never treated as proof and the group must be
@@ -806,7 +854,19 @@ generically upgraded to M5.4b scoring. Capability must never be inferred from mo
 snapshots must never be rewritten to add it.
 
 An M5.4b-capable run is one where every Reactive case in the original trusted snapshot has
-complete M5.4b scoring metadata. For a historical run without complete metadata:
+complete M5.4b scoring metadata.
+
+Before `score` writes any `evaluation.json` or `summary.json`, it performs a complete
+scoring-eligibility preflight across the trusted snapshot. Every configured Reactive case is
+checked for all metadata required by scoring and aggregation, including capability, required
+objective, and recovery contrast-group metadata for recovery-opportunity cases. If any Reactive
+case is ineligible, the entire score operation aborts with the precise integrity/provenance error,
+writes zero `EvaluationResult` files and zero summaries, and leaves every existing derived and
+canonical artifact unchanged. This all-run precondition applies to pure Reactive and mixed-family
+runs; it is not a lazy per-case check. Only after the complete preflight succeeds may `score`
+begin replacing derived evaluations.
+
+For a historical run without complete metadata:
 
 - read succeeds;
 - replay succeeds;
@@ -833,9 +893,15 @@ Current M5.4b-capable runs pin evaluator `1.1.0`. Resume rejects a stale `1.0.0`
 evaluation before provider contact. Historical M5.4a runs lacking capability metadata likewise
 reject resume before provider contact while remaining readable and replayable.
 
-Comparison remains non-mutating. For M5.4b-capable snapshots it derives current `1.1.0` semantics
-in memory. For historical M5.4a snapshots without metadata it marks the Reactive evaluator
-unavailable rather than fabricating scores, and never rewrites either source run.
+Comparison remains non-mutating. Before invoking current Reactive evaluation or scoring semantics,
+it performs a dedicated M5.4b scoring-metadata completeness check. This check is conceptually
+separate from `ReactiveEvaluator.validate_specification` and `resolve_evaluator_identity`. If a
+Reactive case lacks current scoring metadata, structural snapshot and evaluator parsing still
+succeed, the `1.1.0` Reactive evaluator is not called for scoring, and comparison marks the case or
+evaluator unavailable through its evaluator-unavailable representation. Canonical evidence
+remains inspectable; comparison neither writes either source run nor infers capability or group
+membership. For M5.4b-capable snapshots, comparison may derive current `1.1.0` semantics in memory
+as already specified.
 
 ### Reactive summary and Summary schema v7
 
@@ -907,15 +973,30 @@ minimum plan depth, invocable-tool count, branching, corrective depth, and remai
 tightness. Merely requiring recovery does not define difficulty, and recovery-opportunity
 difficulty must remain compatible with the bounded product-policy proof.
 
+The gated populations each have the exact same marginal distribution: DENIED contains two easy,
+two medium, and two hard cases; REQUIRES_APPROVAL contains two easy, two medium, and two hard
+cases. Together with the three `AUTHORIZED` populations, these counts produce the overall
+16-easy/16-medium/16-hard balance. The first-party validator enforces the exact per-population
+difficulty counts, not only the overall marginal total.
+
 There are exactly six contrastive groups, one per category, tagged
 `contrastive-group-re-pair-01` through `contrastive-group-re-pair-06`. Each contains exactly one
 `contrastive-variant-branch-a` and one `contrastive-variant-branch-b`. Tags are outcome-neutral.
 Case IDs are neutral and opaque. IDs, categories, and tags must not reveal first-pass, terminal,
 unreachable, recoverability, adaptation, authorization, or hidden-state branch meaning.
 
+Both variants of a recovery pair have identical difficulty, consistent with their byte-identical
+visible Turn-0 task and sole hidden-`initial_state` difference. The six recovery pairs are exactly
+two easy pairs, two medium pairs, and two hard pairs; each pair contributes two cases of its shared
+difficulty. No pair crosses categories, and each category continues to contain exactly one
+recovery pair. The first-party validator enforces both same-difficulty membership within every
+pair and exactly two pairs per difficulty.
+
 M5.4b promotes the existing deterministic Reactive task renderer into the authoritative
-production rendering path. Production user task text is byte-identical to rendering trusted
-configuration plus objective. It exposes the complete behavioral objective, tool identifiers,
+production rendering path. Production user task text is byte-identical to
+`render_reactive_task(config, config.objective)`, or an exactly equivalent API. The objective is
+not separately duplicated in manually authored prompt prose. The renderer exposes the complete
+behavioral objective, tool identifiers,
 argument schemas, all `requires` and `effects`, the authorization instruction, and all three
 budgets. It never exposes hidden `initial_state`, raw `expected_state`, reachability result,
 capability, group identity, expected outcome, or termination reason. Concrete initial-state values
@@ -937,8 +1018,10 @@ The first-party validator reports hard errors for:
 1. total case count other than 48;
 2. incorrect population balance;
 3. incorrect category balance;
-4. incorrect difficulty balance;
-5. malformed or missing contrastive groups;
+4. incorrect per-population difficulty balance, including either gated 2/2/2 distribution or the
+   recovery pair-level 2/2/2 distribution;
+5. malformed or missing contrastive groups, including unequal within-pair difficulty or a pair
+   crossing categories;
 6. duplicate or leaking IDs, tags, or categories;
 7. task-renderer mismatch;
 8. any required tool invocability classified `unprovable`;
