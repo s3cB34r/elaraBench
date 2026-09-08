@@ -87,6 +87,21 @@ through fixed synthetic transitions up to `max_plan_length`. A found path is sou
 search is called unrecoverable only when every relevant tool is witnessed invocable or soundly
 proven non-invocable; unsupported potentially satisfiable schemas yield `unprovable` instead.
 
+### Reactive Execution scoring and corpus validity
+
+The ratified M5.4b methodology is defined normatively in
+[Reactive Execution](reactive-execution.md) and is not yet implemented. It separates
+capability-conditioned binary sample scores from three equally weighted `AUTHORIZED` axes:
+E5-only first-pass completion, contrast-group-minimum E5-plus-E6 adaptation, and E9-only terminal
+stopping. Full denied and approval-required coverage gates headline availability without entering
+its numeric mean.
+
+Recovery-opportunity groups prove, by bounded deterministic product-state exploration, that no
+deterministic observation-blind policy in the canonical policy space can complete both hidden-state
+variants. Exceeding 250000 expanded product nodes is a corpus error rather than proof. This is a
+bounded deterministic claim, not a claim about stochastic or unbounded policies or a guarantee
+that observation use succeeds.
+
 Category and tag breakdowns are diagnostics. Each M3 category has only three cases, so its score
 is a coarse signal rather than a statistically precise estimate. ElaraBench does not manufacture
 confidence intervals from these small samples.

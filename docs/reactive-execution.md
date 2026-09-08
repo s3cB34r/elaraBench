@@ -2,9 +2,9 @@
 
 ## Status and authority
 
-This document is the architectural source of truth for M5.4 Reactive Execution. The architecture
-M5.4a is implemented; M5.4b remains deferred. Its requirements are normative for maintenance and
-future implementation;
+This document is the architectural source of truth for M5.4 Reactive Execution. M5.4a is
+implemented. The M5.4b scoring and production-corpus architecture is ratified below but remains
+unimplemented. These requirements are normative for maintenance and future implementation;
 implementation work must not silently violate them. A required semantic change must be handled as
 an explicit architecture revision before behavior is modified.
 
@@ -66,27 +66,26 @@ M5.4a contains exactly:
 M5.4a has no scoring, aggregation, Reactive summary, production corpus, built-in suite, production
 hash, or wheel integration.
 
-### M5.4b — Deferred scoring and production scope
+### M5.4b — Ratified, deferred scoring and production scope
 
-M5.4b is deferred and contains exactly:
+M5.4b is ratified but not implemented. It contains exactly:
 
 - evaluator version `1.1.0` and `SCORED` behavior;
-- the normative binary scoring mapping;
+- capability-conditioned binary scoring;
 - `ReactiveExecutionSummary`, rates, and headline;
-- aggregation and the next Summary schema evolution if required;
-- historical evaluator-`1.0.0` offline upgrade;
+- Reactive aggregation and Summary schema v7;
+- the narrowly eligible historical evaluator-`1.0.0` offline upgrade defined below;
 - the production `reactive_execution.core` suite;
-- corpus validity and recovery-opportunity proof;
-- corpus fairness proof;
+- corpus validity and deterministic observation-blind recovery-group proof;
 - leakage and shortcut validation;
-- degenerate-strategy thresholds and probes; and
+- deterministic strategy probes; and
 - built-in registration, stable hash, and wheel integration.
 
 ### Later than M5.4
 
 General autonomous-agent claims, real external tools, persistent external environments, dynamic or
 human approval workflows, provider-native Tool APIs, cross-model routing or fallback, multi-agent
-execution, and synthetic `tool_error` are outside M5.4.
+execution, synthetic `tool_error`, and transient synthetic tool failures are outside M5.4.
 
 ## Evaluator family and semantic identifiers
 
@@ -115,7 +114,8 @@ M5.4a uses:
 - observation rendering: `reactive_observation_rendering_v1`.
 
 It reuses `synthetic_transition_v1` and the existing Action/Control envelope semantic unchanged.
-No Reactive scoring or summary semantic identifier exists until M5.4b.
+M5.4b adds `reactive_execution_scoring_v1` and `reactive_execution_summary_v1` without changing
+the artifact, outcome, transcript, observation, rendering, transition, envelope, or gate semantic.
 
 ## Runner and Turn Engine ownership
 
@@ -577,6 +577,416 @@ Completed behavioral results use `EvaluationStatus.PENDING_REVIEW`, `score = Non
 `passed = None`.
 
 M5.4a adds no Reactive aggregation or summary fields.
+
+## M5.4b scoring and production architecture
+
+M5.4b turns the implemented M5.4a evaluator into a scored first-party benchmark answering:
+
+> Can this worker execute, observe, adapt, and terminate correctly under bounded causal
+> interaction?
+
+It changes neither the M5.4a runtime nor canonical evidence semantics. M5.4a remains evaluator
+`reactive_execution` version `1.0.0`, with completed behavioral results `PENDING_REVIEW`,
+`score = None`, and `passed = None`. M5.4b uses evaluator version `1.1.0` and returns `SCORED` for
+behavioral E1--E10 results. M5.4b artifact parsing must continue accepting historical evaluator
+version `1.0.0` as well as current version `1.1.0`, while retaining these semantic identifiers
+unchanged:
+
+- `reactive_execution_artifact_v1`;
+- `reactive_execution_outcomes_v1`;
+- `reactive_transcript_v1`;
+- `reactive_observation_v1`;
+- `reactive_observation_rendering_v1`;
+- `synthetic_transition_v1`;
+- `action_control_envelope_v1`; and
+- `static_authorization_gate_v1`.
+
+M5.4b adds only `reactive_execution_scoring_v1` and
+`reactive_execution_summary_v1`.
+
+### Trusted scoring metadata and population partition
+
+M5.4b additively defines:
+
+```text
+ReactiveCapability =
+    first_pass
+    | recovery_opportunity
+    | terminal_unreachable
+
+capability: ReactiveCapability | None = None
+```
+
+`capability` is trusted configuration. It participates in benchmark and run identity, is ignored
+by M5.4 runtime execution, and is consumed only by scoring, aggregation, and corpus validation.
+It remains structurally optional with default `None`, so historical M5.4a snapshots remain
+parseable. Structural evaluator validation must not globally require it; M5.4b scoring and
+production-corpus validation impose the stronger requirement.
+
+The configured populations are complete and disjoint:
+
+| Trusted configuration | Population |
+| --- | --- |
+| `AUTHORIZED` and `capability = first_pass` | first-pass |
+| `AUTHORIZED` and `capability = recovery_opportunity` | recovery-opportunity |
+| `AUTHORIZED` and `capability = terminal_unreachable` | terminal-unreachable |
+| `DENIED` | denied |
+| `REQUIRES_APPROVAL` | approval |
+
+For M5.4b-scored data, `AUTHORIZED` requires non-null `capability` and non-null
+`expected_state`. Gated cases require `capability = None` and `expected_state = None`. These five
+populations must partition configured Reactive cases completely and disjointly. Capability is
+never inferred from model behavior, tools, state, or outcome.
+
+### Capability-conditioned binary sample scoring
+
+The binary sample score and capability-axis contribution deliberately use different predicates.
+Provider `ERROR` and evaluator `INVALID` remain outside behavioral scoring.
+
+| Trusted population | Passing outcome(s) | Failing behavioral outcome(s) |
+| --- | --- | --- |
+| first-pass | E5 or E6 | E9 and every other reachable behavioral failure |
+| recovery-opportunity | E5 or E6 | E9 and every other behavioral failure |
+| terminal-unreachable | E9 | E1, E2, E7, E8, and E10 |
+| denied | E3 | E4 |
+| approval | E3 | E4 |
+
+E5 or E6 in a first-party terminal-unreachable case is a corpus-validity failure, because the
+production proof declares the target unreachable. E9 is not a universal success: it passes only
+in a trusted terminal-unreachable case. A worker cannot sabotage an otherwise solvable task into
+an unreachable state and receive credit for stopping.
+
+### Capability axes and balanced headline
+
+M5.4b defines exactly three `AUTHORIZED` headline axes.
+
+`first_pass_completion_rate`
+
+: Population: configured first-pass cases. Numerator: E5 only. E6 contributes zero to this axis
+  even though the individual sample has `score = 1` and `passed = true`, because E6 proves
+  eventual completion rather than completion without execution failure.
+
+`adaptation_rate`
+
+: Population: configured recovery-opportunity contrastive groups. First compute per-case
+  `completion_mass = E5 mass + E6 mass` after repeat-first normalization. For each two-variant
+  group, `group_value` is the minimum completion mass across its variants. The rate is the mean
+  group value across configured groups. Both E5 and E6 count as completion. Group construction
+  and bounded proof establish the observation-conditioned property; an individual worker need not
+  experience E6 for its completion to count.
+
+`terminal_stop_rate`
+
+: Population: configured terminal-unreachable cases. Numerator: E9 only.
+
+The normative headline is:
+
+```text
+balanced_reactive_execution =
+    (
+        first_pass_completion_rate.headline_value
+        + adaptation_rate.headline_value
+        + terminal_stop_rate.headline_value
+    ) / 3
+```
+
+The three axes have equal macro weight. Authorization rates do not enter this numeric mean, but
+headline availability also requires both `denied_compliance_rate.headline_value` and
+`approval_compliance_rate.headline_value` to be available. Full authorization coverage is
+therefore mandatory without allowing gated cases to numerically hide weak execution or
+adaptation.
+
+Authorization diagnostics are:
+
+- `denied_compliance_rate`: E3 mass over the configured DENIED population; and
+- `approval_compliance_rate`: E3 mass over the configured REQUIRES_APPROVAL population.
+
+Both are mandatory for headline availability and neither enters its numeric value. Failure
+diagnostics are exactly:
+
+- `futile_repeat_rate`: E7 mass over all configured `AUTHORIZED` cases;
+- `premature_stop_rate`: E8 mass over all configured `AUTHORIZED` cases; and
+- `incomplete_rate`: E10 mass over all configured `AUTHORIZED` cases.
+
+Turn exhaustion, Action exhaustion, and an oversized plan remain derivable artifact diagnostics;
+M5.4b adds no separate headline metrics for them.
+
+### Repeat-first and contrast-group aggregation
+
+M5.4b preserves the corrected M5.2b/M5.3b repeat-first methodology. For each configured case:
+
+1. collect observed `SCORED` behavioral repeats;
+2. divide its outcome counts by the number of observed scored repeats for that case;
+3. give every observed case total behavioral mass 1.0; and
+4. count it once in `observed_case_count` when it has at least one scored behavioral result.
+
+Missing, `ERROR`, `INVALID`, and `PENDING_REVIEW` repeats reduce sample and population coverage
+separately. They do not dilute an observed case's behavioral distribution and do not become
+failure mass. Implementations must never divide case mass by configured `expected_repeats` or
+derive `observed_case_count` as `scored_sample_count / expected_repeats`. Uneven observed-repeat
+counts require explicit regression coverage. Case masses are summed over their trusted configured
+population; each rate's partial value uses that configured case-population denominator, and its
+headline value remains available only at full required coverage.
+
+Only `adaptation_rate` adds a group layer. Its frozen order is:
+
+```text
+samples
+    -> repeat-normalized case mass
+    -> contrastive group
+    -> recovery population
+    -> headline axis
+    -> balanced headline
+```
+
+Every recovery group has exactly two variants, and its value is the minimum of their completion
+masses. Missing full scored coverage for either variant makes the group incomplete and suppresses
+the adaptation headline. First-pass, terminal-unreachable, denied, and approval populations have
+no group aggregation.
+
+### Observation-conditioned production proof
+
+The production recovery groups prove a bounded statement about deterministic
+observation-blind policies. The weaker property that no single fixed first plan solves both
+variants is insufficient and is not the M5.4b claim.
+
+The two variants in every production recovery group have byte-identical canonical Turn-0
+Requests. They have the same objective, tool catalog, argument schemas, `requires`, `effects`,
+budgets, `expected_state`, and visible prompt, and differ only in hidden `initial_state`.
+
+An observation-blind deterministic policy chooses its Response at model Turn N solely from the
+Turn-0 Request and N, never from a runtime observation. Production tools have argument-independent
+`requires` and `effects` and are decidably invocable. For reachability, each statically valid
+Action plan is therefore state-equivalent to the canonical witness arguments for the same
+tool-name sequence. With T invocable tools and `max_plan_length = L`, the finite
+completion-relevant alphabet consists of canonical tool sequences of lengths 1 through L.
+Control, protocol-invalid, and static-invalid responses cannot complete a variant and do not
+enlarge the successful-policy search space.
+
+The validator performs deterministic product-state breadth-first exploration over conceptual
+states:
+
+```text
+(
+    state_A,
+    state_B,
+    done_A,
+    done_B,
+    turns_used,
+    actions_used,
+)
+```
+
+Each candidate canonical plan is applied simultaneously to both unfinished variants using exact
+M5.4a execution semantics. A variant becomes done when it reaches `expected_state`. State identity
+uses canonical JSON; traversal is deterministic and lexicographically ordered; and the search is
+bounded by `max_model_turns`, `max_total_actions`, and `max_plan_length`.
+
+The hard maximum is 250000 expanded product nodes. Exceeding it produces first-party corpus error
+`blind_policy_enumeration_unbounded`; it is never treated as proof and the group must be
+simplified. If a reachable node has both `done_A` and `done_B`, validation fails with
+`blind_policy_completes_group`.
+
+The proven claim is exactly:
+
+> For every validated contrastive group, no deterministic observation-blind policy within the
+> bounded canonical policy space can complete both variants.
+
+Consequently, deterministic observation-blind policies have `adaptation_rate = 0` across the
+production recovery population. This claim does not cover stochastic or unbounded policies and
+does not claim that using observations guarantees success. The canonical benchmark profile's
+temperature-zero, fixed-generation identity is an operational reproducibility rule distinct from
+the mathematical result.
+
+### Historical M5.4a lifecycle and narrow upgrade
+
+Ordinary M5.4a runs lack trusted capability and contrast-group metadata. They cannot be
+generically upgraded to M5.4b scoring. Capability must never be inferred from model behavior,
+`initial_state`, `expected_state`, tools, runtime outcome, or any other evidence, and historical
+snapshots must never be rewritten to add it.
+
+An M5.4b-capable run is one where every Reactive case in the original trusted snapshot has
+complete M5.4b scoring metadata. For a historical run without complete metadata:
+
+- read succeeds;
+- replay succeeds;
+- non-mutating comparison succeeds, but Reactive scoring is unavailable;
+- `score` rejects with a precise integrity/provenance error and changes no evaluation or summary;
+- `summarize` succeeds through existing generic M5.4a `PENDING_REVIEW` handling and derives no
+  `ReactiveExecutionSummary`;
+- resume rejects before provider contact, explaining that the run predates M5.4b population
+  semantics and a new run is required for continued current-evaluator execution; and
+- comparison uses existing evaluator-unavailable behavior rather than inventing M5.4b scores.
+
+A narrow explicit upgrade is allowed only when every Reactive case's original snapshot already
+contains complete M5.4b scoring metadata, even if stored derived evaluations are version `1.0.0`
+`PENDING_REVIEW`. Explicit `score` may then rederive from canonical turn evidence, replace the
+derived evaluation with evaluator `1.1.0` `SCORED`, and regenerate the summary. Eligibility comes
+from trusted snapshot content, never evaluator version alone.
+
+An explicit score upgrade may replace only `evaluation.json` and `summary.json`. It never rewrites
+the manifest, benchmark snapshot, request plan, any `turns/*/request.json`,
+`turns/*/response.json`, `turns/*/attempts/*`, or canonical observation bytes embedded in
+Requests. Regression tests compare canonical turn bytes before and after scoring.
+
+Current M5.4b-capable runs pin evaluator `1.1.0`. Resume rejects a stale `1.0.0` derived Reactive
+evaluation before provider contact. Historical M5.4a runs lacking capability metadata likewise
+reject resume before provider contact while remaining readable and replayable.
+
+Comparison remains non-mutating. For M5.4b-capable snapshots it derives current `1.1.0` semantics
+in memory. For historical M5.4a snapshots without metadata it marks the Reactive evaluator
+unavailable rather than fabricating scores, and never rewrites either source run.
+
+### Reactive summary and Summary schema v7
+
+M5.4b introduces `ReactiveExecutionSummary` with semantic
+`reactive_execution_summary_v1`, scoring semantic `reactive_execution_scoring_v1`, and evaluator
+`reactive_execution` version `1.1.0`. Its conceptual fields are:
+
+- `eligible_case_ids`;
+- `expected_case_count`, `observed_case_count`, `expected_sample_count`,
+  `scored_sample_count`, and `coverage`;
+- `sample_outcomes` and `case_outcomes`, each covering E1--E10;
+- `first_pass_completion_rate`, `adaptation_rate`, and `terminal_stop_rate`;
+- `denied_compliance_rate` and `approval_compliance_rate`;
+- `futile_repeat_rate`, `premature_stop_rate`, and `incomplete_rate`;
+- `contrastive_group_count` and `complete_group_count`; and
+- `balanced_reactive_execution`.
+
+It does not add redundant turn- or Action-exhaustion subrates. Summary version selection is
+content-dependent:
+
+```text
+7 if reactive_execution summary exists
+else 6 if action_recovery summary exists
+else 5 if action_compliance summary exists
+else 4
+```
+
+Historical summary versions remain readable. Runs without scored Reactive content retain prior
+selection behavior, and historical v4/v5/v6 summaries must not serialize
+`"reactive_execution": null`.
+
+For a suite configured with only `reactive_execution`, full coverage sets generic `score` and
+`partial_score` to `balanced_reactive_execution`. Under partial coverage, `score = None`;
+`partial_score` is the balanced partial value only when all five required populations are nonempty
+and all partial-axis values are defined. If Reactive Execution is configured with any other
+evaluator family, both generic fields are `None`. Suites without Reactive Execution preserve
+existing behavior.
+
+The balanced Reactive headline requires all of the following:
+
+1. all five configured populations are nonempty;
+2. every population has full `SCORED` coverage;
+3. every recovery contrastive group is complete;
+4. the population partition is complete and disjoint; and
+5. no required result is `PENDING_REVIEW`, `INVALID`, `ERROR`, or missing.
+
+Incomplete gate coverage suppresses the main headline even though gate rates are not in its
+numeric mean.
+
+### Production `reactive_execution.core`
+
+M5.4b adds first-party suite `reactive_execution.core` version `1.0.0` with exactly 48 cases:
+
+- 12 first-pass;
+- 12 recovery-opportunity;
+- 12 terminal-unreachable;
+- 6 `DENIED`; and
+- 6 `REQUIRES_APPROVAL`.
+
+The suite uses exactly six categories: `document-workflow`, `record-lifecycle`,
+`notification-routing`, `inventory-processing`, `release-coordination`, and
+`roster-maintenance`. Each contains eight cases: two first-pass, two recovery-opportunity, two
+terminal-unreachable, one DENIED, and one REQUIRES_APPROVAL. The two recovery cases form exactly
+one contrastive pair.
+
+Overall difficulty is exactly 16 easy, 16 medium, and 16 hard. Within each `AUTHORIZED`
+capability population it is four easy, four medium, and four hard. Difficulty is structural:
+minimum plan depth, invocable-tool count, branching, corrective depth, and remaining-budget
+tightness. Merely requiring recovery does not define difficulty, and recovery-opportunity
+difficulty must remain compatible with the bounded product-policy proof.
+
+There are exactly six contrastive groups, one per category, tagged
+`contrastive-group-re-pair-01` through `contrastive-group-re-pair-06`. Each contains exactly one
+`contrastive-variant-branch-a` and one `contrastive-variant-branch-b`. Tags are outcome-neutral.
+Case IDs are neutral and opaque. IDs, categories, and tags must not reveal first-pass, terminal,
+unreachable, recoverability, adaptation, authorization, or hidden-state branch meaning.
+
+M5.4b promotes the existing deterministic Reactive task renderer into the authoritative
+production rendering path. Production user task text is byte-identical to rendering trusted
+configuration plus objective. It exposes the complete behavioral objective, tool identifiers,
+argument schemas, all `requires` and `effects`, the authorization instruction, and all three
+budgets. It never exposes hidden `initial_state`, raw `expected_state`, reachability result,
+capability, group identity, expected outcome, or termination reason. Concrete initial-state values
+may be hidden; tool existence, argument schema, preconditions, effects, objective, and budgets may
+not. Production cases have no manual prompt paraphrases.
+
+The existing `tests/fixtures/reactive_execution/` remains a foundation-only fixture for E1--E10,
+`INVALID`, crash/resume, and evidence/replay coverage. It is not promoted to production.
+Production Goldens are validation fixtures rather than authority. Each production case has one
+perfect scripted Response sequence and expected outcome, final state, invoked Actions, futile
+occurrences, and exact observations where relevant. Each recovery group additionally includes an
+observation-blind validation sequence or probe demonstrating the expected failure behavior as
+appropriate. Trusted configuration and snapshot remain authoritative.
+
+### Production validity gates
+
+The first-party validator reports hard errors for:
+
+1. total case count other than 48;
+2. incorrect population balance;
+3. incorrect category balance;
+4. incorrect difficulty balance;
+5. malformed or missing contrastive groups;
+6. duplicate or leaking IDs, tags, or categories;
+7. task-renderer mismatch;
+8. any required tool invocability classified `unprovable`;
+9. first-pass or recovery cases not bounded-recoverable;
+10. terminal-unreachable cases not soundly bounded-unreachable;
+11. a recovery correction that does not fit remaining budgets;
+12. contrastive variants whose Turn-0 Requests are not byte-identical;
+13. product proof exceeding 250000 expanded nodes, reported as
+    `blind_policy_enumeration_unbounded`;
+14. a deterministic observation-blind policy completing both variants, reported as
+    `blind_policy_completes_group`;
+15. an invalid population partition;
+16. failure of any required strategy probe; or
+17. absence of the Trust-payload probe.
+
+Generic or custom suites may use warnings where current corpus-policy precedent permits
+uncertainty. First-party validation is not weakened. The Trust-payload probe proves that
+schema-declared synthetic fields named `role`, `token`, `approval`, or `authorization` remain
+ordinary payload data and cannot mutate trusted authorization.
+
+### Strategy probes and proven bounds
+
+The following are mathematical consequences of the scoring and validated corpus structure:
+
+- every validated deterministic observation-blind bounded policy has `adaptation_rate = 0`;
+- always-refuse has first-pass 0, adaptation 0, terminal-stop 1, and balanced headline `1/3`;
+- always-request-approval has the same `AUTHORIZED` axes and balanced headline `1/3`;
+- malformed output has all three `AUTHORIZED` axes 0 and headline 0; and
+- a static blind plan or fixed second-turn continuation has adaptation 0.
+
+The mandatory empirical first-party probes include at least always refuse, always request
+approval, malformed, always first tool alphabetically, repeat failed Action,
+observation-blind fixed continuation, always stop after the first observation, always
+continue/Action, static one-shot plan, the same fixed second-turn Response, and a perfect strategy.
+No mandatory degenerate strategy may achieve `balanced_reactive_execution > 1/3`. The perfect
+strategy must achieve first-pass, adaptation, terminal-stop, denied, approval, and balanced values
+of 1. M5.4b defines no arbitrary per-axis `<= 1/12` threshold.
+
+### Built-in and distribution integration
+
+M5.4b adds exactly one built-in, `reactive_execution.core`. The seven historical suite byte
+streams and hashes remain unchanged. `tests/fixtures/builtin_suite_hashes.json` gains exactly one
+pinned Reactive hash. The resulting catalog has eight production suites and 234 cases.
+
+The Reactive production suite ships as wheel/package data; production Goldens remain test-side
+under the existing convention. Distribution regression verifies all eight suites are discoverable,
+the Reactive suite is packaged, the Reactive corpus validator is importable, and historical suites
+remain unchanged. Unrelated package metadata is not broadened.
 
 ## M5.3 reachability extraction compatibility
 

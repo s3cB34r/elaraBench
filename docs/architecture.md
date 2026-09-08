@@ -186,4 +186,5 @@ are defined in [Action Recovery](action-recovery.md). Bounded proof and the prod
 offline validation machinery, not runtime tool execution. A causal provider -> tool -> provider loop,
 runtime-generated observations, and additional model turns require M5.4. The implemented M5.4a
 bounded causal runtime and physical-v4 evidence foundation is defined in [Reactive Execution](reactive-execution.md).
-M5.4b scoring, aggregation, and production corpus work remain deferred.
+The same authoritative document specifies the ratified, still-deferred M5.4b capability-conditioned
+scoring, Summary v7, observation-conditioned proof, and production-corpus architecture.

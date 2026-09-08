@@ -43,8 +43,9 @@ contracts. The [M5.2 Static Action Compliance design](docs/action-compliance.md)
 boundaries. M5.3b completes the one-request Action Recovery benchmark with evaluator `1.1.0`,
 bounded corpus proof, summary schema v6, and the production `action_recovery.core` suite. The
 implemented M5.4a [Reactive Execution architecture](docs/reactive-execution.md) provides bounded
-causal multi-turn synthetic execution and physical-v4 evidence. M5.4b scoring, aggregation, and
-production corpus work remain deferred.
+causal multi-turn synthetic execution and physical-v4 evidence. The same authoritative document
+specifies the ratified M5.4b scoring, Summary v7, observation-conditioned proof, and production
+corpus architecture; M5.4b remains unimplemented.
 
 ## First-party benchmarks
 

@@ -174,6 +174,23 @@ case. A same-tool/different-argument probe demonstrates Action identity and R5 p
 synthetic transitions are argument-independent, its successful R3 control also uses a genuine
 prerequisite transition rather than attributing causal state change to the argument.
 
+### M5.4b Reactive Execution corpus authoring
+
+The ratified, unimplemented `reactive_execution.core` profile and its complete normative authoring
+rules are defined in [Reactive Execution](reactive-execution.md). Its 48 cases partition as
+12 first-pass, 12 recovery-opportunity, 12 terminal-unreachable, six DENIED, and six
+REQUIRES_APPROVAL. Six two-variant recovery groups differ only in hidden initial state and have
+byte-identical canonical Turn-0 Requests.
+
+Authors must use the authoritative deterministic Reactive renderer rather than manually paraphrase
+production prompts. It exposes the objective, tools, schemas, preconditions, effects,
+authorization instruction, and budgets while withholding hidden state values, machine
+`expected_state`, capability, group identity, reachability, expected outcome, and termination.
+The production validator owns exact population/category/difficulty balance, bounded reachability,
+the 250000-node deterministic blind-policy proof, leakage checks, Goldens, and mandatory strategy
+probes. The existing test-only Reactive fixture remains foundation evidence and is not production
+corpus data.
+
 ## Fixtures and safety
 
 All initial M3 core cases are self-contained and use no fixtures. A future
