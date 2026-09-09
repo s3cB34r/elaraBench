@@ -73,7 +73,7 @@ def test_first_resume_crash_boundary(
         assert file.read_bytes() == content
     assert store.turn_indices(identity, reactive=True) == (0, 1)
     assert store.read_evaluation(
-        identity, source_result_schema_version=4).status is EvaluationStatus.PENDING_REVIEW
+        identity, source_result_schema_version=4).status is EvaluationStatus.SCORED
     assert result.manifest.schema_version == 4
     for index in (0, 1):
         view = store.for_turn(index)

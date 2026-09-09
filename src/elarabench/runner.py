@@ -66,10 +66,13 @@ from elarabench.reactive_execution import (
     ReactiveEvaluationContext,
     ReactiveExecutionConfig,
     ReactiveTurnEvidence,
+    reactive_case_expectations,
+    validate_reactive_evaluation,
 )
 from elarabench.run_identity import compute_run_fingerprint, generate_run_id
 from elarabench.scoring import (
     RunIntegrityError,
+    _reactive_context,
     open_run_path,
     regenerate_summary,
     validate_stored_run,
@@ -199,6 +202,7 @@ class Runner:
                 minimum_scored_coverage=configuration.minimum_scored_coverage,
             )
             validate_benchmark_snapshot(snapshot)
+            reactive_case_expectations(snapshot.suite.cases)
             physical_schema = 4 if any(
                 case.evaluation.type == "reactive_execution" for case in snapshot.suite.cases
             ) else 3
@@ -296,6 +300,13 @@ class Runner:
                 )
             if not isinstance(snapshot, BenchmarkSnapshot):
                 raise RunnerError("schema-v3 manifest has an incompatible benchmark snapshot")
+            try:
+                reactive_case_expectations(snapshot.suite.cases)
+            except ValueError as error:
+                raise RunnerError(
+                    "run predates M5.4b population semantics or has incomplete scoring metadata; "
+                    f"start a new run: {error}"
+                ) from error
             repaired_event_tail = store.repair_event_log_tail()
             removed = store.cleanup_temporary_files()
             requests = self._resolve_requests(snapshot, manifest.configuration)
@@ -661,6 +672,27 @@ class Runner:
         """Read every finalized artifact before mutating lifecycle state on resume."""
         cases = {case.id: case for case in snapshot.suite.cases}
         for identity, expected in requests:
+            if cases[identity.case_id].evaluation.type == "reactive_execution":
+                if store.turn_indices(identity, reactive=True):
+                    context = _reactive_context(store, identity, cases[identity.case_id].evaluation)
+                    context = ReactiveEvaluationContext(
+                        specification=context.specification, identity=identity,
+                        initial_request=expected, turns=context.turns,
+                    )
+                    ReactiveTurnEngine.replay(context)
+                    # Exact persisted bytes are validated even for an unfinished final Request.
+                    for index, turn in enumerate(context.turns):
+                        self._ensure_request(
+                            store.for_turn(index), identity, turn.request, "validate"
+                        )
+                    if store.evaluation_exists(identity):
+                        result = store.read_evaluation(identity, source_result_schema_version=4)
+                        if result.evaluator_version != "1.1.0":
+                            raise RunnerError(
+                                "stale Reactive evaluation; run explicit score upgrade"
+                            )
+                        validate_reactive_evaluation(result, context)
+                continue
             if store.request_exists(identity):
                 actual = store.read_request(identity)
                 if hash_generation_request(actual) != hash_generation_request(expected):

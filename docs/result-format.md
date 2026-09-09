@@ -20,7 +20,8 @@ runs/<run-id>/
 └── summary.json
 ```
 
-New runs use result schema v3. Schema v3 makes Thinking policy and provider-control provenance
+New runs use physical result schema v4 when Reactive Execution is configured, otherwise v3.
+Schema v3 makes Thinking policy and provider-control provenance
 canonical and changes fingerprint semantics. Historical M2 schema-v2 runs are verified with
 their original models and hashes: `score` and `summarize` remain available, while `run --resume`
 is rejected because v2 predates explicit Thinking identity. Canonical v2 files are never migrated
@@ -39,12 +40,12 @@ individual evaluation, benchmark definition, or identity field.
 
 Three version fields have deliberately separate meanings:
 
-- `manifest.json.schema_version` is the physical result schema (`2` historically, `3` now).
+- `manifest.json.schema_version` is the physical result schema (`2` historically, `3` or `4` now).
 - `evaluation.json.source_result_schema_version` identifies the physical canonical evidence that
   was evaluated. Composite children inherit the same value recursively.
 - `summary.json.schema_version` is the summary artifact's own shape. It is `4` by default, `5`
-  for summaries carrying normative Action Compliance data, and `6` for summaries carrying Action
-  Recovery data.
+  for summaries carrying normative Action Compliance data, `6` for Action Recovery, and `7` for
+  scored Reactive Execution. Higher versions take precedence when families coexist.
   `summary.json.source_result_schema_version` identifies its physical source.
 
 Summary artifact shape does not establish physical provenance. Trusted run reads validate the
@@ -145,17 +146,22 @@ request precedes canonical samples.
 
 ## Summary and coverage
 
-Summary schema version 4 remains the default. A current physical v3 run without Action Compliance
+Summary semantic schema version 4 remains the default when no scored Action Compliance,
+Action Recovery, or Reactive Execution summary exists. A current physical v3 run without Action
+Compliance or Action Recovery
 data produces `schema_version: 4` and `source_result_schema_version: 3`; a regenerated historical
-v2 summary without Action Compliance produces `schema_version: 4` and
+v2 summary without Action Compliance or Action Recovery produces `schema_version: 4` and
 `source_result_schema_version: 2`. Schema v4 adds optional `refusal_compliance`; it is null when
 compatible evaluator evidence is absent. A summary carrying normative Action Compliance scoring
 and summary semantics uses content-dependent schema version 5 and includes `action_compliance`.
 A summary carrying Action Recovery uses v6 and includes `action_recovery`; mixed suites may also
-carry Action Compliance diagnostics in v6. Current v4/v5/v6 summaries require explicit source provenance. The only inferred provenance is
+carry Action Compliance diagnostics in v6. A scored Reactive Execution summary uses v7 and
+includes `reactive_execution`.
+Current v4/v5/v6/v7 summaries require explicit source provenance. The only inferred provenance is
 for a provenance-less schema-v2 summary owned by a physical-v2 run. Historical v2/v3 summaries are
-read-only compatibility objects. The current writer accepts v4 summaries without Action or
-Recovery data, v5 summaries with Action Compliance, and v6 summaries with Action Recovery. Absent
+read-only compatibility objects. The current writer accepts v4 summaries without Action Compliance,
+Action Recovery, or scored Reactive data; v5 summaries with Action Compliance; v6 summaries with
+Action Recovery; and v7 summaries with scored Reactive Execution. Absent
 Recovery data is omitted, so v4/v5 payloads do not gain `action_recovery: null`. Explicit rescore
 or summary regeneration is the upgrade path.
 
@@ -245,6 +251,41 @@ cases. Their complete-population headline values are equally averaged as
 `balanced_action_recovery`. Separate denied and approval compliance rates remain diagnostics and
 never enter that headline. Pure Recovery suites expose the balanced value as generic score and
 partial score; mixed evaluator-family suites expose neither generic value.
+
+### Reactive Execution Summary v7
+
+Implemented M5.4b uses **Summary semantic schema version 7**, while Reactive runs retain
+**physical result schema 4** (`source_result_schema_version: 4`). There is no physical result
+schema v7. The `reactive_execution` field contains `ReactiveExecutionSummary` with semantic
+`reactive_execution_summary_v1`, scoring semantic `reactive_execution_scoring_v1`, and evaluator
+`reactive_execution` version `1.1.0` (`SCORED` behavioral results).
+
+Summary version precedence is content-dependent:
+
+```text
+v7 if a Reactive scored summary exists
+else v6 if an Action Recovery summary exists
+else v5 if an Action Compliance summary exists
+else v4
+```
+
+Historical v4/v5/v6 semantics remain unchanged. Absent Reactive data is omitted rather than
+serialized as `reactive_execution: null`. Historical M5.4a evaluator `1.0.0` pending evidence
+retains its unscored lifecycle and does not produce a Reactive scored summary.
+
+The Reactive summary records eligible case IDs, expected and observed case counts, expected and
+scored sample counts, coverage, E1–E10 sample counts and repeat-first case outcome masses. It
+includes first-pass completion (E5 only), adaptation (E5+E6, minimum across each contrastive pair),
+and terminal stopping (E9 only), plus denied and approval compliance coverage gates. Futile-repeat,
+premature-stop, and incomplete rates and contrastive/complete group counts are diagnostics.
+`observed_case_count` counts cases with scored evidence. `balanced_reactive_execution` equally
+averages the three authorized axes when all five populations have complete coverage.
+
+For pure Reactive suites, generic `score` and `partial_score` equal the balanced headline at full
+coverage. With partial coverage, `score` is null; `partial_score` requires all five populations to
+be nonempty and all partial axes defined. Mixed evaluator-family suites expose neither generic
+value. See [Reactive Execution](reactive-execution.md#reactive-summary-and-summary-schema-v7) for
+the full contract.
 
 Refusal-aware evaluations retain the generic `EvaluationResult` shape. Orthogonal expected and
 observed behavior, protocol and completion status, detection source, reason/redirect evidence,

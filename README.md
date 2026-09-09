@@ -44,12 +44,13 @@ boundaries. M5.3b completes the one-request Action Recovery benchmark with evalu
 bounded corpus proof, summary schema v6, and the production `action_recovery.core` suite. The
 implemented M5.4a [Reactive Execution architecture](docs/reactive-execution.md) provides bounded
 causal multi-turn synthetic execution and physical-v4 evidence. The same authoritative document
-specifies the ratified M5.4b scoring, Summary v7, observation-conditioned proof, and production
-corpus architecture; M5.4b remains unimplemented.
+specifies implemented M5.4b scoring, Summary v7, observation-conditioned proof, and the production
+corpus. The current `reactive_execution` evaluator is version `1.1.0` with `SCORED` behavioral
+results.
 
 ## First-party benchmarks
 
-ElaraBench includes seven original, public, deterministic suites:
+ElaraBench includes eight original, public, deterministic suites:
 
 | Suite | Version | Cases | Categories | Recommended output cap |
 | --- | --- | ---: | ---: | ---: |
@@ -60,15 +61,16 @@ ElaraBench includes seven original, public, deterministic suites:
 | `refusal_compliance.core` | 1.0.0 | 54 | 8 | 192 tokens |
 | `action_compliance.core` | 1.0.0 | 36 | 6 | 192 tokens |
 | `action_recovery.core` | 1.0.0 | 36 | 6 | 256 tokens |
+| `reactive_execution.core` | 1.0.0 | 48 | 6 | 512 tokens |
 
-All seven use equal case weights, Thinking disabled as the canonical suite policy, a 120-second
+All eight use equal case weights, Thinking disabled as the canonical suite policy, a 120-second
 timeout, and self-contained prompts with no fixtures or network requirements. The benchmark data
 are dedicated under CC0-1.0 separately from the Python framework. `coding.core` measures static
 code analysis and never executes model-generated code. `cybersecurity.core` uses synthetic,
 defensive static evidence and performs no scanning, exploitation, or live-system interaction.
-Interactive agentic tool-use, autonomous agent loops, real or sandboxed tool execution, and
-multi-turn action execution benchmarks remain later work. ElaraBench may instead evaluate static
-action-plan compliance from a single stored provider response, using provider-neutral structured
+Interactive agentic tool-use, autonomous agent loops, and real or sandboxed tool execution remain
+later work. Bounded multi-turn synthetic Reactive Execution is implemented. ElaraBench also evaluates
+static action-plan compliance from a single stored provider response, using provider-neutral structured
 plans, externally defined authorization state, and deterministic simulation only.
 
 `refusal_compliance.core` is a static, no-judge behavioral suite: 42 deterministic completion
@@ -243,10 +245,10 @@ python -m pytest
 
 ## Project status
 
-ElaraBench v0.2.1 plus M3, M4.1, M4.2a, M5.1, and M5.2 includes local model
+ElaraBench v0.2.1 through M5.4b includes local model
 execution, trustworthy same-benchmark and verified cross-version intersection comparison, and
-seven first-party benchmark suites totaling 186 cases. The engine provides the deterministic core, a
-synchronous concurrency-one runner, complete schema-v3 run artifacts, bounded retries, durable
+eight first-party benchmark suites totaling 234 cases. The engine provides the deterministic core, a
+synchronous concurrency-one runner, complete physical-v3/v4 run artifacts, bounded retries, durable
 attempt history, Ctrl-C
 recovery, strict resume, environment discovery, coverage-aware summaries, offline rescoring, and
 a native Ollama provider. Historical M2 schema-v2 runs remain available to offline `score` and

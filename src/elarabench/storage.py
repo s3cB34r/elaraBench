@@ -416,10 +416,12 @@ class RunArtifactStore:
 
     def replace_summary(self, summary: AggregationSummary) -> None:
         """Explicitly and atomically replace the reproducible derived summary."""
-        if summary.schema_version not in {4, 5, 6}:
+        if summary.schema_version not in {4, 5, 6, 7}:
             raise ArtifactStoreError(
-                "current summary writer only accepts summary schema v4, v5, or v6"
+                "current summary writer only accepts summary schema v4, v5, v6, or v7"
             )
+        if (summary.schema_version == 7) != (summary.reactive_execution is not None):
+            raise ArtifactStoreError("summary schema v7 requires Reactive analysis exclusively")
         if summary.schema_version < 6 and summary.action_recovery is not None:
             raise ArtifactStoreError(
                 "summary schemas before v6 cannot contain Recovery analysis"

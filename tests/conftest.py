@@ -32,7 +32,7 @@ class ReactiveHarness:
 
     def suite(self, *, mixed=False, ordinary=False):
         base = load_benchmark_suite("tests/fixtures/tiny_suite")
-        config = self.config()
+        config = self.config(capability="first_pass", objective=self.fixture["objective"])
         case = BenchmarkCase.model_validate({
             "id": "reactive", "category": "synthetic",
             "messages": [

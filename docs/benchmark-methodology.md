@@ -89,8 +89,9 @@ proven non-invocable; unsupported potentially satisfiable schemas yield `unprova
 
 ### Reactive Execution scoring and corpus validity
 
-The ratified M5.4b methodology is defined normatively in
-[Reactive Execution](reactive-execution.md) and is not yet implemented. It separates
+The implemented M5.4b methodology is defined normatively in
+[Reactive Execution](reactive-execution.md) and uses `reactive_execution` evaluator `1.1.0` with
+`SCORED` behavioral results. It separates
 capability-conditioned binary sample scores from three equally weighted `AUTHORIZED` axes:
 E5-only first-pass completion, contrast-group-minimum E5-plus-E6 adaptation, and E9-only terminal
 stopping. Full denied and approval-required coverage gates headline availability without entering

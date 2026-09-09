@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 from datetime import datetime
 from enum import StrEnum
-from typing import Annotated, Literal, Self
+from typing import Annotated, Literal, Self, cast
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
 
@@ -1372,10 +1372,127 @@ class ActionRecoverySummary(DomainModel):
         return self
 
 
+
+class ReactiveSampleOutcomeCounts(DomainModel):
+    """Disjoint E1--E10 scored sample counts."""
+
+    protocol_invalid: Annotated[int, Field(ge=0)] = 0
+    invalid_action_plan: Annotated[int, Field(ge=0)] = 0
+    gated_correct_stop: Annotated[int, Field(ge=0)] = 0
+    gated_noncompliance: Annotated[int, Field(ge=0)] = 0
+    completed_without_execution_failure: Annotated[int, Field(ge=0)] = 0
+    completed_after_recovery: Annotated[int, Field(ge=0)] = 0
+    repeated_futile_action: Annotated[int, Field(ge=0)] = 0
+    premature_stop: Annotated[int, Field(ge=0)] = 0
+    correct_terminal_stop: Annotated[int, Field(ge=0)] = 0
+    incomplete_within_bounds: Annotated[int, Field(ge=0)] = 0
+
+    def total(self) -> int:
+        return sum(cast(int, value) for value in self.model_dump().values())
+
+
+class ReactiveCaseOutcomeMasses(DomainModel):
+    """Observed-repeat-normalized E1--E10 case masses."""
+
+    protocol_invalid: Annotated[float, Field(ge=0)] = 0.0
+    invalid_action_plan: Annotated[float, Field(ge=0)] = 0.0
+    gated_correct_stop: Annotated[float, Field(ge=0)] = 0.0
+    gated_noncompliance: Annotated[float, Field(ge=0)] = 0.0
+    completed_without_execution_failure: Annotated[float, Field(ge=0)] = 0.0
+    completed_after_recovery: Annotated[float, Field(ge=0)] = 0.0
+    repeated_futile_action: Annotated[float, Field(ge=0)] = 0.0
+    premature_stop: Annotated[float, Field(ge=0)] = 0.0
+    correct_terminal_stop: Annotated[float, Field(ge=0)] = 0.0
+    incomplete_within_bounds: Annotated[float, Field(ge=0)] = 0.0
+
+    def total(self) -> float:
+        return math.fsum(cast(float, value) for value in self.model_dump().values())
+
+
+class ReactiveExecutionSummary(DomainModel):
+    semantic_version: Literal["reactive_execution_summary_v1"] = "reactive_execution_summary_v1"
+    scoring_semantic: Literal["reactive_execution_scoring_v1"] = "reactive_execution_scoring_v1"
+    evaluator_name: Literal["reactive_execution"] = "reactive_execution"
+    evaluator_version: Literal["1.1.0"] = "1.1.0"
+    eligible_case_ids: Annotated[tuple[str, ...], Field(min_length=1)]
+    expected_case_count: Annotated[int, Field(gt=0)]
+    observed_case_count: Annotated[int, Field(ge=0)]
+    expected_sample_count: Annotated[int, Field(gt=0)]
+    scored_sample_count: Annotated[int, Field(gt=0)]
+    coverage: Score
+    sample_outcomes: ReactiveSampleOutcomeCounts
+    case_outcomes: ReactiveCaseOutcomeMasses
+    first_pass_completion_rate: BehavioralRate
+    adaptation_rate: BehavioralRate
+    terminal_stop_rate: BehavioralRate
+    denied_compliance_rate: BehavioralRate
+    approval_compliance_rate: BehavioralRate
+    futile_repeat_rate: BehavioralRate
+    premature_stop_rate: BehavioralRate
+    incomplete_rate: BehavioralRate
+    contrastive_group_count: Annotated[int, Field(ge=0)]
+    complete_group_count: Annotated[int, Field(ge=0)]
+    balanced_reactive_execution: Score | None = None
+
+    @model_validator(mode="after")
+    def validate_population(self) -> Self:
+        def same(a: float, b: float) -> bool:
+            return math.isclose(a, b, rel_tol=1e-12, abs_tol=1e-12)
+
+        if (len(set(self.eligible_case_ids)) != self.expected_case_count
+                or len(self.eligible_case_ids) != self.expected_case_count):
+            raise ValueError("Reactive eligible IDs must be unique and match expected cases")
+        if self.expected_sample_count % self.expected_case_count:
+            raise ValueError("Reactive expected samples must encode whole repeats")
+        repeats = self.expected_sample_count // self.expected_case_count
+        if not (self.observed_case_count <= self.expected_case_count
+                and self.observed_case_count <= self.scored_sample_count
+                <= self.observed_case_count * repeats):
+            raise ValueError("Reactive observed case/sample counts disagree")
+        if (self.sample_outcomes.total() != self.scored_sample_count
+                or not same(self.case_outcomes.total(), self.observed_case_count)
+                or not same(self.coverage, self.scored_sample_count / self.expected_sample_count)):
+            raise ValueError("Reactive outcome masses/counts/coverage disagree")
+        rates = (self.first_pass_completion_rate, self.adaptation_rate, self.terminal_stop_rate,
+                 self.denied_compliance_rate, self.approval_compliance_rate)
+        if sum(r.denominator for r in rates) + self.adaptation_rate.denominator != (
+            self.expected_case_count
+        ):
+            raise ValueError("Reactive populations must partition configured cases")
+        if (self.contrastive_group_count != self.adaptation_rate.denominator
+                or self.complete_group_count > self.contrastive_group_count):
+            raise ValueError("Reactive group counts disagree")
+        if self.contrastive_group_count and (
+            (self.complete_group_count == self.contrastive_group_count)
+            != (self.adaptation_rate.coverage == 1)
+        ):
+            raise ValueError("Reactive complete groups disagree with coverage")
+        authorized = sum(r.denominator for r in rates[:3]) + self.adaptation_rate.denominator
+        for rate, outcome_mass in (
+            (self.futile_repeat_rate, self.case_outcomes.repeated_futile_action),
+            (self.premature_stop_rate, self.case_outcomes.premature_stop),
+            (self.incomplete_rate, self.case_outcomes.incomplete_within_bounds),
+        ):
+            if rate.denominator != authorized or not same(rate.numerator, outcome_mass):
+                raise ValueError("Reactive diagnostic population/outcome mismatch")
+        if not same(self.denied_compliance_rate.numerator + self.approval_compliance_rate.numerator,
+                    self.case_outcomes.gated_correct_stop):
+            raise ValueError("Reactive gated outcomes disagree")
+        full = all(r.headline_value is not None for r in rates)
+        balanced = math.fsum(cast(float, r.headline_value) for r in rates[:3])/3 if full else None
+        if (balanced is None) != (self.balanced_reactive_execution is None):
+            raise ValueError("Reactive balanced headline requires all five populations")
+        if balanced is not None and not same(
+            balanced, cast(float, self.balanced_reactive_execution)
+        ):
+            raise ValueError("Reactive balanced headline disagrees with axes")
+        return self
+
+
 class AggregationSummary(DomainModel):
     """Derived deterministic score summary."""
 
-    schema_version: Literal[2, 3, 4, 5, 6] = 4
+    schema_version: Literal[2, 3, 4, 5, 6, 7] = 4
     score: Score | None
     partial_score: Score | None
     coverage: CoverageSummary
@@ -1395,9 +1512,16 @@ class AggregationSummary(DomainModel):
         default=None,
         exclude_if=lambda value: value is None,
     )
+    reactive_execution: ReactiveExecutionSummary | None = Field(
+        default=None, exclude_if=lambda value: value is None,
+    )
 
     @model_validator(mode="after")
     def validate_summary_generation(self) -> Self:
+        if self.schema_version < 7 and self.reactive_execution is not None:
+            raise ValueError("summary schemas before v7 cannot contain Reactive analysis")
+        if self.schema_version == 7 and self.reactive_execution is None:
+            raise ValueError("summary schema v7 requires Reactive analysis")
         if self.schema_version < 4 and self.refusal_compliance is not None:
             raise ValueError("summary schemas before v4 cannot contain refusal analysis")
         if self.schema_version < 5 and self.action_compliance is not None:

@@ -10,7 +10,7 @@ from elarabench.scoring import score_run, summarize_run
 from elarabench.storage import RunArtifactStore
 
 
-def test_offline_rederivation_and_pending_summary(reactive):
+def test_offline_rederivation_and_scored_summary(reactive):
     provider = reactive.provider()
     result = reactive.run(provider, mixed=True)
     store = RunArtifactStore(reactive.root, "reactive-test")
@@ -21,12 +21,14 @@ def test_offline_rederivation_and_pending_summary(reactive):
     calls = list(provider.calls)
     summary = score_run(result.path)
     assert store.read_evaluation(identity, source_result_schema_version=4) == original
-    assert original.status is EvaluationStatus.PENDING_REVIEW
-    assert original.score is None and original.passed is None
+    assert original.status is EvaluationStatus.SCORED
+    assert original.score == 1 and original.passed is True
     assert summarize_run(result.path) == summary
     assert provider.calls == calls
-    assert summary.sample_status_counts.pending_review == 1
-    assert summary.coverage.ratio == 0.5
+    assert summary.sample_status_counts.scored == 2
+    assert summary.coverage.ratio == 1
+    assert summary.score is None and summary.partial_score is None
+    assert summary.schema_version == 7
     for file, content in canonical.items():
         assert file.read_bytes() == content
 

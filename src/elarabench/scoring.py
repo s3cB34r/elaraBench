@@ -43,6 +43,7 @@ from elarabench.models import (
 from elarabench.reactive_execution import (
     ReactiveEvaluationContext,
     ReactiveTurnEvidence,
+    reactive_case_expectations,
     validate_reactive_evaluation,
 )
 from elarabench.refusal_compliance import expectation_from_specification
@@ -220,6 +221,9 @@ def regenerate_summary(
             },
             action_case_expectations=action_expectations,
             recovery_case_expectations=recovery_expectations,
+            reactive_case_expectations=reactive_case_expectations(
+                snapshot.suite.cases, strict=False
+            ),
             configured_evaluator_types={
                 case.id: case.evaluation.type for case in snapshot.suite.cases
             },
@@ -245,6 +249,10 @@ def score_run(path: str | Path, *, clock: Clock = utc_now) -> AggregationSummary
     """Re-evaluate canonical responses and rebuild the summary without a provider."""
     store = open_run_path(path)
     manifest, snapshot = validate_stored_run(store)
+    try:
+        reactive_case_expectations(snapshot.suite.cases)
+    except ValueError as error:
+        raise RunIntegrityError(str(error)) from error
     invocation_id = f"score-{uuid4().hex}"
     store.record_event(
         timestamp=clock(),

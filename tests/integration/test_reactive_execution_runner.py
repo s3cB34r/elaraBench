@@ -25,8 +25,8 @@ def test_live_multiturn_and_retries(reactive, retry_turn):
     assert [m.role.value for m in request.messages] == ["system", "user", "assistant", "user"]
     assert request.messages[2].content == store.read_response(identity).text
     evaluation = store.read_evaluation(identity, source_result_schema_version=4)
-    assert evaluation.status is EvaluationStatus.PENDING_REVIEW
-    assert evaluation.score is None and evaluation.passed is None
+    assert evaluation.status is EvaluationStatus.SCORED
+    assert evaluation.score == 1 and evaluation.passed is True
     assert not list(result.path.glob("samples/*/*/request.json"))
 
 

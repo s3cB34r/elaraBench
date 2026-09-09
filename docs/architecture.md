@@ -96,8 +96,9 @@ reuse. Neither service constructs a provider, reads the original suite directory
 network.
 Evaluation context carries the physical source result-schema version; composite dispatch forwards
 it unchanged at every nesting level. Current summaries use artifact schema version 4 by default
-and version 5 when they carry Action Compliance summary semantics; both separately record whether
-their canonical source run was result schema 2 or 3.
+and version 7 for scored Reactive Execution, otherwise 6 for Action Recovery, otherwise 5 for
+Action Compliance summary semantics. Summaries separately record whether their canonical
+source run was physical result schema 2, 3, or 4.
 Artifact loading receives the physical manifest schema explicitly. A versionless historical v2
 evaluation is interpreted as source schema 2 in memory and is not silently migrated on read;
 current v3 evaluation writes carry the field explicitly. Summary reads and writes likewise
@@ -105,7 +106,8 @@ validate source provenance against the owning manifest. Only a physical-v2 run m
 omitted provenance of a historical summary-v2 payload; context-free summary parsing does not
 invent that ownership fact.
 
-New physical runs use result schema v3. A narrow compatibility layer validates historical M2
+New physical runs use result schema v4 when Reactive Execution is configured, otherwise v3. A
+narrow compatibility layer validates historical M2
 schema-v2 manifests, snapshots, request hashes, and fingerprint schema v1 without injecting v3
 defaults. Those runs can be scored and summarized, but cannot resume because doing so would mix
 pre-Thinking and explicit-Thinking execution semantics. Canonical v2 evidence remains immutable.
@@ -186,5 +188,7 @@ are defined in [Action Recovery](action-recovery.md). Bounded proof and the prod
 offline validation machinery, not runtime tool execution. A causal provider -> tool -> provider loop,
 runtime-generated observations, and additional model turns require M5.4. The implemented M5.4a
 bounded causal runtime and physical-v4 evidence foundation is defined in [Reactive Execution](reactive-execution.md).
-The same authoritative document specifies the ratified, still-deferred M5.4b capability-conditioned
-scoring, Summary v7, observation-conditioned proof, and production-corpus architecture.
+The same authoritative document specifies implemented M5.4b capability-conditioned scoring with
+`reactive_execution` evaluator `1.1.0` (`SCORED`), Summary v7, observation-conditioned proof, and
+`reactive_execution.core` v1.0.0: 48 cases across six categories. The production catalog now has
+eight Built-ins and 234 cases. Summary v7 does not change physical result schema v4.

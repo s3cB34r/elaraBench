@@ -13,6 +13,8 @@ from typing import cast
 PROJECT_ROOT = Path(__file__).parents[2]
 EXPECTED_WHEEL_FILES = {
     "elarabench/builtin_benchmarks/LICENSE",
+    "elarabench/builtin_benchmarks/reactive_execution/core-v1/suite.yaml",
+    "elarabench/builtin_benchmarks/reactive_execution/core-v1/cases.jsonl",
     "elarabench/builtin_benchmarks/reasoning/core-v1/suite.yaml",
     "elarabench/builtin_benchmarks/reasoning/core-v1/cases.jsonl",
     "elarabench/builtin_benchmarks/instruction_following/core-v1/suite.yaml",
@@ -29,6 +31,7 @@ EXPECTED_WHEEL_FILES = {
     "elarabench/builtin_benchmarks/action_recovery/core-v1/cases.jsonl",
 }
 EXPECTED_HASHES = {
+    "reactive_execution.core": "6c0d74ddebe5f94e68498c4b31eb4cd494272f9ef79b52b8b0b094776890f498",
     "reasoning.core": "76e8699add4c94921e40215b85b2b8870abf25023dff02bff92b0a51e6021b3c",
     "instruction_following.core": (
         "2dc75a0d7fa60c0503e1430cb797d35f7310cff1e325b8468b2d92bdaac10b39"
@@ -109,6 +112,7 @@ def test_wheel_contains_and_runs_bundled_suites(tmp_path: Path) -> None:
     assert any("builtin_benchmarks/action_recovery/" in name for name in names)
     assert not any("builtin_suite_goldens" in name for name in names)
     assert not any(name.startswith("tests/") for name in names)
+    assert not any("fixtures/reactive_execution/" in name for name in names)
 
     installed = tmp_path / "installed"
     install = completed(
@@ -142,19 +146,15 @@ installed = pathlib.Path(sys.argv[1]).resolve()
 sys.path.insert(0, str(installed))
 import elarabench
 from elarabench.benchmark import load_benchmark_suite
-from elarabench.builtin import get_builtin_suite_path
+from elarabench.builtin import available_builtin_suites, get_builtin_suite_path
+from elarabench.reactive_execution_corpus import validate_reactive_execution_corpus
+
+assert callable(validate_reactive_execution_corpus)
 
 assert pathlib.Path(elarabench.__file__).resolve().is_relative_to(installed)
 result = {}
-for suite_id in (
-    "reasoning.core",
-    "instruction_following.core",
-    "coding.core",
-    "cybersecurity.core",
-    "refusal_compliance.core",
-    "action_compliance.core",
-    "action_recovery.core",
-):
+assert len(available_builtin_suites()) == 8
+for suite_id in available_builtin_suites():
     path = get_builtin_suite_path(suite_id)
     assert path.is_relative_to(installed)
     loaded = load_benchmark_suite(path)
@@ -171,6 +171,9 @@ print(json.dumps(result, sort_keys=True))
     )
     assert probe.returncode == 0, probe.stdout + probe.stderr
     result = cast(dict[str, dict[str, object]], json.loads(probe.stdout))
+    assert len(result) == 8
+    assert sum(cast(int, data["case_count"]) for data in result.values()) == 234
+    assert result["reactive_execution.core"]["case_count"] == 48
     assert result["reasoning.core"]["case_count"] == 18
     assert result["instruction_following.core"]["case_count"] == 18
     assert result["coding.core"]["case_count"] == 12

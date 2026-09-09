@@ -3,9 +3,9 @@
 ## Status and authority
 
 This document is the architectural source of truth for M5.4 Reactive Execution. M5.4a is
-implemented. The M5.4b scoring and production-corpus architecture is ratified below but remains
-unimplemented. These requirements are normative for maintenance and future implementation;
-implementation work must not silently violate them. A required semantic change must be handled as
+implemented as the runtime/evidence foundation. M5.4b scoring and the production corpus are also
+implemented. These requirements are normative for maintenance; implementation work must not
+silently violate them. A required semantic change must be handled as
 an explicit architecture revision before behavior is modified.
 
 M5.4 introduces bounded, deterministic, multi-turn synthetic execution beneath the existing
@@ -44,7 +44,7 @@ real tools.
 
 ## Delivery stages
 
-### M5.4a — Ratified runtime and evidence scope
+### M5.4a — Implemented runtime and evidence foundation
 
 M5.4a contains exactly:
 
@@ -66,9 +66,9 @@ M5.4a contains exactly:
 M5.4a has no scoring, aggregation, Reactive summary, production corpus, built-in suite, production
 hash, or wheel integration.
 
-### M5.4b — Ratified, deferred scoring and production scope
+### M5.4b — Implemented scoring and production scope
 
-M5.4b is ratified but not implemented. It contains exactly:
+M5.4b is implemented. It contains exactly:
 
 - evaluator version `1.1.0` and `SCORED` behavior;
 - capability-conditioned binary scoring;
@@ -139,7 +139,7 @@ ordinary Runner path.
 
 The `reactive_execution` evaluator is the sole authority that derives and validates
 `reactive_execution_artifact_v1` and the E1--E10 behavioral outcome. It must do so from canonical
-evidence during the live run, during offline replay, and during a future M5.4b explicit rescore or
+evidence during the live run, during offline replay, and during an M5.4b explicit rescore or
 upgrade, without provider contact.
 
 Existing `EvaluationContext` remains unchanged for all existing evaluator families. M5.4a adds a
@@ -294,7 +294,7 @@ neutral pure primitive. The expected implementation direction is to extract the 
 `src/elarabench/action_recovery_corpus.py` into a neutral module such as
 `synthetic_reachability.py`. `analyze_bounded_recoverability(config)` remains a thin compatibility
 wrapper over that primitive. The extraction is a refactor only: M5.3 semantics, tests, production
-suite content, and all seven current production suite hashes must remain unchanged.
+suite content, and all seven historical production suite hashes must remain unchanged.
 
 Runtime Control reachability uses:
 
@@ -322,7 +322,7 @@ The reachability result maps as follows:
 - `unprovable` -> evaluator `INVALID`, outside the behavioral taxonomy.
 
 `unprovable` must never mean `unrecoverable`. M5.4a requires the pure runtime primitive; production
-proof and validation remain M5.4b work.
+proof and validation are implemented by M5.4b.
 
 ## Observation fairness
 
@@ -357,7 +357,7 @@ For its small test fixture, M5.4a provides one deterministic helper or rendering
 the model-visible synthetic tool description. It covers at least tool identifier, argument schema,
 `requires` conditions, configured budgets, and behavioral-objective placement. This prevents
 case-by-case manual paraphrases from creating accidental mismatches. It is not a production corpus
-renderer; production authoring and validation remain deferred to M5.4b.
+renderer; production authoring and validation are implemented by M5.4b.
 
 ## Canonical runtime observation
 
@@ -1102,7 +1102,7 @@ identity, `ReachabilityResult` fields, `ToolInvocability` classifications,
 witness-under-approximation semantics, and Action Recovery findings behavior exactly. It is a
 behavior-preserving refactor only. The refactor must not alter M5.3 outcomes, scoring, corpus
 behavior, findings, Action Recovery suite contents, or hashes. Acceptance requires all existing
-M5.3 tests to remain green and all seven current built-in hashes to remain unchanged.
+M5.3 tests to remain green and all seven historical built-in hashes to remain unchanged.
 
 ## Compatibility requirements
 
@@ -1111,7 +1111,7 @@ M5.4 must preserve:
 - M5.1 Refusal Compliance;
 - M5.2 Action Compliance;
 - M5.3 Action Recovery;
-- all seven current built-in suite hashes;
+- all seven historical built-in suite hashes;
 - existing Summary schema v4, v5, and v6 semantics;
 - physical v3 evidence behavior for non-Reactive runs;
 - the existing provider API;

@@ -86,7 +86,12 @@ from elarabench.models import (
     ThinkingPolicy,
     TimingMetadata,
 )
-from elarabench.reactive_execution import ReactiveEvaluationContext, ReactiveTurnEvidence
+from elarabench.reactive_execution import (
+    ReactiveEvaluationContext,
+    ReactiveTurnEvidence,
+    reactive_metadata_errors,
+    replay_reactive,
+)
 from elarabench.refusal_compliance import (
     RefusalCaseExpectation,
     derive_refusal_compliance_summary,
@@ -379,12 +384,16 @@ def _load_evidence(
         attempt_hashes: list[tuple[str, ...]] = []
         performance_samples: dict[SampleIdentity, SamplePerformanceEvidence] = {}
         evaluator_unavailable = False
+        reactive_unavailable = reactive_metadata_errors(snapshot.suite.cases)
         for case in snapshot.suite.cases:
             case_evaluator_unavailable = False
             try:
                 evaluator_name, evaluator_version = resolve_evaluator_identity(
                     case.evaluation
                 )
+                if case.id in reactive_unavailable:
+                    # Structural resolution succeeded; only current scoring is unavailable.
+                    raise ValueError(reactive_unavailable[case.id])
                 resolution.append(
                     EvaluatorResolutionEvidence(
                         run_role=role,
@@ -471,6 +480,11 @@ def _load_evidence(
                     )
                 if not reactive:
                     verify_attempt_request_hashes(attempts, entry)
+                elif turn_evidence:
+                    replay_reactive(ReactiveEvaluationContext(
+                        specification=case.evaluation, identity=identity,
+                        initial_request=turn_evidence[0].request, turns=turn_evidence,
+                    ))
                 attempt_hashes.append(
                     tuple(
                         hash_canonical(
