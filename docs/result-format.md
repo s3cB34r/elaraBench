@@ -252,6 +252,21 @@ cases. Their complete-population headline values are equally averaged as
 never enter that headline. Pure Recovery suites expose the balanced value as generic score and
 partial score; mixed evaluator-family suites expose neither generic value.
 
+### Planned M5.5 Summary v8 (not implemented)
+
+The normative [M5.5 design](reactive-failure-recovery.md) is **DESIGNED / RATIFIED, NOT YET
+IMPLEMENTED**. It plans `ReactiveFailureSummary` (`reactive_failure_summary_v1`, scoring semantic
+`reactive_failure_scoring_v1`) as a disjoint `reactive_failure` block. Future Summary semantic
+version precedence is v8 for that block, else v7 Reactive Execution, else v6 Action Recovery,
+else v5 Action Compliance, else v4. Physical result schema remains v4, not v5 or v8.
+
+After implementation, `reactive_execution.core` retains Summary v7 with only its Reactive
+Execution block; planned `reactive_failure.core` uses v8 with only its failure block. A deliberately
+combined Reactive run may contain both blocks in v8, with generic `score=None` and
+`partial_score=None`. Earlier versions must not gain null summary blocks. Failure observations
+remain in existing turn evidence, with deterministic offline replay and no canonical evidence
+rewrite during upgrade. These planned contracts do not change the implemented Summary v7 below.
+
 ### Reactive Execution Summary v7
 
 Implemented M5.4b uses **Summary semantic schema version 7**, while Reactive runs retain

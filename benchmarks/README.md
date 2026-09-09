@@ -26,6 +26,11 @@ and relatively small category
 samples are useful diagnostics, not proof of contamination-free capability or statistically
 precise rankings.
 
+The [M5.5 Reactive Execution Failure Recovery design](../docs/reactive-failure-recovery.md) is
+**DESIGNED / RATIFIED, NOT YET IMPLEMENTED**. It plans `reactive_failure.core` v1.0.0 with 24 cases,
+bringing planned post-implementation totals to nine Built-ins and 258 cases. The available catalog
+above remains eight Built-ins and 234 cases; the planned suite is not yet available.
+
 Canonical local runs use temperature 0, seed 42 when supported, one repeat, Thinking disabled, a
 120-second timeout, no retries, concurrency one, and leave top-p, top-k, and stop unset:
 

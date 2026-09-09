@@ -87,6 +87,13 @@ General autonomous-agent claims, real external tools, persistent external enviro
 human approval workflows, provider-native Tool APIs, cross-model routing or fallback, multi-agent
 execution, synthetic `tool_error`, and transient synthetic tool failures are outside M5.4.
 
+The normative [M5.5 Reactive Execution Failure Recovery design](reactive-failure-recovery.md) is
+**DESIGNED / RATIFIED, NOT YET IMPLEMENTED**. It extends this evaluator with deterministic
+benchmark-generated `execution_failed` behavior; it does not change this document's M5.4 scope,
+E1–E10 semantics, or production corpus. Its corrected product proof includes Control and
+independent failure-contact flags. M5.4 Control remains dead for goal completion, with unchanged
+M5.4 proof verdicts and expanded-node counts required by the future compatibility regressions.
+
 ## Evaluator family and semantic identifiers
 
 Reactive Execution is a new top-level evaluator family named `reactive_execution`. It does not

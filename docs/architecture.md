@@ -192,3 +192,13 @@ The same authoritative document specifies implemented M5.4b capability-condition
 `reactive_execution` evaluator `1.1.0` (`SCORED`), Summary v7, observation-conditioned proof, and
 `reactive_execution.core` v1.0.0: 48 cases across six categories. The production catalog now has
 eight Built-ins and 234 cases. Summary v7 does not change physical result schema v4.
+
+## Planned M5.5 Reactive Execution Failure Recovery
+
+[M5.5 Reactive Execution Failure Recovery](reactive-failure-recovery.md) is the normative
+architecture authority for the **DESIGNED / RATIFIED, NOT YET IMPLEMENTED** extension. It plans
+`reactive_execution` evaluator `1.2.0`, visible failure catalog and hidden trusted schedule,
+failure-contact scoring, and disjoint failure populations in Summary semantic schema v8.
+Physical result schema remains v4. It adds no evaluator family, real tools, provider failure
+semantics, or new orchestration capability. Implemented M5.4 remains evaluator `1.1.0` with eight
+Built-ins and 234 cases; the planned 24-case ninth suite would yield nine Built-ins and 258 cases.

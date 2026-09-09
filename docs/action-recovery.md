@@ -81,8 +81,11 @@ greater than `max_plan_length`, uses only known tools, and contains only actions
 pass existing deterministic static Action Compliance validation. `outcome_per_action` has exactly
 the same length and may contain only `applied`, `precondition_failed`, or `not_executed`.
 
-M5.3 uses Option B: there is no benchmark-supplied `tool_error`. Runtime synthetic tool errors and
-failure injection are deferred to M5.4 with true runtime-generated observations.
+M5.3 uses Option B: there is no benchmark-supplied `tool_error`. M5.4 implements causal
+runtime-generated observations for deterministic precondition failures. Deterministic synthetic
+execution failures are specified by the normative
+[M5.5 Reactive Execution Failure Recovery design](reactive-failure-recovery.md), which is
+**DESIGNED / RATIFIED, NOT YET IMPLEMENTED**; M5.3 semantics remain unchanged.
 
 ## Preceding-attempt consistency replay
 

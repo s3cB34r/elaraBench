@@ -48,6 +48,11 @@ specifies implemented M5.4b scoring, Summary v7, observation-conditioned proof, 
 corpus. The current `reactive_execution` evaluator is version `1.1.0` with `SCORED` behavioral
 results.
 
+[M5.5 Reactive Execution Failure Recovery](docs/reactive-failure-recovery.md) is
+**DESIGNED / RATIFIED, NOT YET IMPLEMENTED**. It plans deterministic benchmark execution failures
+within the existing Reactive evaluator. Current totals remain eight Built-ins and 234 production
+cases; the planned ninth suite would bring post-implementation totals to nine and 258.
+
 ## First-party benchmarks
 
 ElaraBench includes eight original, public, deterministic suites:
