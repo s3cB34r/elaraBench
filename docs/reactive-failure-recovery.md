@@ -182,6 +182,21 @@ Correct terminal Control after permanent execution failure remains E9. Premature
 recovery remains possible remains E8. Provider `ERROR` and evaluator `INVALID` remain outside
 the behavioral taxonomy.
 
+The existing M5.4 per-turn ordering remains unchanged before post-execution classification.
+After execution, classify goal completion first: E11 if execution failure occurred, otherwise
+E6 if precondition failure occurred, otherwise E5. Only if the goal was not reached, classify
+exhaustion when `turns_remaining == 0 OR actions_remaining == 0` in this exact order:
+
+1. E12 if at least one qualifying permanent execution-failure futile-retry occurrence was recorded.
+2. Otherwise E7 if at least one qualifying M5.4 precondition futile-repeat occurrence was recorded.
+3. Otherwise E10.
+
+Thus **E12 > E7 > E10** for exhaustion classification, including when both kinds of occurrence
+were recorded. This ordering affects diagnostic outcome identity only. It MUST NOT alter ordinary
+state, `failure_state`, budgets, capability-success reachability, or the ProductState omission
+proof. All E12/E7/E10 remain dead for M5.5 capability success. Without completion or exhaustion,
+execution continues under the existing turn semantics.
+
 ## Capability populations and sample scoring
 
 Extend `ReactiveCapability` with exactly:
@@ -270,7 +285,24 @@ else 4
 | --- | ---: | --- |
 | `reactive_execution.core` | 7 | `reactive_execution` present; `reactive_failure` absent. |
 | `reactive_failure.core` | 8 | `reactive_execution` absent; `reactive_failure` present. |
-| Deliberately combined Reactive populations | 8 | Both summaries may exist; generic `score=None`, `partial_score=None`. |
+| Deliberately combined Reactive populations | 8 | `reactive_failure` required; `reactive_execution` may also be present; generic `score=None`, `partial_score=None`. |
+
+Both `AggregationSummary` model validation and `ArtifactStore.replace_summary` validation MUST
+implement the same planned presence rules:
+
+| `schema_version` | `reactive_execution` | `reactive_failure` |
+| --- | --- | --- |
+| `< 7` | MUST be absent. | MUST be absent. |
+| `== 7` | MUST be present. | MUST be absent. |
+| `== 8` | MAY be present or absent. | MUST be present. |
+
+Equivalently, `reactive_execution` is allowed only for `schema_version >= 7`, and
+`reactive_failure` only for `schema_version >= 8`; v7 requires `reactive_execution`, and v8
+requires `reactive_failure`. V8 MUST NOT reject a combined run merely because
+`reactive_execution` is also present. The current v7 storage biconditional
+`(schema_version == 7) == (reactive_execution is not None)` MUST NOT be carried forward unchanged:
+it would reject that valid v8 combination. These presence rules preserve the content-version
+selection precedence above.
 
 Do not serialize null summary blocks into earlier versions. Existing summary meanings and
 population-specific headline requirements remain intact.
@@ -533,7 +565,7 @@ action_action_control
 perfect
 ```
 
-The following consequences and validation requirements are normative:
+The following are proven consequences of the capability predicates and valid contrast groups:
 
 | Strategy or policy class | Retry recovery | Terminal failure | Failure discrimination | Headline |
 | --- | ---: | ---: | ---: | ---: |
@@ -543,10 +575,18 @@ The following consequences and validation requirements are normative:
 | `perfect` | 1 | 1 | 1 | 1 |
 
 Every deterministic observation-blind strategy has `failure_discrimination_rate = 0` when
-covered by valid contrast groups. No mandatory case-blind/observation-blind degenerate strategy
-may exceed headline `1/3`. `ERROR`, `INVALID`, `PENDING_REVIEW`, incomplete coverage, and
-`headline=None` are hard validation failures, never threshold bypasses. `action_action_control`
-explicitly covers the blind counterexample class above.
+covered by valid contrast groups.
+
+The headline `1/3` threshold is an **empirical first-party validation gate, not a general theorem**
+derived from the three-axis formula. Every mandatory case-blind/observation-blind degenerate
+strategy MUST be executed against `reactive_failure.core`, obtain complete valid scored coverage,
+and achieve `balanced_failure_recovery <= 1/3`. `ERROR`, `INVALID`, pending (`PENDING_REVIEW`),
+incomplete coverage, and `headline=None` fail validation rather than bypassing the threshold.
+`action_action_control` explicitly covers the blind counterexample class above.
+
+A blind policy could theoretically score strongly on one or both non-contrastive axes. The
+`<= 1/3` requirement is an empirical property enforced on the mandatory strategy probes of the
+concrete first-party corpus; it is not a mathematical bound for every blind policy.
 
 ### Required implementation regression and mutation tests
 
