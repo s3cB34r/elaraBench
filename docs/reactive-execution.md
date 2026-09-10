@@ -96,6 +96,13 @@ M5.4 proof verdicts and expanded-node counts verified by the compatibility regre
 The M5.4 version references below describe its original `1.1.0` contract; M5.5 preserves that
 behavior and permits explicit upgrades to current `1.2.0` derived evaluations.
 
+[M5.6 Partially Observable Reactive Execution](reactive-observability.md) is the normative authority
+for the **DESIGNED / RATIFIED — NOT YET IMPLEMENTED** observability extension. It plans evaluator
+`1.3.0`, projected Turn-0 state and observation v3, and information-required/sufficient populations.
+It preserves E1–E12, the full canonical blind-policy alphabet, M5.5 ProductState, and existing
+reachability and transition semantics. With `observability=None`, historical task and observation
+bytes remain identical. No task-render semantic identifier is introduced.
+
 ## Evaluator family and semantic identifiers
 
 Reactive Execution is a new top-level evaluator family named `reactive_execution`. It does not

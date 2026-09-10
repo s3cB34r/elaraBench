@@ -14,6 +14,14 @@ semantics. This design does not reopen M5.1–M5.4. M5.5 uses `reactive_executio
 `1.2.0`, nine Built-ins, and 258 production cases. It introduces no new top-level evaluator family. M5.4 cases without failure
 configuration retain their existing meaning.
 
+[M5.6 Partially Observable Reactive Execution](reactive-observability.md) is
+**DESIGNED / RATIFIED — NOT YET IMPLEMENTED** and governs the planned evaluator `1.3.0` extension.
+It leaves M5.5 outcomes, failure predicates, product proof, and corpus unchanged. Its first-party
+suite requires empty failure catalogs and schedules; generic M5.6 capability scoring still permits
+E11 completion in custom suites containing execution failures. Planned Summary v9 adds a disjoint
+observability block under the exact presence contract in that specification. Current M5.5 remains
+evaluator `1.2.0`, Summary v8, and nine Built-ins / 258 cases.
+
 ## Capability boundary
 
 M5.5 measures whether a worker can distinguish and correctly react to deterministic,

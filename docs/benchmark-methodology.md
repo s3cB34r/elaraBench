@@ -116,6 +116,25 @@ credit. Its corrected bounded proof includes Control and independent per-variant
 Action usage, and failure-contact flags. The 250000 expanded-state cap remains a hard bound,
 never proof on exhaustion. M5.4 scoring and proof results remain unchanged.
 
+### M5.6 observability methodology (planned)
+
+[M5.6 Partially Observable Reactive Execution](reactive-observability.md) is
+**DESIGNED / RATIFIED — NOT YET IMPLEMENTED**. It separates information acquisition from restraint:
+required cases begin with insufficient visible information; sufficient cases independently satisfy
+epistemic sufficiency (S1/S2/S3) and exact shortest-path budget gates. Legitimate information may
+come from inspection, successful Actions, or precondition failures; scoring requires no specific
+Reveal mechanism.
+
+The planned headline equally averages acquisition, restraint, and discrimination. Behavioral mass
+uses actual observed SCORED repeats per case, followed by pair minima and population macros;
+missing or non-scored results affect coverage only. Six required pairs prevent a lucky blind
+single-case success from establishing discrimination. Each pair needs both unchanged bounded
+blind-policy proof and one information-safe adaptive witness with cross-variant request/response
+determinism. The proof covers deterministic observation-blind policies only. The designated
+degenerate probes' `<= 1/3` headline gate and perfect `1.0` are empirical corpus requirements.
+All first-party failure catalogs and schedules are empty. These planned axes do not combine with
+implemented M5.4/M5.5 headlines; current catalog totals remain nine Built-ins / 258 cases.
+
 ## Difficulty
 
 First-party M3 cases use `easy`, `medium`, or `hard`. Difficulty describes intended capability

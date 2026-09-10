@@ -202,6 +202,28 @@ mandatory strategy probes, and the Trust payload probe. The offline
 `validate_reactive_failure_corpus` validator enforces these gates. The ninth suite and its hash
 are pinned; current counts are nine Built-ins and 258 cases.
 
+### M5.6 observability corpus authoring (planned)
+
+[M5.6 Partially Observable Reactive Execution](reactive-observability.md) is
+**DESIGNED / RATIFIED — NOT YET IMPLEMENTED**. Its normative specification owns all 26 fail-closed
+validator gates for planned `reactive_observability.core` v1.0.0. The 24-case design has 12 required
+cases in six pairs and 12 ungrouped sufficient cases, six categories, and 8/8/8 difficulty.
+Every case is authorized, has hidden initial state, and has empty failure catalog and schedule.
+
+Use the deterministic renderer for initial projected values, observable keys, and reveal mapping.
+Pair requests and projections must match, differing only in allowed hidden initial values.
+Inspection tools must satisfy effects-subset-of-requires as identical pairs. Sufficient cases
+independently require S1/S2/S3 hidden-value irrelevance and exact full-budget shortest distance.
+Required pairs need the unchanged full-alphabet blind proof and one adaptive witness whose
+identical request bytes always receive identical response bytes across both variants. Hidden-state
+closure branching must fail its mutation test. No alphabet filter or ProductState visibility field
+is permitted. `UNPROVABLE` and node-cap exhaustion cannot establish validity.
+
+Enforce metadata leakage restrictions, all twelve strategy probes, and the Trust-payload probe
+without a recursive field-name blacklist. Preserve all nine existing production hashes; a tenth
+pin and wheel validation of ten Built-ins / 282 cases belong to future implementation. Current
+implemented totals remain nine / 258; this design creates no corpus data or package changes.
+
 ## Fixtures and safety
 
 All initial M3 core cases are self-contained and use no fixtures. A future

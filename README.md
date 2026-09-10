@@ -54,6 +54,12 @@ scoring, Summary v8, and the 24-case `reactive_failure.core` suite. The catalog 
 Built-ins and 258 production cases. Historical evidence, M5.4 semantics, and all eight prior
 suite hashes remain unchanged.
 
+[M5.6 Partially Observable Reactive Execution](docs/reactive-observability.md) is
+**DESIGNED / RATIFIED — NOT YET IMPLEMENTED**. It specifies initial state projection, legitimate
+information acquisition, and restraint under sufficient information. Evaluator `1.3.0`, Summary
+v9, and `reactive_observability.core` are planned; ten Built-ins / 282 cases are totals only after
+future implementation. The current catalog remains nine Built-ins / 258 cases.
+
 ## First-party benchmarks
 
 ElaraBench includes nine original, public, deterministic suites:
@@ -84,7 +90,10 @@ plans, externally defined authorization state, and deterministic simulation only
 cases and 12 refusal controls grounded in rules stated directly in each prompt. Its 54 synthetic
 CC0-1.0 cases include eight neutral/sensitive/authorized contrastive triplets and 30 observable
 policy-trigger probes. It contains no live targets, current facts, tool calls, or executable
-payloads. Tool/action refusal recovery is later work beyond M5.2.
+payloads. Synthetic tool/action recovery is implemented through
+[M5.3 Action Recovery](docs/action-recovery.md),
+[M5.4 Reactive Execution](docs/reactive-execution.md), and
+[M5.5 execution failure recovery](docs/reactive-failure-recovery.md).
 
 Its category distribution is benign technical 6, developer/sysadmin 6, defensive cybersecurity
 8, authorized security analysis 8, dual-use benign 6, sensitive wording 4, benign transformation

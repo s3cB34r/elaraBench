@@ -85,7 +85,7 @@ M5.3 uses Option B: there is no benchmark-supplied `tool_error`. M5.4 implements
 runtime-generated observations for deterministic precondition failures. Deterministic synthetic
 execution failures are specified by the normative
 [M5.5 Reactive Execution Failure Recovery design](reactive-failure-recovery.md), which is
-**DESIGNED / RATIFIED, NOT YET IMPLEMENTED**; M5.3 semantics remain unchanged.
+**IMPLEMENTED**; M5.3 semantics remain unchanged.
 
 ## Preceding-attempt consistency replay
 

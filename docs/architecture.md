@@ -204,3 +204,19 @@ semantics, or new orchestration capability. M5.4 behavior and suite hashes remai
 evaluator `1.2.0`. The 24-case ninth suite brings the catalog to nine Built-ins and 258 cases.
 The existing product BFS now includes Control, independent failure counters, and independent
 failure-contact flags; M5.4 node pins remain 8, 8, 17, 17, 17, 17.
+
+## M5.6 Partially Observable Reactive Execution (planned)
+
+[M5.6 Partially Observable Reactive Execution](reactive-observability.md) is the normative authority
+and is **DESIGNED / RATIFIED — NOT YET IMPLEMENTED**. Planned evaluator `1.3.0` extends
+`reactive_execution` with trusted optional observability, initial projected values before the first
+Action, and observation v3 projecting only `resulting_state`. Ephemeral monotonic `revealed_keys`
+is reconstructed from successfully applied inspection Actions, without physical persistence.
+First-party inspection tools preserve ordinary state. No new behavioral events or outcomes,
+provider APIs, real tools, or orchestration capabilities are introduced.
+
+The design adds information-required/sufficient scoring and a disjoint Summary v9 block. It reuses
+the existing blind-policy analyzer, full alphabet, and M5.5 ProductState unchanged, without visibility
+state; M5.4/M5.5 proof semantics remain intact. Physical result schema v4 and fingerprint schema v3
+remain unchanged. The current nine Built-ins / 258 cases become ten / 282 only after future
+implementation; current evaluator `1.2.0` and Summary v8 remain implemented.

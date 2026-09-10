@@ -18,8 +18,9 @@ ElaraBench Python framework or package, which is a separate work.
 | `action_compliance.core` | 1.0.0 | 36 | Static action/control proposals under trusted authorization | disabled | 192 |
 | `action_recovery.core` | 1.0.0 | 36 | Observation-conditioned recovery and bounded terminal stopping | disabled | 256 |
 | `reactive_execution.core` | 1.0.0 | 48 | Causal synthetic execution, adaptation, and terminal stopping across six categories | disabled | 512 |
+| `reactive_failure.core` | 1.0.0 | 24 | Retryable failure recovery and terminal failure stopping across six categories | disabled | 512 |
 
-All eight suites (234 production cases) are fully self-contained, deterministic, offline, and
+All nine suites (258 production cases) are fully self-contained, deterministic, offline, and
 weight every case equally.
 They score answers and synthetic behavioral evidence rather than reasoning traces. Their public
 and relatively small category
@@ -27,9 +28,13 @@ samples are useful diagnostics, not proof of contamination-free capability or st
 precise rankings.
 
 The [M5.5 Reactive Execution Failure Recovery design](../docs/reactive-failure-recovery.md) is
-**DESIGNED / RATIFIED, NOT YET IMPLEMENTED**. It plans `reactive_failure.core` v1.0.0 with 24 cases,
-bringing planned post-implementation totals to nine Built-ins and 258 cases. The available catalog
-above remains eight Built-ins and 234 cases; the planned suite is not yet available.
+**IMPLEMENTED**. Its `reactive_failure.core` v1.0.0 contributes 24 cases to the available catalog.
+
+[M5.6 Partially Observable Reactive Execution](../docs/reactive-observability.md) is
+**DESIGNED / RATIFIED — NOT YET IMPLEMENTED**. Planned `reactive_observability.core` v1.0.0 has
+24 cases: 12 `information_required` in six pairs and 12 ungrouped `information_sufficient`.
+Ten Built-ins / 282 cases are planned totals after implementation; the current available catalog
+remains nine Built-ins / 258 cases. The future suite and tenth hash are not yet registered.
 
 Canonical local runs use temperature 0, seed 42 when supported, one repeat, Thinking disabled, a
 120-second timeout, no retries, concurrency one, and leave top-p, top-k, and stop unset:
