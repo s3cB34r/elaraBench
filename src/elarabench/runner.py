@@ -63,6 +63,7 @@ from elarabench.models import (
 from elarabench.providers.base import ModelProvider, ProviderConfigurationError
 from elarabench.reactive_engine import ReactiveTurnEngine
 from elarabench.reactive_execution import (
+    REACTIVE_EVALUATOR_VERSION,
     ReactiveEvaluationContext,
     ReactiveExecutionConfig,
     ReactiveTurnEvidence,
@@ -687,7 +688,7 @@ class Runner:
                         )
                     if store.evaluation_exists(identity):
                         result = store.read_evaluation(identity, source_result_schema_version=4)
-                        if result.evaluator_version != "1.1.0":
+                        if result.evaluator_version != REACTIVE_EVALUATOR_VERSION:
                             raise RunnerError(
                                 "stale Reactive evaluation; run explicit score upgrade"
                             )

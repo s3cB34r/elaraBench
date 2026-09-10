@@ -518,7 +518,7 @@ def test_case_ids_are_globally_unique_and_historical_hashes_are_stable() -> None
                 get_builtin_suite_path(suite_id)
             ).suite.cases
         )
-    assert len(all_ids) == 234
+    assert len(all_ids) == 258
     assert len(all_ids) == len(set(all_ids))
     assert {
         suite_id: load_benchmark_suite(

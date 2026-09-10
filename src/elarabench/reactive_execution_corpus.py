@@ -13,6 +13,7 @@ from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
+from itertools import chain
 
 from elarabench.action_compliance import ActionPlanEnvelope, AuthorizationState, ProposedAction
 from elarabench.action_compliance_corpus import CorpusFindingSeverity
@@ -31,6 +32,7 @@ from elarabench.models import (
     SampleIdentity,
 )
 from elarabench.reactive_execution import (
+    FAILURE_CAPABILITIES,
     ReactiveCapability,
     ReactiveEvaluationContext,
     ReactiveEvaluator,
@@ -41,15 +43,18 @@ from elarabench.reactive_execution import (
     next_reactive_request,
     reactive_case_expectations,
     reactive_metadata_errors,
+    reactive_outcome_passes,
     render_reactive_task,
     step_reactive,
 )
 from elarabench.synthetic_reachability import (
+    FailureState,
     ReachabilityResult,
     ReachabilityStatus,
     ToolInvocability,
     analyze_bounded_reachability,
     analyze_tool_invocability,
+    initial_failure_state,
 )
 
 CORE_SUITE_ID = "reactive_execution.core"
@@ -119,6 +124,10 @@ class ProductState:
     status_B: ProductStatus = ProductStatus.ALIVE
     actions_used_A: int = 0
     actions_used_B: int = 0
+    failure_state_A: FailureState = ()
+    failure_state_B: FailureState = ()
+    execution_failure_seen_A: bool = False
+    execution_failure_seen_B: bool = False
     turns_used: int = 0
 
 
@@ -157,6 +166,11 @@ def canonical_plans(config: ReactiveExecutionConfig) -> Iterator[tuple[ProposedA
     yield from visit(())
 
 
+def canonical_responses(config: ReactiveExecutionConfig) -> Iterator[str]:
+    """Actions in lexical order, then one AUTHORIZED Control equivalence representative."""
+    yield from chain((action_text(plan) for plan in canonical_plans(config)), (CONTROL_REFUSE,))
+
+
 def project_variant(
     config: ReactiveExecutionConfig,
     state: bytes,
@@ -164,23 +178,32 @@ def project_variant(
     actions_used: int,
     turns_used: int,
     response: str,
-) -> tuple[bytes, ProductStatus, int]:
+    failure_state: FailureState = (),
+    execution_failure_seen: bool = False,
+) -> tuple[bytes, ProductStatus, int, FailureState, bool]:
     """Completion projection of the single runtime step, with a frozen terminal variant."""
     if status is not ProductStatus.ALIVE:
-        return state, status, actions_used
+        return state, status, actions_used, failure_state, execution_failure_seen
     runtime = step_reactive(
         config,
         ReactiveRuntime(
             current_state=json.loads(state),
             durable_model_responses=turns_used,
             invoked_actions=actions_used,
+            failure_state=failure_state,
+            execution_failures=int(execution_failure_seen),
         ),
         GenerationResponse(text=response),
     )
+    if runtime.status is not None and runtime.outcome is None:
+        raise ValueError("unprovable product transition")
     completed = runtime.outcome in {
         ReactiveOutcome.COMPLETED_WITHOUT_EXECUTION_FAILURE,
         ReactiveOutcome.COMPLETED_AFTER_RECOVERY,
     }
+    if config.capability in FAILURE_CAPABILITIES:
+        completed = reactive_outcome_passes(config, runtime.outcome, runtime.execution_failures > 0)
+    assert runtime.failure_state is not None
     return (
         canonical_json_bytes(runtime.current_state),
         ProductStatus.DONE
@@ -189,6 +212,8 @@ def project_variant(
         if runtime.status is not None
         else ProductStatus.ALIVE,
         runtime.invoked_actions,
+        runtime.failure_state,
+        runtime.execution_failures > 0,
     )
 
 
@@ -198,13 +223,15 @@ def advance_product(
     node: ProductState,
     response: str,
 ) -> ProductState:
-    sa, status_a, aa = project_variant(
-        a, node.state_A, node.status_A, node.actions_used_A, node.turns_used, response
+    sa, status_a, aa, fa, ea = project_variant(
+        a, node.state_A, node.status_A, node.actions_used_A, node.turns_used, response,
+        node.failure_state_A, node.execution_failure_seen_A,
     )
-    sb, status_b, ab = project_variant(
-        b, node.state_B, node.status_B, node.actions_used_B, node.turns_used, response
+    sb, status_b, ab, fb, eb = project_variant(
+        b, node.state_B, node.status_B, node.actions_used_B, node.turns_used, response,
+        node.failure_state_B, node.execution_failure_seen_B,
     )
-    return ProductState(sa, sb, status_a, status_b, aa, ab, node.turns_used + 1)
+    return ProductState(sa, sb, status_a, status_b, aa, ab, fa, fb, ea, eb, node.turns_used + 1)
 
 
 def analyze_blind_policy_group(
@@ -215,10 +242,13 @@ def analyze_blind_policy_group(
 ) -> BlindPolicyProof:
     if not 1 <= node_limit <= MAX_PRODUCT_NODES:
         raise ValueError("product node limit must be between 1 and 250000")
-    if a.model_dump(exclude={"initial_state"}) != b.model_dump(exclude={"initial_state"}):
-        raise ValueError("blind proof requires identical configs except initial_state")
+    hidden = {"initial_state", "failure_schedule", "capability"}
+    if a.model_dump(exclude=hidden) != b.model_dump(exclude=hidden):
+        raise ValueError("blind proof requires identical visible configs and budgets")
     start = ProductState(
-        canonical_json_bytes(a.initial_state), canonical_json_bytes(b.initial_state)
+        canonical_json_bytes(a.initial_state), canonical_json_bytes(b.initial_state),
+        failure_state_A=initial_failure_state(a.failure_schedule),
+        failure_state_B=initial_failure_state(b.failure_schedule),
     )
     queue: deque[tuple[ProductState, tuple[str, ...]]] = deque([(start, ())])
     visited = {start}
@@ -229,8 +259,7 @@ def analyze_blind_policy_group(
             return BlindPolicyProof(CorpusFindingCode.ENUMERATION, expanded)
         # Every queued node is unseen at insertion and live; select it for expansion exactly once.
         expanded += 1
-        for plan in canonical_plans(a):
-            response = action_text(plan)
+        for response in canonical_responses(a):
             next_node = advance_product(a, b, node, response)
             if next_node.status_A is next_node.status_B is ProductStatus.DONE:
                 return BlindPolicyProof(
@@ -255,6 +284,7 @@ def bounded_path(config: ReactiveExecutionConfig, runtime: ReactiveRuntime) -> R
             config.max_plan_length * (config.max_model_turns - runtime.durable_model_responses),
         ),
         config.action_view(runtime.current_state),
+        failure_schedule=config.failure_schedule, failure_state=runtime.failure_state,
     )
 
 

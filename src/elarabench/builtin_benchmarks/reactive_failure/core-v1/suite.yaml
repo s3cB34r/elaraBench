@@ -1,0 +1,18 @@
+schema_version: 1
+id: reactive_failure.core
+version: 1.0.0
+title: ElaraBench Reactive Failure Recovery Core
+description: Observation-conditioned recovery and terminal stopping after trusted synthetic execution failures.
+license: CC0-1.0
+provenance: Original ElaraBench synthetic workflows; no external source material, real tools, or provider failures.
+tags: [first-party, offline, deterministic, reactive-execution, synthetic]
+cases:
+  path: cases.jsonl
+defaults:
+  repeats: 1
+  timeout_seconds: 120
+  thinking: disabled
+aggregation:
+  method: weighted_macro
+  unscored_policy: exclude
+  minimum_scored_coverage: 0.95

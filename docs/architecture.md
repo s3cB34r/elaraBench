@@ -190,15 +190,17 @@ runtime-generated observations, and additional model turns require M5.4. The imp
 bounded causal runtime and physical-v4 evidence foundation is defined in [Reactive Execution](reactive-execution.md).
 The same authoritative document specifies implemented M5.4b capability-conditioned scoring with
 `reactive_execution` evaluator `1.1.0` (`SCORED`), Summary v7, observation-conditioned proof, and
-`reactive_execution.core` v1.0.0: 48 cases across six categories. The production catalog now has
-eight Built-ins and 234 cases. Summary v7 does not change physical result schema v4.
+`reactive_execution.core` v1.0.0: 48 cases across six categories. M5.4 introduced the eighth Built-in and
+brought the historical catalog to 234 cases. Summary v7 does not change physical result schema v4.
 
-## Planned M5.5 Reactive Execution Failure Recovery
+## M5.5 Reactive Execution Failure Recovery
 
 [M5.5 Reactive Execution Failure Recovery](reactive-failure-recovery.md) is the normative
-architecture authority for the **DESIGNED / RATIFIED, NOT YET IMPLEMENTED** extension. It plans
+architecture authority for the **IMPLEMENTED** extension. It provides
 `reactive_execution` evaluator `1.2.0`, visible failure catalog and hidden trusted schedule,
 failure-contact scoring, and disjoint failure populations in Summary semantic schema v8.
 Physical result schema remains v4. It adds no evaluator family, real tools, provider failure
-semantics, or new orchestration capability. Implemented M5.4 remains evaluator `1.1.0` with eight
-Built-ins and 234 cases; the planned 24-case ninth suite would yield nine Built-ins and 258 cases.
+semantics, or new orchestration capability. M5.4 behavior and suite hashes remain unchanged under
+evaluator `1.2.0`. The 24-case ninth suite brings the catalog to nine Built-ins and 258 cases.
+The existing product BFS now includes Control, independent failure counters, and independent
+failure-contact flags; M5.4 node pins remain 8, 8, 17, 17, 17, 17.

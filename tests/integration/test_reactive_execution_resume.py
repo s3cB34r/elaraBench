@@ -24,9 +24,36 @@ class Crash(BaseException):
     ],
     ids=list("ABCDEFG"),
 )
+@pytest.mark.parametrize("failure_enabled", [False, True])
 def test_first_resume_crash_boundary(
-    reactive, monkeypatch, boundary, owner, method, target, after, expected_calls,
+    reactive, monkeypatch, boundary, owner, method, target, after, expected_calls, failure_enabled,
 ):
+    if failure_enabled:
+        from dataclasses import replace
+
+        from elarabench.hashing import hash_suite
+        from elarabench.models import ChatMessage, ChatRole, EvaluationSpecification
+        from elarabench.reactive_execution import ReactiveExecutionConfig, render_reactive_task
+
+        loaded = reactive.suite()
+        case = loaded.suite.cases[0]
+        config = ReactiveExecutionConfig.model_validate(case.evaluation.config | {
+            "capability": "retryable_failure",
+            "failure_catalog": {"busy": "retryable", "closed": "permanent"},
+            "failure_schedule": {"open": {"code": "busy", "transient_failures": 1}},
+            "outcome_semantic": "reactive_execution_outcomes_v2",
+            "observation_semantic": "reactive_observation_v2",
+            "rendering_semantic": "reactive_observation_rendering_v2",
+        })
+        case = case.model_copy(update={
+            "evaluation": EvaluationSpecification(type="reactive_execution",
+                                                  config=config.model_dump(mode="json")),
+            "messages": (case.messages[0], ChatMessage(
+                role=ChatRole.USER, content=render_reactive_task(config, config.objective))),
+        })
+        suite = loaded.suite.model_copy(update={"cases": (case,)})
+        loaded = replace(loaded, suite=suite, content_hash=hash_suite(suite, {}))
+        monkeypatch.setattr(reactive, "suite", lambda **kwargs: loaded)
     original = getattr(owner, method)
 
     def interrupted(self, *args, **kwargs):
@@ -39,6 +66,20 @@ def test_first_resume_crash_boundary(
         return original(self, *args, **kwargs)
 
     provider = reactive.provider(retry_turn=1 if boundary == "B" else None)
+    if failure_enabled:
+        from elarabench.models import GenerationResponse
+
+        generate = provider.generate
+
+        def failure_response(request):
+            response = generate(request)
+            if response.error is None and len(request.messages) > 2:
+                return GenerationResponse(text=(
+                    '{"type":"action","actions":[{"tool":"open","arguments":{}},'
+                    '{"tool":"finish","arguments":{}}]}'))
+            return response
+
+        provider.generate = failure_response
     with monkeypatch.context() as patch:
         patch.setattr(owner, method, interrupted)
         with pytest.raises(Crash):
@@ -74,6 +115,11 @@ def test_first_resume_crash_boundary(
     assert store.turn_indices(identity, reactive=True) == (0, 1)
     assert store.read_evaluation(
         identity, source_result_schema_version=4).status is EvaluationStatus.SCORED
+    if failure_enabled:
+        evaluation = store.read_evaluation(identity, source_result_schema_version=4)
+        assert evaluation.score == 1
+        assert evaluation.artifacts["reactive_execution"]["outcome"] == (
+            "completed_after_execution_failure")
     assert result.manifest.schema_version == 4
     for index in (0, 1):
         view = store.for_turn(index)

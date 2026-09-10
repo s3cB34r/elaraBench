@@ -2,17 +2,16 @@
 
 ## Status and authority
 
-**DESIGNED / RATIFIED — NOT YET IMPLEMENTED.**
+**IMPLEMENTED — READY FOR FINAL ACCEPTANCE.**
 
 This document is the normative M5.5 architecture authority. It records the finalized, corrected
-design and governs future implementation and its architecture gate. All M5.5 runtime, scoring,
-summary, proof, and corpus requirements below are planned contracts, not claims of implemented
-behavior. Semantic changes require an explicit architecture revision.
+design and governs the implementation and its architecture gate. The runtime, scoring, summary,
+proof, corpus, historical lifecycle, and distribution contracts below are implemented and verified.
+Semantic changes require an explicit architecture revision.
 
 [M5.4 Reactive Execution](reactive-execution.md) remains the authority for implemented M5.4
-semantics. This design does not reopen M5.1–M5.4. Current implementation uses `reactive_execution`
-evaluator `1.1.0`, eight Built-ins, and 234 production cases. Planned M5.5 extends that same
-evaluator to `1.2.0`; it introduces no new top-level evaluator family. M5.4 cases without failure
+semantics. This design does not reopen M5.1–M5.4. M5.5 uses `reactive_execution` evaluator
+`1.2.0`, nine Built-ins, and 258 production cases. It introduces no new top-level evaluator family. M5.4 cases without failure
 configuration retain their existing meaning.
 
 ## Capability boundary
@@ -29,7 +28,7 @@ infrastructure failures remain `ERROR`, outside the behavioral taxonomy. Trusted
 
 ## Trusted failure configuration
 
-The planned trusted evaluator configuration adds this exact split:
+The trusted evaluator configuration adds this exact split:
 
 ```text
 failure_catalog: dict[Identifier, RecoveryClass] = {}
@@ -117,12 +116,12 @@ The following classes remain distinct:
 
 ## Observation and rendering semantics
 
-Failure-enabled cases use planned `reactive_observation_v2`. `outcome_per_action` gains
+Failure-enabled cases use `reactive_observation_v2`. `outcome_per_action` gains
 `execution_failed`. An observation may include `failure_code` only for `execution_failed`.
 It MUST NOT directly expose recovery class, `transient_failures`, trigger, hidden schedule,
 `expected_state`, capability, or reachability classification.
 
-The planned `reactive_observation_rendering_v2` bump is required because canonical observation
+The `reactive_observation_rendering_v2` bump is required because canonical observation
 rendering now represents the expanded v2 observation vocabulary, including
 `execution_failed`/`failure_code`. It is NOT caused merely by the TASK renderer displaying
 `failure_catalog`. The visible failure catalog belongs to deterministic task rendering. This
@@ -222,7 +221,9 @@ terminal_failure_stop success:
 occurred. Every M5.5 capability success MUST require that contact. E5 and E6 in either M5.5
 population FAIL. A Turn-0 Control before any execution failure receives zero M5.5 capability
 credit even if the hidden benchmark is globally unreachable and Control is classified E9.
-Existing M5.4 population scoring remains unchanged.
+Existing M5.4 population scoring remains unchanged. Scoring eligibility rejects nonempty
+failure schedules attached to M5.4 populations before provider contact: their preserved
+summary taxonomy is E1–E10. Failure-enabled scoring uses the two M5.5 populations.
 
 ## Repeat-first axes and headline
 
@@ -255,7 +256,7 @@ required population or group coverage cannot be presented as a complete headline
 
 ## Strict summary population ownership
 
-Plan `ReactiveFailureSummary` with semantic `reactive_failure_summary_v1` and scoring semantic
+`ReactiveFailureSummary` uses semantic `reactive_failure_summary_v1` and scoring semantic
 `reactive_failure_scoring_v1`.
 
 | Summary | Exclusive eligible populations |
@@ -269,9 +270,9 @@ diagnostics, partition validation, or headline availability. Sharing the top-lev
 family is not permission to merge these populations. M5.4 authorization gates do not become
 missing populations of a pure M5.5 failure summary.
 
-### Planned Summary semantic schema v8
+### Summary semantic schema v8
 
-Future content-dependent version selection is:
+Content-dependent version selection is:
 
 ```text
 8 if reactive_failure summary exists
@@ -288,7 +289,7 @@ else 4
 | Deliberately combined Reactive populations | 8 | `reactive_failure` required; `reactive_execution` may also be present; generic `score=None`, `partial_score=None`. |
 
 Both `AggregationSummary` model validation and `ArtifactStore.replace_summary` validation MUST
-implement the same planned presence rules:
+implement the same presence rules:
 
 | `schema_version` | `reactive_execution` | `reactive_failure` |
 | --- | --- | --- |
@@ -494,10 +495,10 @@ verdicts and `expanded_nodes` are unchanged, and that the historical `reactive_e
 content hash is unchanged. The M5.4 document's Action-only completion alphabet remains correct
 for its own populations.
 
-## Planned first-party production suite
+## First-party production suite
 
-Plan the ninth Built-in `reactive_failure.core`, version `1.0.0`, with exactly 24 cases. It is NOT
-currently registered, packaged, or implemented. There are 12 `retryable_failure` and 12
+The ninth Built-in `reactive_failure.core`, version `1.0.0`, contains exactly 24 cases and is
+registered and packaged. There are 12 `retryable_failure` and 12
 `terminal_failure_stop` cases, with no gated cases.
 
 | Category | Retryable | Terminal | Total |
@@ -515,8 +516,7 @@ There are exactly six contrastive groups, one per category. Each group contains 
 one terminal case of the same difficulty. Group difficulty is exactly two easy, two medium, two
 hard. Exactly 12 cases are grouped and 12 ungrouped.
 
-Current implemented totals remain **8 Built-ins / 234 production cases**. Planned
-post-implementation M5.5 totals are **9 Built-ins / 258 production cases**.
+Current implemented totals are **9 Built-ins / 258 production cases**.
 
 ### Production hard gates
 
@@ -590,7 +590,7 @@ concrete first-party corpus; it is not a mathematical bound for every blind poli
 
 ### Required implementation regression and mutation tests
 
-Future implementation MUST include these mutation regressions:
+The implementation includes these mandatory mutation regressions:
 
 1. Increasing `max_model_turns` by one in a tight valid group creates a done/done
    Action -> Action -> Control witness and MUST produce `blind_policy_completes_group`.
@@ -601,8 +601,7 @@ Future implementation MUST include these mutation regressions:
 Also require runtime/reachability agreement on state, failure state, and Action consumption;
 failure-contact scoring including zero-credit Turn-0 Control; E11/E6 precedence and legitimate
 retryable repetition versus E12; observed-repeat normalization and disjoint summary ownership;
-and the M5.4 verdict, node-count, and hash regressions specified above. These are planned tests,
-not tests introduced by this documentation change.
+and the M5.4 verdict, node-count, and hash regressions specified above. These regressions are exercised by the runtime, corpus, lifecycle, and distribution test families.
 
 ## Trust boundary
 
@@ -617,11 +616,11 @@ The mandatory Trust payload probe verifies that such schema-declared data cannot
 code, alter failure class/counters, or mutate trusted authorization. Observation trust is derived
 from deterministic replay of trusted configuration and canonical history, never model assertions.
 
-## Planned semantic identifiers
+## Semantic identifiers
 
-| Contract | M5.5 plan |
+| Contract | M5.5 implementation |
 | --- | --- |
-| Top-level evaluator | `reactive_execution` version `1.2.0` (current M5.4: `1.1.0`). |
+| Top-level evaluator | `reactive_execution` version `1.2.0` (historical M5.4: `1.1.0`). |
 | Preserved artifact | `reactive_execution_artifact_v1`. |
 | Preserved M5.4 scoring | `reactive_execution_scoring_v1`. |
 | Preserved M5.4 summary | `reactive_execution_summary_v1`. |
@@ -635,12 +634,12 @@ Observation/rendering v2 applies to failure-enabled cases. M5.4 cases retain v1 
 rendering, and outcome semantics. The preserved artifact identifier does not authorize silent
 reinterpretation of historical evidence. Physical schema remains v4; Summary v8 is separate.
 
-## Planned historical lifecycle and compatibility
+## Historical lifecycle and compatibility
 
 Existing M5.4 configurations have empty/default failure catalog and schedule. No new mandatory
-historical scoring metadata is absent from those cases. Their planned lifecycle under M5.5 is:
+historical scoring metadata is absent from those cases. Their lifecycle under M5.5 is:
 
-| Operation | Planned behavior |
+| Operation | Behavior |
 | --- | --- |
 | READ | Yes; historical evidence remains readable. |
 | REPLAY | Yes; same behavior with empty/default failure configuration. |
@@ -653,7 +652,7 @@ Do not rewrite original canonical snapshots or turn evidence during upgrade. The
 lifecycle and metadata restrictions remain governed by M5.4; empty failure defaults do not invent
 missing M5.4b capability metadata or broaden that historical upgrade.
 
-No historical suite contents change. All eight current production hashes MUST remain
+No historical suite contents change. All eight historical production hashes MUST remain
 byte-identical. In particular:
 
 ```text
@@ -661,5 +660,20 @@ reactive_execution.core
 6c0d74ddebe5f94e68498c4b31eb4cd494272f9ef79b52b8b0b094776890f498
 ```
 
-Only future implementation of `reactive_failure.core` adds a ninth production hash pin. This
-ratification adds no suite, corpus data, hash pin, runtime implementation, or tests.
+The ninth production hash pin is:
+
+```text
+reactive_failure.core
+61bc076d4d0edb5340b0b4d86ffd3081b18eb8189d75d494ec903086cca103a5
+```
+
+Production pairs use two model turns and retain a spare Action after a second failed invocation.
+Increasing their turn budget by one therefore admits the required Action -> Action -> Control
+counterexample; the illustrative three-Action example above remains valid under its tighter
+Action bound. Easy workflows have two prerequisite-linked tools; medium workflows have three;
+hard workflows also require schema-declared payload arguments.
+
+All 12 mandatory strategies have complete scored coverage. Perfect achieves 1.0 on each axis
+and headline; the highest degenerate headline is 1/3. M5.4 product verdicts and sorted group
+node pins remain 8, 8, 17, 17, 17, 17. Physical result schema v4 and fingerprint schema v3 remain
+unchanged. Isolated wheel verification covers all nine suites and their hashes.

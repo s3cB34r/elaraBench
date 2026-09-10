@@ -6,20 +6,65 @@ import json
 from collections import deque
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import cast
+from typing import Annotated, Literal, cast
 
 from jsonschema import Draft202012Validator
-from pydantic import JsonValue
+from pydantic import Field, JsonValue
 
 from elarabench.action_compliance import (
     ActionComplianceConfig,
     ActionPlanEnvelope,
     PlanValidationStatus,
     ProposedAction,
+    StrictModel,
     SyntheticToolDefinition,
     validate_action_plan,
 )
 from elarabench.hashing import canonical_json_bytes
+from elarabench.models import Identifier
+
+
+class RecoveryClass(StrEnum):
+    RETRYABLE = "retryable"
+    PERMANENT = "permanent"
+
+
+class FailureScheduleEntry(StrictModel):
+    code: Identifier
+    trigger: dict[str, JsonValue] = Field(default_factory=dict)
+    transient_failures: Annotated[int, Field(strict=True, ge=1, le=2)] | None = None
+
+
+FailureState = tuple[tuple[str, int], ...]
+ActionOutcome = Literal["applied", "precondition_failed", "execution_failed", "not_executed"]
+
+
+def initial_failure_state(schedule: dict[str, FailureScheduleEntry]) -> FailureState:
+    return tuple((name, entry.transient_failures) for name, entry in sorted(schedule.items())
+                 if entry.transient_failures is not None)
+
+
+def invoke_synthetic_action(
+    tool: str, definition: SyntheticToolDefinition, state: dict[str, JsonValue],
+    failure_state: FailureState, schedule: dict[str, FailureScheduleEntry],
+) -> tuple[dict[str, JsonValue], FailureState, ActionOutcome, str | None]:
+    """One trusted invocation, shared by runtime and reachability; always costs one Action."""
+    if not _requirements_met(state, definition):
+        return dict(state), failure_state, "precondition_failed", None
+    entry = schedule.get(tool)
+    counters = dict(failure_state)
+    if entry is not None and all(
+        key in state and canonical_json_bytes(state[key]) == canonical_json_bytes(value)
+        for key, value in entry.trigger.items()
+    ):
+        if entry.transient_failures is None:
+            return dict(state), failure_state, "execution_failed", entry.code
+        if counters[tool] > 0:
+            counters[tool] -= 1
+            return dict(state), tuple(sorted(counters.items())), "execution_failed", entry.code
+    result = dict(state)
+    result.update(cast(dict[str, JsonValue], _json_copy(cast(JsonValue, definition.effects))))
+    return result, failure_state, "applied", None
 
 
 class ToolInvocability(StrEnum):
@@ -158,6 +203,9 @@ def analyze_bounded_reachability(
     goal_state: dict[str, JsonValue],
     depth_bound: int,
     action_config: ActionComplianceConfig,
+    *, failure_schedule: dict[str, FailureScheduleEntry] | None = None,
+    failure_state: FailureState | None = None,
+    consume_transient_failures: bool = True,
 ) -> ReachabilityResult:
     """Run the shared deterministic, conservative bounded BFS."""
     if depth_bound < 0:
@@ -168,30 +216,37 @@ def analyze_bounded_reachability(
     invocable = tuple(
         analysis for analysis in analyses if analysis.classification is ToolInvocability.INVOCABLE
     )
-    queue: deque[tuple[dict[str, JsonValue], int, tuple[ProposedAction, ...]]] = deque(
-        [(dict(start_state), 0, ())]
-    )
-    visited = {canonical_json_bytes(start_state)}
+    schedule = failure_schedule or {}
+    counters = initial_failure_state(schedule) if failure_state is None else failure_state
+
+    def state_key(state: dict[str, JsonValue], failures: FailureState) -> bytes:
+        return canonical_json_bytes((state, failures)) if schedule else canonical_json_bytes(state)
+
+    queue = deque([(dict(start_state), counters, 0, cast(tuple[ProposedAction, ...], ()))])
+    visited = {state_key(start_state, counters)}
     maximum_depth = 0
     while queue:
-        state, depth, path = queue.popleft()
+        state, failures, depth, path = queue.popleft()
         maximum_depth = max(maximum_depth, depth)
         if depth == depth_bound:
             continue
         for analysis in invocable:
             definition = tools[analysis.tool]
-            if not _requirements_met(state, definition):
-                continue
-            next_state = dict(state)
-            next_state.update(
-                cast(dict[str, JsonValue], _json_copy(cast(JsonValue, definition.effects)))
+            next_state, next_failures, outcome, _ = invoke_synthetic_action(
+                analysis.tool, definition, state, failures, schedule,
             )
+            # No-op failures cannot shorten a goal path. Transient failures change
+            # the reachability state and MUST be traversed (except the counterfactual).
+            if outcome == "precondition_failed" or (outcome == "execution_failed" and (
+                next_failures == failures or not consume_transient_failures
+            )):
+                continue
             assert analysis.witness is not None
             next_path = (*path, analysis.witness)
             next_depth = depth + 1
             maximum_depth = max(maximum_depth, next_depth)
-            identity = canonical_json_bytes(next_state)
-            if identity == canonical_json_bytes(goal_state):
+            identity = state_key(next_state, next_failures)
+            if canonical_json_bytes(next_state) == canonical_json_bytes(goal_state):
                 return ReachabilityResult(
                     ReachabilityStatus.RECOVERABLE,
                     next_path,
@@ -203,7 +258,7 @@ def analyze_bounded_reachability(
             if identity in visited:
                 continue
             visited.add(identity)
-            queue.append((next_state, next_depth, next_path))
+            queue.append((next_state, next_failures, next_depth, next_path))
     undecidable = tuple(
         analysis.tool
         for analysis in analyses

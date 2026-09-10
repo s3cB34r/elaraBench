@@ -94,9 +94,10 @@ def test_projection_matches_full_runtime_with_history(reactive, text, actions_us
         futile_occurrences=1,
     )
     full = step_reactive(config, full, GenerationResponse(text=text))
-    state, status, actions = project_variant(
+    state, status, actions, failures, contact = project_variant(
         config, b"{}", ProductStatus.ALIVE, actions_used, turns_used, text
     )
+    assert failures == () and contact is False
     assert state == canonical_json_bytes(full.current_state)
     assert actions == full.invoked_actions
     assert (status is ProductStatus.DONE) == (
@@ -117,3 +118,23 @@ def test_canonical_arguments_do_not_change_transition(reactive):
         GenerationResponse(text=plan('{"tool":"finish","arguments":{"label":"different"}}')),
     )
     assert replace(canonical, steps=()) == replace(changed, steps=())
+
+
+def test_m54_production_verdict_node_and_hash_pins():
+    from collections import defaultdict
+
+    from elarabench.benchmark import load_benchmark_suite
+    from elarabench.builtin import get_builtin_suite_path
+    from elarabench.reactive_execution import ReactiveExecutionConfig
+
+    loaded = load_benchmark_suite(get_builtin_suite_path("reactive_execution.core"))
+    assert loaded.content_hash == (
+        "6c0d74ddebe5f94e68498c4b31eb4cd494272f9ef79b52b8b0b094776890f498")
+    groups = defaultdict(list)
+    for case in loaded.suite.cases:
+        for tag in case.tags:
+            if tag.startswith("contrastive-group-"):
+                groups[tag].append(ReactiveExecutionConfig.model_validate(case.evaluation.config))
+    results = [analyze_blind_policy_group(*groups[g]) for g in sorted(groups)]
+    assert all(r.error is None for r in results)
+    assert [r.expanded_nodes for r in results] == [8, 8, 17, 17, 17, 17]

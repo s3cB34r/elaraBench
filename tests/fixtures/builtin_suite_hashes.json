@@ -38,5 +38,10 @@
     "version": "1.0.0",
     "case_count": 48,
     "content_hash": "6c0d74ddebe5f94e68498c4b31eb4cd494272f9ef79b52b8b0b094776890f498"
+  },
+  "reactive_failure.core": {
+    "version": "1.0.0",
+    "case_count": 24,
+    "content_hash": "61bc076d4d0edb5340b0b4d86ffd3081b18eb8189d75d494ec903086cca103a5"
   }
 }

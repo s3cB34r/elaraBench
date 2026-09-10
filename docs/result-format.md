@@ -252,20 +252,21 @@ cases. Their complete-population headline values are equally averaged as
 never enter that headline. Pure Recovery suites expose the balanced value as generic score and
 partial score; mixed evaluator-family suites expose neither generic value.
 
-### Planned M5.5 Summary v8 (not implemented)
+### M5.5 Summary v8
 
-The normative [M5.5 design](reactive-failure-recovery.md) is **DESIGNED / RATIFIED, NOT YET
-IMPLEMENTED**. It plans `ReactiveFailureSummary` (`reactive_failure_summary_v1`, scoring semantic
-`reactive_failure_scoring_v1`) as a disjoint `reactive_failure` block. Future Summary semantic
+The normative [M5.5 design](reactive-failure-recovery.md) is **IMPLEMENTED**. It adds `ReactiveFailureSummary` (`reactive_failure_summary_v1`, scoring semantic
+`reactive_failure_scoring_v1`) as a disjoint `reactive_failure` block. Summary semantic
 version precedence is v8 for that block, else v7 Reactive Execution, else v6 Action Recovery,
 else v5 Action Compliance, else v4. Physical result schema remains v4, not v5 or v8.
 
-After implementation, `reactive_execution.core` retains Summary v7 with only its Reactive
-Execution block; planned `reactive_failure.core` uses v8 with only its failure block. A deliberately
+`reactive_execution.core` retains Summary v7 with only its Reactive
+Execution block; `reactive_failure.core` uses v8 with only its failure block. A deliberately
 combined Reactive run may contain both blocks in v8, with generic `score=None` and
 `partial_score=None`. Earlier versions must not gain null summary blocks. Failure observations
 remain in existing turn evidence, with deterministic offline replay and no canonical evidence
-rewrite during upgrade. These planned contracts do not change the implemented Summary v7 below.
+rewrite during upgrade. The model and atomic summary writer enforce the same presence matrix:
+v7 requires only the Reactive Execution block; v8 requires the failure block and permits both.
+Current Reactive summaries carry evaluator `1.2.0`; historical v7 summaries with `1.1.0` remain readable.
 
 ### Reactive Execution Summary v7
 

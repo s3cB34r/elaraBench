@@ -24,6 +24,7 @@ from elarabench.models import (
     RunLifecycle,
     RunManifest,
     SampleIdentity,
+    validate_reactive_summary_presence,
 )
 
 ModelT = TypeVar("ModelT", bound=BaseModel)
@@ -416,12 +417,17 @@ class RunArtifactStore:
 
     def replace_summary(self, summary: AggregationSummary) -> None:
         """Explicitly and atomically replace the reproducible derived summary."""
-        if summary.schema_version not in {4, 5, 6, 7}:
+        if summary.schema_version not in {4, 5, 6, 7, 8}:
             raise ArtifactStoreError(
-                "current summary writer only accepts summary schema v4, v5, v6, or v7"
+                "current summary writer only accepts summary schema v4, v5, v6, v7, or v8"
             )
-        if (summary.schema_version == 7) != (summary.reactive_execution is not None):
-            raise ArtifactStoreError("summary schema v7 requires Reactive analysis exclusively")
+        try:
+            validate_reactive_summary_presence(
+                summary.schema_version, summary.reactive_execution is not None,
+                summary.reactive_failure is not None,
+            )
+        except ValueError as error:
+            raise ArtifactStoreError(str(error)) from error
         if summary.schema_version < 6 and summary.action_recovery is not None:
             raise ArtifactStoreError(
                 "summary schemas before v6 cannot contain Recovery analysis"

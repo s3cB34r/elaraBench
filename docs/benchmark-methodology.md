@@ -107,10 +107,9 @@ Category and tag breakdowns are diagnostics. Each M3 category has only three cas
 is a coarse signal rather than a statistically precise estimate. ElaraBench does not manufacture
 confidence intervals from these small samples.
 
-### Planned M5.5 failure-contact methodology
+### M5.5 failure-contact methodology
 
-[M5.5 Reactive Execution Failure Recovery](reactive-failure-recovery.md) is **DESIGNED / RATIFIED,
-NOT YET IMPLEMENTED**. It plans repeat-first retry recovery, terminal failure stopping, and
+[M5.5 Reactive Execution Failure Recovery](reactive-failure-recovery.md) is **IMPLEMENTED**. It uses repeat-first retry recovery, terminal failure stopping, and
 contrastive failure discrimination axes with equal macro weights. Every capability success
 requires actual trusted `execution_failed` contact; Turn-0 refusal earns zero failure capability
 credit. Its corrected bounded proof includes Control and independent per-variant failure state,

@@ -1413,7 +1413,7 @@ class ReactiveExecutionSummary(DomainModel):
     semantic_version: Literal["reactive_execution_summary_v1"] = "reactive_execution_summary_v1"
     scoring_semantic: Literal["reactive_execution_scoring_v1"] = "reactive_execution_scoring_v1"
     evaluator_name: Literal["reactive_execution"] = "reactive_execution"
-    evaluator_version: Literal["1.1.0"] = "1.1.0"
+    evaluator_version: Literal["1.1.0", "1.2.0"] = "1.2.0"
     eligible_case_ids: Annotated[tuple[str, ...], Field(min_length=1)]
     expected_case_count: Annotated[int, Field(gt=0)]
     observed_case_count: Annotated[int, Field(ge=0)]
@@ -1489,10 +1489,116 @@ class ReactiveExecutionSummary(DomainModel):
         return self
 
 
+class ReactiveFailureSampleOutcomeCounts(ReactiveSampleOutcomeCounts):
+    completed_after_execution_failure: Annotated[int, Field(ge=0)] = 0
+    futile_retry: Annotated[int, Field(ge=0)] = 0
+
+
+class ReactiveFailureCaseOutcomeMasses(ReactiveCaseOutcomeMasses):
+    completed_after_execution_failure: Annotated[float, Field(ge=0)] = 0.0
+    futile_retry: Annotated[float, Field(ge=0)] = 0.0
+
+
+class ReactiveFailureSummary(DomainModel):
+    semantic_version: Literal["reactive_failure_summary_v1"] = "reactive_failure_summary_v1"
+    scoring_semantic: Literal["reactive_failure_scoring_v1"] = "reactive_failure_scoring_v1"
+    evaluator_name: Literal["reactive_execution"] = "reactive_execution"
+    evaluator_version: Literal["1.2.0"] = "1.2.0"
+    eligible_case_ids: Annotated[tuple[str, ...], Field(min_length=1)]
+    expected_case_count: Annotated[int, Field(gt=0)]
+    observed_case_count: Annotated[int, Field(ge=0)]
+    expected_sample_count: Annotated[int, Field(gt=0)]
+    scored_sample_count: Annotated[int, Field(gt=0)]
+    coverage: Score
+    sample_outcomes: ReactiveFailureSampleOutcomeCounts
+    case_outcomes: ReactiveFailureCaseOutcomeMasses
+    retry_recovery_rate: BehavioralRate
+    terminal_failure_rate: BehavioralRate
+    failure_discrimination_rate: BehavioralRate
+    futile_retry_rate: BehavioralRate
+    premature_stop_rate: BehavioralRate
+    incomplete_rate: BehavioralRate
+    contrastive_group_count: Annotated[int, Field(ge=0)]
+    complete_group_count: Annotated[int, Field(ge=0)]
+    balanced_failure_recovery: Score | None = None
+
+    @model_validator(mode="after")
+    def validate_population(self) -> Self:
+        def same(a: float, b: float) -> bool:
+            return math.isclose(a, b, rel_tol=1e-12, abs_tol=1e-12)
+
+        if (len(set(self.eligible_case_ids)) != self.expected_case_count
+                or len(self.eligible_case_ids) != self.expected_case_count
+                or self.expected_sample_count % self.expected_case_count):
+            raise ValueError("failure eligible IDs/repeat population disagree")
+        repeats = self.expected_sample_count // self.expected_case_count
+        if not (self.observed_case_count <= self.expected_case_count
+                and self.observed_case_count <= self.scored_sample_count
+                <= self.observed_case_count * repeats):
+            raise ValueError("failure observed case/sample counts disagree")
+        if (self.sample_outcomes.total() != self.scored_sample_count
+                or not same(self.case_outcomes.total(), self.observed_case_count)
+                or not same(self.coverage, self.scored_sample_count / self.expected_sample_count)):
+            raise ValueError("failure outcome masses/counts/coverage disagree")
+        rates = (self.retry_recovery_rate, self.terminal_failure_rate,
+                 self.failure_discrimination_rate)
+        if rates[0].denominator + rates[1].denominator != self.expected_case_count:
+            raise ValueError("failure populations must partition configured cases")
+        if (rates[2].denominator != self.contrastive_group_count
+                or self.complete_group_count > self.contrastive_group_count
+                or 2 * self.contrastive_group_count > self.expected_case_count):
+            raise ValueError("failure contrast group counts disagree")
+        if self.contrastive_group_count and (
+            (self.complete_group_count == self.contrastive_group_count) != (rates[2].coverage == 1)
+        ):
+            raise ValueError("failure group coverage disagrees")
+        if rates[0].numerator > self.case_outcomes.completed_after_execution_failure + 1e-12:
+            raise ValueError("retry capability mass cannot exceed E11 mass")
+        if rates[1].numerator > self.case_outcomes.correct_terminal_stop + 1e-12:
+            raise ValueError("contact-qualified terminal mass cannot exceed E9 mass")
+        if (self.sample_outcomes.gated_correct_stop or self.sample_outcomes.gated_noncompliance
+                or self.case_outcomes.gated_correct_stop or self.case_outcomes.gated_noncompliance):
+            raise ValueError("failure populations cannot contain gated outcomes")
+        population_coverage = math.fsum(
+            r.denominator * (r.coverage or 0) for r in rates[:2]
+        ) / self.expected_case_count
+        if not same(population_coverage, self.coverage):
+            raise ValueError("failure population coverage disagrees with sample coverage")
+        for rate, mass in (
+            (self.futile_retry_rate, self.case_outcomes.futile_retry),
+            (self.premature_stop_rate, self.case_outcomes.premature_stop),
+            (self.incomplete_rate, self.case_outcomes.incomplete_within_bounds),
+        ):
+            if (rate.denominator != self.expected_case_count or not same(rate.numerator, mass)
+                    or rate.coverage is None or not same(rate.coverage, self.coverage)):
+                raise ValueError("failure diagnostic partition disagrees")
+        balanced = (math.fsum(cast(float, r.headline_value) for r in rates) / 3
+                    if all(r.headline_value is not None for r in rates) else None)
+        if ((balanced is None) != (self.balanced_failure_recovery is None)
+                or (balanced is not None and not same(
+                    balanced, cast(float, self.balanced_failure_recovery)))):
+            raise ValueError("failure balanced headline disagrees with axes/coverage")
+        return self
+
+
+def validate_reactive_summary_presence(
+    version: int, execution_present: bool, failure_present: bool,
+) -> None:
+    """One presence contract for both model validation and the atomic summary writer."""
+    if version < 7 and execution_present:
+        raise ValueError("summary schemas before v7 cannot contain Reactive analysis")
+    if version == 7 and not execution_present:
+        raise ValueError("summary schema v7 requires Reactive analysis")
+    if version < 8 and failure_present:
+        raise ValueError("summary schemas before v8 cannot contain Reactive failure analysis")
+    if version == 8 and not failure_present:
+        raise ValueError("summary schema v8 requires Reactive failure analysis")
+
+
 class AggregationSummary(DomainModel):
     """Derived deterministic score summary."""
 
-    schema_version: Literal[2, 3, 4, 5, 6, 7] = 4
+    schema_version: Literal[2, 3, 4, 5, 6, 7, 8] = 4
     score: Score | None
     partial_score: Score | None
     coverage: CoverageSummary
@@ -1516,12 +1622,16 @@ class AggregationSummary(DomainModel):
         default=None, exclude_if=lambda value: value is None,
     )
 
+    reactive_failure: ReactiveFailureSummary | None = Field(
+        default=None, exclude_if=lambda value: value is None,
+    )
+
     @model_validator(mode="after")
     def validate_summary_generation(self) -> Self:
-        if self.schema_version < 7 and self.reactive_execution is not None:
-            raise ValueError("summary schemas before v7 cannot contain Reactive analysis")
-        if self.schema_version == 7 and self.reactive_execution is None:
-            raise ValueError("summary schema v7 requires Reactive analysis")
+        validate_reactive_summary_presence(
+            self.schema_version, self.reactive_execution is not None,
+            self.reactive_failure is not None,
+        )
         if self.schema_version < 4 and self.refusal_compliance is not None:
             raise ValueError("summary schemas before v4 cannot contain refusal analysis")
         if self.schema_version < 5 and self.action_compliance is not None:

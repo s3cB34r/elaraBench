@@ -114,7 +114,7 @@ def test_production_strategy_live_and_offline(reactive, name):
     before = {p: p.read_bytes() for p in result.path.rglob("*") if p.is_file()}
     comparison = compare_runs(result.path, result.path)
     assert all(
-        r.status == "available" and r.evaluator_version == "1.1.0"
+        r.status == "available" and r.evaluator_version == "1.2.0"
         for r in comparison.evaluator_resolution
     )
     assert {p: p.read_bytes() for p in before} == before

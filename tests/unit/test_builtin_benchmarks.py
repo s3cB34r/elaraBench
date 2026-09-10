@@ -15,6 +15,8 @@ from elarabench.builtin import (
 )
 
 EXPECTED = {
+    "reactive_failure.core": (
+        24, "61bc076d4d0edb5340b0b4d86ffd3081b18eb8189d75d494ec903086cca103a5"),
     "reasoning.core": (
         18,
         "76e8699add4c94921e40215b85b2b8870abf25023dff02bff92b0a51e6021b3c",
@@ -60,9 +62,10 @@ def test_available_builtin_suites_have_stable_order() -> None:
         "action_compliance.core",
         "action_recovery.core",
         "reactive_execution.core",
+        "reactive_failure.core",
     )
-    assert len(EXPECTED) == 8
-    assert sum(case_count for case_count, _ in EXPECTED.values()) == 234
+    assert len(EXPECTED) == 9
+    assert sum(case_count for case_count, _ in EXPECTED.values()) == 258
 
 
 @pytest.mark.parametrize(("suite_id", "expected"), EXPECTED.items())

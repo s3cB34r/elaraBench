@@ -95,7 +95,7 @@ def test_narrow_upgrade_and_stale_resume(reactive):
     summary = score_run(result.path)
     assert summary.schema_version == 7
     current = store.read_evaluation(identity, source_result_schema_version=4)
-    assert current.evaluator_version == "1.1.0" and current.score == 1
+    assert current.evaluator_version == "1.2.0" and current.score == 1
     after = contents(result.path)
     for name, content in before.items():
         if name not in {"summary.json", "events.jsonl"} and not name.endswith("evaluation.json"):
@@ -130,3 +130,42 @@ def test_new_run_ineligible_before_provider(reactive):
             ),
         )
     assert provider.calls == []
+
+
+def test_frozen_m54b_upgrade_preserves_original_evidence(tmp_path, reactive):
+    fixture = json.loads(
+        Path("tests/fixtures/reactive_execution/historical-v1.1-run.json").read_text()
+    )
+    path = tmp_path / json.loads(fixture["files"]["manifest.json"])["run_id"]
+    for name, content in fixture["files"].items():
+        target = path / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content)
+    before = contents(path)
+    store = RunArtifactStore(path.parent, path.name)
+    manifest, snapshot = validate_stored_run(store)
+    case = snapshot.suite.cases[0]
+    assert "failure_schedule" not in case.evaluation.config
+    assert "failure_catalog" not in case.evaluation.config
+    identity = SampleIdentity(case_id=case.id, repeat_index=0)
+    context = _reactive_context(store, identity, case.evaluation)
+    assert store.read_evaluation(identity, source_result_schema_version=4) == (
+        ReactiveEvaluator().derive(context, version="1.1.0"))
+    assert replay_reactive(context)[0].failure_state == ()
+    provider = reactive.provider()
+    provider.describe = lambda: pytest.fail("provider contacted")
+    provider.capabilities = lambda: pytest.fail("provider contacted")
+    with pytest.raises(RuntimeError, match="explicit score upgrade"):
+        reactive.runner(provider).resume(path)
+    comparison = compare_runs(path, path)
+    assert all(r.status != "unavailable" for r in comparison.evaluator_resolution)
+    assert contents(path) == before
+    upgraded = score_run(path)
+    assert upgraded.schema_version == 7
+    assert upgraded.reactive_execution.evaluator_version == "1.2.0"
+    assert summarize_run(path) == upgraded
+    assert manifest.schema_version == 4
+    after = contents(path)
+    for name, content in before.items():
+        if name not in {"summary.json", "events.jsonl"} and not name.endswith("evaluation.json"):
+            assert after[name] == content

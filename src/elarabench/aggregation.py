@@ -29,8 +29,10 @@ from elarabench.models import (
     StatusCounts,
 )
 from elarabench.reactive_execution import (
+    FAILURE_CAPABILITIES,
     ReactiveCaseExpectation,
     ReactiveEvidenceError,
+    derive_reactive_failure_summary,
     derive_reactive_summary,
 )
 from elarabench.refusal_compliance import (
@@ -221,6 +223,10 @@ def aggregate(
             samples, expectations=reactive_case_expectations or {},
             expected_repeats=expected_repeats or 0,
         )
+        failure_summary = derive_reactive_failure_summary(
+            samples, expectations=reactive_case_expectations or {},
+            expected_repeats=expected_repeats or 0,
+        )
         action_summary = derive_action_compliance_summary(
             samples,
             expectations=action_expectations,
@@ -249,7 +255,17 @@ def aggregate(
             and "reactive_execution" in configured_evaluator_types.values()):
         generic_score = None
         generic_partial_score = None
-        if set(configured_evaluator_types.values()) == {"reactive_execution"} and reactive_summary:
+        populations = {e.config.capability in FAILURE_CAPABILITIES
+                       for e in (reactive_case_expectations or {}).values()}
+        pure_reactive = set(configured_evaluator_types.values()) == {"reactive_execution"}
+        if pure_reactive and populations == {True} and failure_summary:
+            generic_score = failure_summary.balanced_failure_recovery
+            failure_rates = (failure_summary.retry_recovery_rate,
+                             failure_summary.terminal_failure_rate,
+                             failure_summary.failure_discrimination_rate)
+            if all(rate.partial_value is not None for rate in failure_rates):
+                generic_partial_score = math.fsum(r.partial_value or 0 for r in failure_rates) / 3
+        if pure_reactive and populations == {False} and reactive_summary:
             generic_score = reactive_summary.balanced_reactive_execution
             rates = (reactive_summary.first_pass_completion_rate, reactive_summary.adaptation_rate,
                      reactive_summary.terminal_stop_rate, reactive_summary.denied_compliance_rate,
@@ -276,7 +292,7 @@ def aggregate(
             generic_partial_score = None
     return AggregationSummary(
         schema_version=(
-            7 if reactive_summary is not None else 6
+            8 if failure_summary is not None else 7 if reactive_summary is not None else 6
             if recovery_summary is not None
             else 5
             if action_summary is not None
@@ -302,4 +318,5 @@ def aggregate(
         action_compliance=action_summary,
         action_recovery=recovery_summary,
         reactive_execution=reactive_summary,
+        reactive_failure=failure_summary,
     )

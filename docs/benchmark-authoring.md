@@ -191,16 +191,16 @@ the 250000-node deterministic blind-policy proof, leakage checks, Goldens, and m
 probes. The existing test-only Reactive fixture remains foundation evidence and is not production
 corpus data.
 
-### Planned M5.5 failure-recovery corpus authoring
+### M5.5 failure-recovery corpus authoring
 
-The normative [M5.5 design](reactive-failure-recovery.md) is **DESIGNED / RATIFIED, NOT YET
-IMPLEMENTED**. Its planned `reactive_failure.core` v1.0.0 has 24 cases, 12 retryable and 12 terminal,
+The normative [M5.5 design](reactive-failure-recovery.md) is **IMPLEMENTED**. Its `reactive_failure.core` v1.0.0 has 24 cases, 12 retryable and 12 terminal,
 six categories, six contrastive groups, and 8/8/8 difficulty. Authors must use identical complete
 visible failure catalogs and byte-identical canonical Turn-0 Requests within each pair while
 keeping schedules hidden. The design requires failure-contact reachability gates, exhaustive
 product proof including Control, the Action -> Action -> Control counterexample regression,
-mandatory strategy probes, and the Trust payload probe. No production data or ninth hash pin
-exists as part of this ratification; current counts remain eight Built-ins and 234 cases.
+mandatory strategy probes, and the Trust payload probe. The offline
+`validate_reactive_failure_corpus` validator enforces these gates. The ninth suite and its hash
+are pinned; current counts are nine Built-ins and 258 cases.
 
 ## Fixtures and safety
 
