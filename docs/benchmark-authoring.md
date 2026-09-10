@@ -214,8 +214,11 @@ Use the deterministic renderer for initial projected values, observable keys, an
 Pair requests and projections must match, differing only in allowed hidden initial values.
 Inspection tools must satisfy effects-subset-of-requires as identical pairs. Sufficient cases
 independently require S1/S2/S3 hidden-value irrelevance and exact full-budget shortest distance.
-Required pairs need the unchanged full-alphabet blind proof and one adaptive witness whose
-identical request bytes always receive identical response bytes across both variants. Hidden-state
+Required binary pairs need full-alphabet blind proof using the same E5-only predicate as scoring,
+and one adaptive witness achieving E5 in both variants whose identical request bytes always receive
+identical response bytes across both variants. The core search remains unchanged, but M5.6 state
+equivalence conditionally tracks precondition-failure history per variant. Historical state equivalence
+must remain unchanged, with mandatory M5.4 node-pin and M5.5 proof regressions. Hidden-state
 closure branching must fail its mutation test. No alphabet filter or ProductState visibility field
 is permitted. `UNPROVABLE` and node-cap exhaustion cannot establish validity.
 

@@ -121,16 +121,20 @@ never proof on exhaustion. M5.4 scoring and proof results remain unchanged.
 [M5.6 Partially Observable Reactive Execution](reactive-observability.md) is
 **DESIGNED / RATIFIED — NOT YET IMPLEMENTED**. It separates information acquisition from restraint:
 required cases begin with insufficient visible information; sufficient cases independently satisfy
-epistemic sufficiency (S1/S2/S3) and exact shortest-path budget gates. Legitimate information may
-come from inspection, successful Actions, or precondition failures; scoring requires no specific
-Reveal mechanism.
+epistemic sufficiency (S1/S2/S3) and exact shortest-path budget gates. Both capabilities require E5:
+completion with no precondition or benchmark execution failures. State-neutral inspection is the
+primary first-party information route before committing to a failing branch. Precondition-failure
+recovery is M5.4 behavior and earns no M5.6 success; ordinary synthetic effects do not reveal
+arbitrary hidden current values.
 
 The planned headline equally averages acquisition, restraint, and discrimination. Behavioral mass
 uses actual observed SCORED repeats per case, followed by pair minima and population macros;
 missing or non-scored results affect coverage only. Six required pairs prevent a lucky blind
-single-case success from establishing discrimination. Each pair needs both unchanged bounded
-blind-policy proof and one information-safe adaptive witness with cross-variant request/response
-determinism. The proof covers deterministic observation-blind policies only. The designated
+single-case E5 success from establishing discrimination. Each binary pair needs E5-only bounded
+blind-policy proof and one information-safe adaptive witness achieving E5 in both variants, with
+cross-variant request/response determinism. The core search stays unchanged; product completion
+shares the scoring predicate and conditionally tracks precondition-failure history without changing
+historical state equivalence. The proof covers deterministic observation-blind policies only. The designated
 degenerate probes' `<= 1/3` headline gate and perfect `1.0` are empirical corpus requirements.
 All first-party failure catalogs and schedules are empty. These planned axes do not combine with
 implemented M5.4/M5.5 headlines; current catalog totals remain nine Built-ins / 258 cases.

@@ -215,8 +215,10 @@ is reconstructed from successfully applied inspection Actions, without physical 
 First-party inspection tools preserve ordinary state. No new behavioral events or outcomes,
 provider APIs, real tools, or orchestration capabilities are introduced.
 
-The design adds information-required/sufficient scoring and a disjoint Summary v9 block. It reuses
-the existing blind-policy analyzer, full alphabet, and M5.5 ProductState unchanged, without visibility
-state; M5.4/M5.5 proof semantics remain intact. Physical result schema v4 and fingerprint schema v3
+The design adds E5-only information-required/sufficient scoring and a disjoint Summary v9 block.
+The core binary search and full alphabet remain unchanged, while M5.6 product completion uses the
+same E5-only scoring predicate and conditionally tracks per-variant precondition-failure history.
+Visibility state remains excluded. Historical state equivalence is preserved, with mandatory
+M5.4 node-pin and M5.5 proof regressions. Physical result schema v4 and fingerprint schema v3
 remain unchanged. The current nine Built-ins / 258 cases become ten / 282 only after future
 implementation; current evaluator `1.2.0` and Summary v8 remain implemented.

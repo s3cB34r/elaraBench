@@ -12,10 +12,20 @@ catalog to 282 cases. Physical result schema v4 and fingerprint schema v3 remain
 
 ## Capability and boundary
 
-M5.6 measures whether a worker acts correctly under incomplete observation: whether it recognizes
-when visible information does not determine the correct continuation and obtains additional
-information, while avoiding unnecessary information gathering when visible information is already
-sufficient. It extends the existing `reactive_execution` evaluator family; there is no new family.
+Architecture Recovery ratifies **Option A: binary pairs with E5-only M5.6 capability success**.
+M5.6 measures whether a worker under partial observation recognizes when visible information is
+insufficient and obtains the missing information **before committing to a failing branch**, while
+avoiding unnecessary information acquisition when visible information is already sufficient.
+It extends the existing `reactive_execution` evaluator family; there is no new family.
+
+E5 (`COMPLETED_WITHOUT_EXECUTION_FAILURE`) represents completion with zero precondition failures
+and zero benchmark execution failures. This existing meaning makes E5 the predicate for proactive,
+selective information handling. A worker that guesses, receives `precondition_failed`, and then
+recovers demonstrates M5.4 recovery capability, not successful M5.6 observability capability.
+A worker requiring benchmark execution-failure recovery demonstrates M5.5 behavior, not successful
+M5.6 observability capability. The intended separation is M5.4 recovery -> E6, M5.5 execution-failure
+recovery -> E11, M5.6 observability -> E5. This is capability-specific scoring, not an outcome-taxonomy
+change or a redefinition of E5; existing M5.4/M5.5 predicates remain unchanged.
 
 M5.6 introduces no real tools, persistent external environments, exogenous environment changes,
 dynamic authorization, human approval workflow, provider-native Tool APIs, routing/fallback,
@@ -127,9 +137,16 @@ M5.6 adds exactly `information_required` and `information_sufficient`. The older
 concerns epistemic information status, not mandatory use of one inspection mechanism.
 
 For `information_required`, the initial visible projection does not determine the correct
-continuation. Information must be acquired through legitimate model-visible interaction. Valid
-routes include an inspection/Reveal Action, an informative successful Action, or an informative
-`precondition_failed` observation. Scoring must not require a particular inspection mechanism.
+continuation; the worker must acquire sufficient information before committing to a failing branch.
+Under current synthetic tool semantics, state-neutral inspection/Reveal Actions are the primary
+first-party mechanism for acquiring hidden current values without first failing. Ordinary successful
+Actions must not be described as revealing arbitrary hidden current values: existing synthetic
+effects do not express that operation. Scoring tests the outcome, not a named Reveal invocation.
+
+A `precondition_failed` observation remains legitimate, model-visible runtime behavior and can
+support recovery under M5.4 semantics. Once it occurs, the sample cannot earn M5.6 success:
+subsequent completion without benchmark execution failure is E6 rather than E5 (execution-failure
+recovery instead yields E11). Neither recovery route earns M5.6 capability success.
 
 For `information_sufficient`, the initial projection and known deterministic rules already
 determine a valid shortest completion path. Hidden initial values are behaviorally irrelevant.
@@ -189,13 +206,14 @@ failure_catalog == {}
 ```
 
 This is a hard validity gate. The production suite uses no benchmark-generated `execution_failed`
-events. Generic evaluator semantics may still score M5.6 capabilities in custom suites containing
-execution failures. E11 therefore remains a generically valid completion outcome, while it is
-unreachable by construction in first-party `reactive_observability.core`.
+events. Custom suites may configure execution failures, and E11 remains a legal behavioral outcome
+in the shared evaluator. It provides **no M5.6 capability success**, uniformly in first-party and
+custom suites. Behavioral outcome legality is distinct from capability success, which is E5 only.
+E11 is unreachable by construction in first-party `reactive_observability.core`.
 
 ## Contrast pairs and identity
 
-Exactly six contrast groups contain two hidden-world variants each. Every member is
+Exactly six binary contrast groups contain two hidden-world variants each. Every member is
 `information_required`; a required case must never be paired with a sufficient case.
 
 Pair members must have byte-identical canonical Turn-0 `GenerationRequest`s; identical initial
@@ -220,10 +238,44 @@ hidden_key_set_A == hidden_key_set_B
 
 Although P1 can imply part of P2 through rendering, both remain for precise diagnostics.
 
+### Why binary pairs discriminate under E5-only success
+
+A blind fixed policy may guess the correct branch for variant A and earn E5. If the same policy
+first guesses the wrong hidden-dependent branch in variant B, `precondition_failed` occurs.
+Even if later enumeration reaches the goal, that completion is E6, not M5.6 success. Thus blind
+enumeration cannot produce capability-success done/done. An adaptive worker can instead Reveal,
+receive the differing visible observation, select the correct branch, and obtain E5 in both.
+This distinction is categorical, not dependent on a narrow Action-budget margin; every production
+pair must still pass the bounded proof below.
+
+### Illustrative valid binary construction
+
+Both variants share `observable_keys = (done, stage)` and initial visible values
+`stage=open, done=false`. Their only initial difference is hidden `route=left` versus `route=right`.
+Both have exact expected state `stage=closed, route=aligned, done=true` and the same tools:
+
+| Tool | Requires | Effects | Reveals |
+| --- | --- | --- | --- |
+| inspect | `stage=open` | `stage=open` | `route` |
+| left normalizer | `route=left` | `route=aligned` | none |
+| right normalizer | `route=right` | `route=aligned` | none |
+| finish | `route=aligned` | `stage=closed, done=true` | none |
+
+Both failure schedules and catalogs are empty. Use an Action budget of 3, with plan/turn capacity
+allowing inspection on the first turn and the correct normalizer followed by finish after observing
+the revealed route (for example, `max_plan_length=2`, `max_model_turns=3`). All other pair identity
+requirements, including canonical Turn-0 requests, remain in force.
+
+The adaptive witness performs inspect -> correct normalizer -> finish and earns E5 in both.
+Blind left-first enumeration can earn E5 on the left variant by normalizing then finishing. On the
+right variant its first normalizer fails; any eventual completion is E6 and earns no M5.6 success.
+Reverse enumeration is symmetric. A plan that continues with the opposite normalizer even after
+successful normalization can itself fail; this does not improve the blind policy's result.
+
 ### Constructive adaptive witness
 
 Every required pair must have one deterministic policy implementation, used unchanged against
-both variants, that succeeds in both. Its conceptual interface is:
+both variants, that achieves **E5 in both**, never E6 or E11. Its conceptual interface is:
 
 ```text
 ObservabilityWitness(current_generation_request, global_turn_index) -> response
@@ -241,20 +293,27 @@ bytes invalidate the witness, using the established diagnostic pattern equivalen
 once requests legitimately diverge through visible observations. A required mutation test must
 reject a witness that captures hidden `initial_state` and branches at Turn 0.
 
-### Unchanged blind-policy proof
+### Product analyzer and blind-policy proof
 
-Reuse `analyze_blind_policy_group` **unchanged**, with no alphabet filter and no `ProductState`
-modification. Use the full existing canonical policy alphabet: all canonical valid Action plans
+The core two-variant search algorithm in `analyze_blind_policy_group` remains unchanged, as do
+the canonical Action/Control alphabet, transition semantics, reachability, and node cap. M5.6
+requires two conditional semantic extensions: capability-success projection and precondition-failure
+history in product-state equivalence. Use the full existing alphabet with no filter: all valid Action plans
 (including Reveal tools), canonical Witness arguments, and one canonical `AUTHORIZED` Control
 representative.
 
+The existing analyzer's non-failure default completion accepts E5 or E6. Neither M5.6 capability
+may use that default. For `information_required` and `information_sufficient`, `completed` must
+use E5 only, with the **same capability-success predicate as offline scoring**. Prefer one shared
+semantic predicate over duplicated outcome logic. Product-proof completion and scoring must agree.
+
 The proof claim is exactly: for every valid `information_required` contrast group, no deterministic
 observation-blind policy in the bounded canonical policy space reaches population-specific
-capability success in both hidden variants. It makes no claim about observation-adaptive policies,
+capability success (**E5 only**) in both hidden variants. It makes no claim about observation-adaptive policies,
 no-Reveal adaptive policies, stochastic policies, unbounded policies, or arbitrary provider behavior.
 
 The cap remains **250000 previously unseen ProductStates selected for expansion**. Attempt 250001
-is a hard validation failure, never proof. The unchanged minimal M5.5 `ProductState` is:
+is a hard validation failure, never proof. The normative M5.6 `ProductState` is:
 
 ```text
 state_A
@@ -267,6 +326,8 @@ failure_state_A
 failure_state_B
 execution_failure_seen_A
 execution_failure_seen_B
+precondition_failure_seen_A
+precondition_failure_seen_B
 turns_used
 ```
 
@@ -275,22 +336,30 @@ not affect true environment state, failure state, budgets except through existin
 or turns. Initial projected observations are byte-identical across the pair. Visibility state is
 therefore irrelevant to blind-policy reachability.
 
-The analyzer, ProductState, canonical alphabet, transition semantics, and reachability remain
-unchanged. Preserve M5.4 expanded-node pins **8, 8, 17, 17, 17, 17** and all M5.5 proof semantics.
+Each precondition-failure bit records whether any such failure occurred in that variant's history.
+Two histories can otherwise have identical ordinary/failure state and Action count but differ in
+whether completion is E5 or E6. Deduplicating them without this bit is unsound for M5.6.
+
+These bits are **conditional to Observability proof semantics**. For M5.4/M5.5 analysis they must
+remain effectively constant or absent from state equivalence; do not globally split historical
+ProductStates on precondition failure. Mandatory regression tests must preserve M5.4 expanded-node
+pins **8, 8, 17, 17, 17, 17** and unchanged M5.5 proof behavior. Also require regression coverage for
+distinct M5.6 precondition histories and agreement between product completion and offline scoring.
 
 ## Sample scoring and aggregation
 
-For both new populations, sample capability success means target completion via **E5, E6, or
-E11**. E9 is not success. No specific Reveal invocation is required. Exact-budget and no-failure
-gates structurally exclude E6/E11 successful routes in first-party sufficient cases, while generic
-scoring remains broader. Existing M5.4/M5.5 predicates remain unchanged.
+For `information_required`: **passed iff outcome == E5**.
+For `information_sufficient`: **passed iff outcome == E5**.
+E6, E11, E9, and every other outcome provide no M5.6 capability success. This rule applies uniformly
+to first-party and custom suites, regardless of failure configuration. No specific Reveal invocation
+is required. Existing M5.4/M5.5 predicates and all E1–E12 meanings remain unchanged.
 
 Define:
 
-- `information_acquisition_rate`: repeat-normalized capability success mass over required cases.
-- `information_restraint_rate`: repeat-normalized capability success mass over sufficient cases.
-- `observability_discrimination_rate`: macro-average over the six required groups of
-  `min(capability_mass_variant_A, capability_mass_variant_B)`.
+- `information_acquisition_rate`: repeat-normalized E5 success mass over required cases.
+- `information_restraint_rate`: repeat-normalized E5 success mass over sufficient cases.
+- `observability_discrimination_rate`: macro-average over the six binary required groups of
+  `min(E5_success_mass_variant_A, E5_success_mass_variant_B)`.
 
 ```text
 balanced_observability = (
@@ -301,9 +370,10 @@ balanced_observability = (
 ```
 
 The three axes have equal macro weights. Do not combine this headline with
-`balanced_reactive_execution` or `balanced_failure_recovery`. A blind lucky guess may succeed on
-one case; that success is allowed. The pair minimum stays zero when the same blind policy cannot
-win the other variant, preventing lucky single-case completion from establishing adaptation.
+`balanced_reactive_execution` or `balanced_failure_recovery`. A blind lucky guess may earn E5 on
+one case; that individual sample success is legitimate evidence. The pair minimum stays zero
+because the same observation-blind policy cannot earn E5 on the opposite variant. Lucky single-case
+completion therefore does not establish observability discrimination capability.
 
 The per-case behavioral denominator is **actual observed `SCORED` repeats**, never
 `expected_repeats`. `observed_case_count` counts configured eligible cases with at least one
@@ -330,7 +400,7 @@ All twelve probes are mandatory:
 | `always_request_approval` | Proven `0 / 0 / 0`, headline `0` |
 | `malformed` | Proven `0 / 0 / 0`, headline `0` |
 | `always_reveal` | Axis values, including restraint behavior, are empirical |
-| `never_reveal` | Behavior and axis values are empirical; no required inspection mechanism |
+| `never_reveal` | Proven discrimination `0` as an observation-blind strategy within valid contrast groups; acquisition, restraint, and headline are empirical first-party results |
 | `always_reveal_then_fixed` | Proven discrimination `0` as a deterministic blind policy; other axes empirical |
 | `fixed_second_response` | Proven discrimination `0` as a deterministic blind policy; other axes empirical |
 | `static_one_shot` | Proven discrimination `0` as a deterministic blind policy; other axes empirical |
@@ -339,8 +409,16 @@ All twelve probes are mandatory:
 | `repeat_last_tool` | Axis values are empirical |
 | `perfect` | Must empirically achieve `1 / 1 / 1`, headline `1.0` |
 
+For `never_reveal`, the pair proof establishes zero observability discrimination, not zero
+`information_acquisition_rate`. A lucky blind E5 success on one required variant is allowed and
+can produce positive acquisition mass. Its acquisition rate, restraint rate, and resulting headline
+must therefore be measured as empirical first-party probe results; no universal zero acquisition
+claim follows from the pair proof.
+
 Every deterministic observation-blind policy represented by valid contrast groups has
-`observability_discrimination_rate == 0`. The `<= 1/3` headline limit for designated blind/degenerate
+`observability_discrimination_rate == 0`. This includes `left_then_right` and `right_then_left`
+enumeration, as well as the blind special cases in the table, where represented by the bounded
+policy space. The `<= 1/3` headline limit for designated blind/degenerate
 mandatory probes is an **empirical first-party validation gate**, not a theorem. Remaining axis
 values must be measured. Blind probe implementations must not read hidden trusted inputs.
 Incomplete coverage, `ERROR`, `INVALID`, `PENDING_REVIEW`, or headline `None` fails validation.
@@ -436,8 +514,8 @@ The future first-party validator must enforce all of these gates:
 17. All tools are decidable.
 18. `UNPROVABLE` is never accepted as validity or unreachability.
 19. Goal reachability within budget in both required variants.
-20. Blind-policy proof has no done/done success and does not hit the node cap.
-21. One information-safe adaptive witness succeeds in both variants.
+20. Binary blind-policy proof has no E5-only done/done success and does not hit the node cap. Product completion and offline scoring share the same predicate; M5.6 state equivalence tracks per-variant precondition-failure history conditionally. M5.4 node-pin and M5.5 proof compatibility regressions are mandatory.
+21. One information-safe adaptive witness achieves E5 in both variants, not E6 or E11.
 22. Witness input determinism is enforced across the pair, including the hidden-state closure mutation test.
 23. Semantic leakage is forbidden in case IDs, categories, and tags.
 24. Authoritative renderer equality includes initial projection, `observable_keys`, and `reveals`.

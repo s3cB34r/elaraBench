@@ -99,8 +99,10 @@ behavior and permits explicit upgrades to current `1.2.0` derived evaluations.
 [M5.6 Partially Observable Reactive Execution](reactive-observability.md) is the normative authority
 for the **DESIGNED / RATIFIED — NOT YET IMPLEMENTED** observability extension. It plans evaluator
 `1.3.0`, projected Turn-0 state and observation v3, and information-required/sufficient populations.
-It preserves E1–E12, the full canonical blind-policy alphabet, M5.5 ProductState, and existing
-reachability and transition semantics. With `observability=None`, historical task and observation
+It preserves E1–E12, the full canonical blind-policy alphabet, and existing reachability and
+transition semantics. M5.6 capability success is E5 only; product completion shares that predicate
+and conditionally tracks precondition-failure history per variant. M5.4/M5.5 state equivalence and
+proof behavior remain unchanged, enforced by regressions. With `observability=None`, task and observation
 bytes remain identical. No task-render semantic identifier is introduced.
 
 ## Evaluator family and semantic identifiers

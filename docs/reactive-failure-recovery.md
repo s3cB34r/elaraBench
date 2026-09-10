@@ -17,8 +17,9 @@ configuration retain their existing meaning.
 [M5.6 Partially Observable Reactive Execution](reactive-observability.md) is
 **DESIGNED / RATIFIED — NOT YET IMPLEMENTED** and governs the planned evaluator `1.3.0` extension.
 It leaves M5.5 outcomes, failure predicates, product proof, and corpus unchanged. Its first-party
-suite requires empty failure catalogs and schedules; generic M5.6 capability scoring still permits
-E11 completion in custom suites containing execution failures. Planned Summary v9 adds a disjoint
+suite requires empty failure catalogs and schedules. M5.6 capability success is E5 only, including
+custom suites: E11 remains a legal shared-evaluator outcome but earns no M5.6 success.
+Planned Summary v9 adds a disjoint
 observability block under the exact presence contract in that specification. Current M5.5 remains
 evaluator `1.2.0`, Summary v8, and nine Built-ins / 258 cases.
 
