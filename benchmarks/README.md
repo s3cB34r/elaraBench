@@ -4,7 +4,9 @@ ElaraBench's versioned first-party data are canonically stored as installable pa
 under [`src/elarabench/builtin_benchmarks`](../src/elarabench/builtin_benchmarks). The corpus is
 distributed under [CC0 1.0 Universal](../src/elarabench/builtin_benchmarks/LICENSE). That
 dedication applies to the benchmark corpus. It does not determine or imply the license of the
-ElaraBench Python framework or package, which is a separate work.
+ElaraBench Python framework, which is a separate work licensed under
+[Apache-2.0](../LICENSE). Distribution metadata lists both component licenses; it does not
+apply Apache to the corpus or CC0 to the framework.
 
 ## Available suites
 

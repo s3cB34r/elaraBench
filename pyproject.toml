@@ -1,12 +1,14 @@
 [build-system]
-requires = ["setuptools>=68", "wheel>=0.42"]
+requires = ["setuptools>=77.0.3", "wheel>=0.42"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "elarabench"
-version = "0.2.1"
+version = "0.4.0"
 description = "Reproducible, provider-neutral benchmarks for local and remote LLMs"
 readme = "README.md"
+license = "Apache-2.0 AND CC0-1.0"
+license-files = ["LICENSE", "src/elarabench/builtin_benchmarks/LICENSE"]
 requires-python = ">=3.11"
 dependencies = [
     "httpx>=0.27",
@@ -15,7 +17,7 @@ dependencies = [
     "PyYAML>=6.0",
 ]
 classifiers = [
-    "Development Status :: 2 - Pre-Alpha",
+    "Development Status :: 3 - Alpha",
     "Environment :: Console",
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
@@ -29,7 +31,7 @@ dev = [
     "mypy>=1.11",
     "pytest>=8.0",
     "ruff>=0.6",
-    "setuptools>=68",
+    "setuptools>=77.0.3",
     "types-jsonschema>=4.23",
     "types-PyYAML>=6.0",
     "wheel>=0.42",

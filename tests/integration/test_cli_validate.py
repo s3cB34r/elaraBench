@@ -63,3 +63,32 @@ def test_validate_resolves_bundled_suite_id(suite_id: str, case_count: int) -> N
     assert f"Cases: {case_count}" in result.stdout
     assert "Content hash:" in result.stdout
     assert result.stderr == ""
+
+
+@pytest.mark.parametrize("reference", ["reasonign.core", "missing/custom/path"])
+def test_missing_reference_adds_discovery_guidance(reference: str) -> None:
+    result = run_cli("validate", reference)
+    assert result.returncode == 2
+    assert "suite manifest not found" in result.stderr
+    assert reference in result.stderr
+    assert "elarabench list" in result.stderr
+
+
+def test_existing_builtin_looking_custom_directory_is_preserved(tmp_path: Path) -> None:
+    import shutil
+
+    suite = tmp_path / "custom.core"
+    shutil.copytree(TINY_SUITE, suite)
+    result = run_cli("validate", str(suite))
+    assert result.returncode == 0
+    assert "synthetic.tiny" in result.stdout
+
+
+def test_existing_malformed_custom_suite_keeps_validation_error(tmp_path: Path) -> None:
+    suite = tmp_path / "malformed.core"
+    suite.mkdir()
+    (suite / "suite.yaml").write_text("schema_version: 99\n")
+    result = run_cli("validate", str(suite))
+    assert result.returncode == 2
+    assert "unsupported benchmark schema_version" in result.stderr
+    assert "elarabench list" not in result.stderr

@@ -48,3 +48,10 @@ def test_gpu_probe_parses_multiple_devices(monkeypatch: pytest.MonkeyPatch) -> N
 
     assert [gpu.name for gpu in metadata.gpus] == ["RTX 4090", "RTX 3090"]
     assert metadata.gpu_driver == "580.10"
+
+
+def test_framework_metadata_uses_product_version(monkeypatch: pytest.MonkeyPatch) -> None:
+    from elarabench import __version__
+
+    monkeypatch.setattr(environment, "_probe", lambda *_a, **_kw: "")
+    assert environment.discover_framework_metadata().version == __version__ == "0.4.0"

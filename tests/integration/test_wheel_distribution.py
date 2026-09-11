@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import email
 import json
 import os
 import subprocess
 import sys
+import tarfile
+import tomllib
 import zipfile
 from pathlib import Path
 from typing import cast
@@ -77,11 +80,22 @@ def build_interpreter() -> str:
     """Select an interpreter containing the declared offline wheel build backend."""
     base_executable = cast(str, getattr(sys, "_base_executable", sys.executable))
     candidates = dict.fromkeys((sys.executable, base_executable))
+    requirements = tomllib.loads((PROJECT_ROOT / "pyproject.toml").read_text())[
+        "build-system"
+    ]["requires"]
     for candidate in candidates:
         if not Path(candidate).is_file():
             continue
         check = completed(
-            [candidate, "-c", "import setuptools; import wheel"],
+            [candidate, "-c", """
+import importlib.metadata as m
+import json
+import sys
+from packaging.requirements import Requirement
+for text in json.loads(sys.argv[1]):
+    requirement = Requirement(text)
+    assert requirement.specifier.contains(m.version(requirement.name))
+""", json.dumps(requirements)],
             cwd=PROJECT_ROOT,
         )
         if check.returncode == 0:
@@ -94,13 +108,28 @@ def build_interpreter() -> str:
 def test_wheel_contains_and_runs_bundled_suites(tmp_path: Path) -> None:
     wheel_dir = tmp_path / "wheel"
     wheel_dir.mkdir()
+    sdist = completed(
+        [build_interpreter(), "-c",
+         "from setuptools.build_meta import build_sdist; import sys; build_sdist(sys.argv[1])",
+         str(wheel_dir)], cwd=PROJECT_ROOT,
+    )
+    assert sdist.returncode == 0, sdist.stdout + sdist.stderr
+    source_archive = wheel_dir / "elarabench-0.4.0.tar.gz"
+    with tarfile.open(source_archive) as archive:
+        names = set(archive.getnames())
+        for name in ("LICENSE", "README.md", "CHANGELOG.md",
+                     "src/elarabench/builtin_benchmarks/LICENSE"):
+            assert f"elarabench-0.4.0/{name}" in names
+        metadata_file = archive.extractfile("elarabench-0.4.0/PKG-INFO")
+        assert metadata_file is not None
+        assert_release_metadata(metadata_file.read())
     build = completed(
         [
             build_interpreter(),
             "-m",
             "pip",
             "wheel",
-            ".",
+            str(source_archive),
             "--no-deps",
             "--no-build-isolation",
             "--wheel-dir",
@@ -112,9 +141,16 @@ def test_wheel_contains_and_runs_bundled_suites(tmp_path: Path) -> None:
     wheels = list(wheel_dir.glob("*.whl"))
     assert len(wheels) == 1
     wheel = wheels[0]
+    assert wheel.name == "elarabench-0.4.0-py3-none-any.whl"
 
     with zipfile.ZipFile(wheel) as archive:
         names = set(archive.namelist())
+        metadata = next(n for n in names if n.endswith(".dist-info/METADATA"))
+        assert_release_metadata(archive.read(metadata))
+        prefix = metadata.removesuffix("METADATA") + "licenses/"
+        for name in ("LICENSE", "src/elarabench/builtin_benchmarks/LICENSE"):
+            assert archive.read(prefix + name) == (PROJECT_ROOT / name).read_bytes()
+
     assert names >= EXPECTED_WHEEL_FILES
     assert any("builtin_benchmarks/action_compliance/" in name for name in names)
     assert any("builtin_benchmarks/action_recovery/" in name for name in names)
@@ -154,6 +190,16 @@ import sys
 installed = pathlib.Path(sys.argv[1]).resolve()
 sys.path.insert(0, str(installed))
 import elarabench
+import importlib.metadata
+import contextlib
+import io
+from elarabench.cli import main
+assert elarabench.__version__ == importlib.metadata.version("elarabench") == "0.4.0"
+with contextlib.redirect_stdout(io.StringIO()) as output:
+    assert main(["list"]) == 0
+assert len(output.getvalue().splitlines()) == 11
+with contextlib.redirect_stdout(io.StringIO()):
+    assert main(["validate", "reasoning.core"]) == 0
 from elarabench.benchmark import load_benchmark_suite
 from elarabench.builtin import available_builtin_suites, get_builtin_suite_path
 from elarabench.reactive_execution_corpus import validate_reactive_execution_corpus
@@ -201,3 +247,15 @@ print(json.dumps(result, sort_keys=True))
     assert {
         suite_id: data["hash"] for suite_id, data in result.items()
     } == EXPECTED_HASHES
+
+
+def assert_release_metadata(raw: bytes) -> None:
+    metadata = email.message_from_bytes(raw)
+    assert metadata["Version"] == "0.4.0"
+    assert metadata["License-Expression"] == "Apache-2.0 AND CC0-1.0"
+    assert set(metadata.get_all("License-File", [])) == {
+        "LICENSE", "src/elarabench/builtin_benchmarks/LICENSE",
+    }
+    classifiers = metadata.get_all("Classifier", [])
+    assert "Development Status :: 3 - Alpha" in classifiers
+    assert not any(c.startswith("License ::") for c in classifiers)

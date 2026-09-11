@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import importlib.metadata
 import subprocess
 import sys
+import tomllib
+from pathlib import Path
 
 import elarabench
 
@@ -19,7 +22,7 @@ def run_cli(*arguments: str) -> subprocess.CompletedProcess[str]:
 
 
 def test_package_imports_and_exposes_version() -> None:
-    assert elarabench.__version__ == "0.2.1"
+    assert elarabench.__version__ == "0.4.0"
 
 
 def test_cli_help_succeeds() -> None:
@@ -48,3 +51,23 @@ def test_run_help_documents_thinking_and_timeout_policy() -> None:
     assert "provider-default" in result.stdout
     assert "generation read timeout" in result.stdout
     assert "120" in result.stdout
+
+
+def test_product_version_sources_agree() -> None:
+    project = tomllib.loads((Path(__file__).parents[2] / "pyproject.toml").read_text())
+    assert project["project"]["version"] == elarabench.__version__
+    assert importlib.metadata.version("elarabench") == elarabench.__version__
+
+
+def test_all_user_arguments_have_help() -> None:
+    import argparse
+
+    from elarabench.cli import build_parser
+
+    parser = build_parser()
+    commands = next(a for a in parser._actions if isinstance(a, argparse._SubParsersAction))
+    for command in commands.choices.values():
+        for action in command._actions:
+            assert action.help, (command.prog, action.dest)
+    for name in commands.choices:
+        assert run_cli(name, "--help").returncode == 0

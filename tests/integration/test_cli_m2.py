@@ -215,3 +215,64 @@ def test_cli_thinking_precedence_over_suite_default(
     assert main(arguments) == 0
     manifest = ArtifactStore(runs_dir).open_run("suite-thinking-run").read_manifest()
     assert manifest.configuration.thinking is expected_policy
+
+
+def test_readme_reasoning_golden_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import json
+
+    from elarabench import __version__
+    from elarabench.builtin import get_builtin_suite_path
+    from elarabench.models import GenerationParameters, ModelIdentity
+
+    loaded = load_benchmark_suite(get_builtin_suite_path("reasoning.core"))
+    golden_path = (
+        Path(__file__).parents[1] / "fixtures/builtin_suite_goldens/reasoning-core-v1.jsonl"
+    )
+    goldens = {row["case_id"]: row["correct_response"]
+               for row in map(json.loads, golden_path.read_text().splitlines())}
+    responses = {
+        hash_generation_request(GenerationRequest(
+            messages=case.messages, parameters=GenerationParameters(temperature=0, max_tokens=64),
+            seed=42, thinking=ThinkingPolicy.DISABLED, timeout_seconds=120,
+            response_format=case.response_format,
+        )): goldens[case.id] for case in loaded.suite.cases
+    }
+
+    def fake_factory(
+        provider_type: str, *, model: str, endpoint: str | None = None,
+    ) -> FakeProvider:
+        assert provider_type == "ollama"
+        assert model == "YOUR_INSTALLED_MODEL"
+        assert endpoint == "http://127.0.0.1:11434"
+        return FakeProvider(responses=responses, identity=ModelIdentity(
+            provider=provider_type, model=model, model_digest="sha256:golden",
+            backend="deterministic", backend_version="1.0.0",
+        ))
+
+    monkeypatch.setattr("elarabench.cli.create_provider", fake_factory)
+    monkeypatch.chdir(tmp_path)
+    assert main(["list"]) == 0
+    assert main(["validate", "reasoning.core"]) == 0
+    assert main([
+        "run", "reasoning.core", "--provider", "ollama", "--model", "YOUR_INSTALLED_MODEL",
+        "--endpoint", "http://127.0.0.1:11434", "--temperature", "0", "--seed", "42",
+        "--repeats", "1", "--no-think", "--timeout", "120", "--max-retries", "0",
+        "--max-tokens", "64", "--runs-dir", "runs",
+    ]) == 0
+    run_path = next((tmp_path / "runs").iterdir())
+    output = capsys.readouterr().out
+    assert "Score: 1.0" in output
+    assert str(run_path) in output
+    manifest = json.loads((run_path / "manifest.json").read_text())
+    assert manifest["framework"]["version"] == __version__ == "0.4.0"
+    for name in ("benchmark.json", "manifest.json", "samples", "summary.json", "events.jsonl"):
+        assert (run_path / name).exists()
+    before = {p: p.read_bytes() for p in run_path.rglob("*.json")
+              if p.name in {"request.json", "response.json"}}
+    assert before
+    assert main(["summarize", str(run_path)]) == 0
+    assert main(["score", str(run_path)]) == 0
+    assert main(["compare", str(run_path), str(run_path), "--intent", "model"]) in (0, 1)
+    assert all(p.read_bytes() == raw for p, raw in before.items())

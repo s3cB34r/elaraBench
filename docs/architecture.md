@@ -222,3 +222,60 @@ Visibility state remains excluded. Historical state equivalence is preserved, wi
 M5.4 node-pin and M5.5 proof regressions. Physical result schema v4 and fingerprint schema v3
 remain unchanged. The current catalog has ten Built-ins / 282 cases under evaluator `1.3.0`,
 with content-dependent Summary v9 and all nine historical suite hashes unchanged.
+
+## Historical runtime and evaluation policy notes
+
+The following notes preserve the earlier README’s v0.2.1/M2 policy context.
+Current product installation and release scope are documented in the root README.
+
+### Runtime policy
+
+ElaraBench v0.2.1 treats model reasoning/thinking as explicit inference configuration:
+
+```bash
+# Default: explicitly disable thinking
+elarabench run path/to/suite --provider ollama --model qwen3.5:9b
+
+# Deliberately enable thinking for a reasoning-oriented comparison
+elarabench run path/to/suite --provider ollama --model qwen3.5:9b --think
+
+# Preserve the backend/model default, with reduced comparability made explicit
+elarabench run path/to/suite --provider ollama --model qwen3.5:9b \
+  --thinking provider-default
+```
+
+The three policies are `enabled`, `disabled`, and `provider_default`. CLI policy overrides a
+suite default; a suite default overrides ElaraBench's `disabled` default. Provider defaults are
+less reproducible because behavior may change with the model or backend without a benchmark-file
+change. Local reasoning defaults can also consume substantial hidden work, so initial
+deterministic and instruction-following benchmarks do not enable them implicitly.
+
+Ollama enforcement is model-capability dependent and never inferred from model aliases. Its broad
+`thinking` capability does not prove boolean control. ElaraBench classifies control as none,
+boolean, level-valued, or unknown using a small exact provider-architecture compatibility rule.
+Only confirmed boolean control receives top-level `think: true` or `think: false`. A model whose
+valid capability list does not advertise thinking satisfies `disabled` without sending an
+unnecessary field, but rejects `enabled`. Unknown or level-valued control rejects explicit
+policies; `provider_default` remains available and omits the field. ElaraBench v0.2.1 deliberately
+does not model reasoning-effort levels.
+
+The default generation timeout is finite at 120 seconds and remains overrideable with
+`--timeout`. ElaraBench records client wall latency separately from provider-reported total,
+model-load, prompt-evaluation, and token-generation durations. Load time remains part of canonical
+latency; M2.1 performs no silent warmup. A generation read timeout is a final sample outcome and
+is not automatically retried merely because the model was slow.
+
+### Evaluation semantics
+
+`scored` means the evaluator had trustworthy benchmark inputs and could determine an outcome;
+it includes both correct answers and model failures with score `0.0`. Wrong answers, strict
+numeric-format failures, malformed or Markdown-fenced JSON, invalid model choices, regex
+mismatches, missing required content, and forbidden content are ordinary scored failures.
+Deterministic evaluators do not extract, repair, or silently normalize output beyond operations
+declared by the benchmark.
+
+`invalid` is reserved for an unusable benchmark or evaluator specification, such as invalid
+ground truth, regex, or JSON Schema. `error` represents a provider failure or unexpected technical
+evaluation failure. `pending_review` remains unscored. Consequently, a valid zero-score model
+failure counts toward scored coverage, while invalid, error, pending, and missing samples do not.
+This prevents malformed model output from disappearing from the score denominator.

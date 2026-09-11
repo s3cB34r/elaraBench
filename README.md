@@ -1,68 +1,22 @@
 # ElaraBench
 
-ElaraBench is a standalone, provider-neutral framework for reproducible evaluation of local
-and remote large language models. It exists to replace subjective chat impressions with
-versioned benchmark definitions, preserved model outputs, objective scoring where possible,
-and explicit reproducibility metadata.
+ElaraBench is a CLI-first, provider-neutral benchmark product for evaluating language models
+with versioned tasks, preserved model responses, deterministic scoring, and inspectable results.
+Product release **0.4.0** freezes the v1 feature scope. This pre-1.0 release has Alpha status.
 
-ElaraBench is an independent project. It does not import, embed, or depend on Elara Core.
-That boundary allows benchmark results and methodology to be used and audited without an
-Elara deployment.
+## Why ElaraBench exists
 
-## Architectural principles
+Replace subjective chat impressions with explicit benchmark definitions, reproducible run
+configuration, coverage-aware scores, and auditable comparisons. Canonical responses remain
+available for offline evaluation and replay. ElaraBench is independent of Elara Core.
 
-ElaraBench is designed around a simple data flow:
+## Capabilities and Built-ins
 
-```text
-Benchmark definitions
-        ↓
-Runner → Provider adapter → Model/backend
-        ↓
-Immutable raw run artifacts
-        ↓
-Deterministic evaluators
-        ↓
-Derived summaries/comparisons
-```
-
-- Raw model responses are canonical; scores and summaries are derived and repeatable.
-- Benchmark definitions are versioned and contain no provider-specific behavior.
-- Provider adapters perform inference translation and contain no evaluation logic.
-- Deterministic evaluation is preferred whenever it is possible.
-- Human and LLM-assisted judgments remain explicit and separate from deterministic scores.
-- Reproducibility metadata is a first-class output of every future run.
-- ElaraBench v1 will use filesystem artifacts, not a database or general plugin framework.
-- Executable benchmark evaluation will require sandbox isolation when it is introduced.
-
-See [Architecture](docs/architecture.md), [Deterministic core](docs/deterministic-core.md),
-[Benchmark format](docs/benchmark-format.md), [Benchmark methodology](docs/benchmark-methodology.md),
-[Benchmark authoring](docs/benchmark-authoring.md), [Result format](docs/result-format.md),
-[Reproducibility](docs/reproducibility.md), and [Comparison](docs/comparison.md) for implemented
-contracts. The [M5.2 Static Action Compliance design](docs/action-compliance.md) and
-[M5.3 Action Recovery design](docs/action-recovery.md) define their capability constraints and v1
-boundaries. M5.3b completes the one-request Action Recovery benchmark with evaluator `1.1.0`,
-bounded corpus proof, summary schema v6, and the production `action_recovery.core` suite. The
-implemented M5.4a [Reactive Execution architecture](docs/reactive-execution.md) provides bounded
-causal multi-turn synthetic execution and physical-v4 evidence. The same authoritative document
-specifies implemented M5.4b scoring, Summary v7, observation-conditioned proof, and the production
-corpus. The current `reactive_execution` evaluator is version `1.3.0` with `SCORED` behavioral
-results.
-
-[M5.5 Reactive Execution Failure Recovery](docs/reactive-failure-recovery.md) is
-**IMPLEMENTED** with deterministic retryable/permanent execution failures, failure-contact
-scoring, Summary v8, and the 24-case `reactive_failure.core` suite. M5.5 brought the catalog to nine
-Built-ins and 258 production cases. Historical evidence, M5.4 semantics, and all eight prior
-suite hashes remain unchanged.
-
-[M5.6 Partially Observable Reactive Execution](docs/reactive-observability.md) is
-**IMPLEMENTED** with initial state projection, successful-Action reveal state, E5-only
-information acquisition and restraint scoring, and Summary v9. `reactive_observability.core` adds
-24 cases in six categories. The current catalog has ten Built-ins / 282 cases; all nine prior
-production hashes, physical schema v4, and fingerprint v3 remain unchanged.
-
-## First-party benchmarks
-
-ElaraBench includes ten original, public, deterministic suites:
+The installed catalog contains **10 Built-ins / 282 production cases**. It covers reasoning,
+instruction following, static coding and defensive cybersecurity analysis, refusal/compliance,
+synthetic action compliance and recovery, and bounded deterministic multi-turn Reactive execution.
+Reactive tasks include execution-failure recovery and partial observability: acquiring information
+before committing to a failing branch while avoiding unnecessary inspection.
 
 | Suite | Version | Cases | Categories | Recommended output cap |
 | --- | --- | ---: | ---: | ---: |
@@ -77,223 +31,173 @@ ElaraBench includes ten original, public, deterministic suites:
 | `reactive_failure.core` | 1.0.0 | 24 | 6 | 512 tokens |
 | `reactive_observability.core` | 1.0.0 | 24 | 6 | 512 tokens |
 
-All ten use equal case weights, Thinking disabled as the canonical suite policy, a 120-second
-timeout, and self-contained prompts with no fixtures or network requirements. The benchmark data
-are dedicated under CC0-1.0 separately from the Python framework. `coding.core` measures static
-code analysis and never executes model-generated code. `cybersecurity.core` uses synthetic,
-defensive static evidence and performs no scanning, exploitation, or live-system interaction.
-Interactive agentic tool-use, autonomous agent loops, and real or sandboxed tool execution remain
-later work. Bounded multi-turn synthetic Reactive Execution is implemented. ElaraBench also evaluates
-static action-plan compliance from a single stored provider response, using provider-neutral structured
-plans, externally defined authorization state, and deterministic simulation only.
 
-`refusal_compliance.core` is a static, no-judge behavioral suite: 42 deterministic completion
-cases and 12 refusal controls grounded in rules stated directly in each prompt. Its 54 synthetic
-CC0-1.0 cases include eight neutral/sensitive/authorized contrastive triplets and 30 observable
-policy-trigger probes. It contains no live targets, current facts, tool calls, or executable
-payloads. Synthetic tool/action recovery is implemented through
-[M5.3 Action Recovery](docs/action-recovery.md),
-[M5.4 Reactive Execution](docs/reactive-execution.md), and
-[M5.5 execution failure recovery](docs/reactive-failure-recovery.md).
+The suites are small, public, and cannot be claimed contamination-free. Category results are
+diagnostic. Coding tasks never execute generated code; cybersecurity tasks use synthetic static
+evidence, not live targets. See the [benchmark catalog](benchmarks/README.md) for methodology,
+canonical profiles, and limitations.
 
-Its category distribution is benign technical 6, developer/sysadmin 6, defensive cybersecurity
-8, authorized security analysis 8, dual-use benign 6, sensitive wording 4, benign transformation
-4, and refusal control 12. Refusal controls cover authorization, privacy/secrecy, audit integrity,
-and prohibited destructive changes using narrow reason codes and explicitly configured redirects.
+## Installation
 
-The suites are bundled in wheels and may be addressed by stable suite ID from any working
-directory. Run them with the canonical local profile:
-
-```bash
-elarabench run reasoning.core \
-  --provider ollama --model MODEL --temperature 0 --seed 42 \
-  --repeats 1 --no-think --timeout 120 --max-retries 0 --max-tokens 64
-
-elarabench run instruction_following.core \
-  --provider ollama --model MODEL --temperature 0 --seed 42 \
-  --repeats 1 --no-think --timeout 120 --max-retries 0 --max-tokens 128
-
-elarabench run coding.core \
-  --provider ollama --model MODEL --temperature 0 --seed 42 \
-  --repeats 1 --no-think --timeout 120 --max-retries 0 --max-tokens 128
-
-elarabench run cybersecurity.core \
-  --provider ollama --model MODEL --temperature 0 --seed 42 \
-  --repeats 1 --no-think --timeout 120 --max-retries 0 --max-tokens 192
-
-elarabench run refusal_compliance.core \
-  --provider ollama --model MODEL --temperature 0 --seed 42 \
-  --repeats 1 --no-think --timeout 120 --max-retries 0 --max-tokens 192
-
-elarabench run action_recovery.core \
-  --provider ollama --model MODEL --temperature 0 --seed 42 \
-  --repeats 1 --no-think --timeout 120 --max-retries 0 --max-tokens 256
-```
-
-Validation uses the same IDs:
-
-```bash
-elarabench validate reasoning.core
-elarabench validate instruction_following.core
-elarabench validate coding.core
-elarabench validate cybersecurity.core
-elarabench validate refusal_compliance.core
-```
-
-Library callers can obtain the installed filesystem location without depending on the current
-working directory:
-
-```python
-from elarabench import get_builtin_suite_path
-
-reasoning_path = get_builtin_suite_path("reasoning.core")
-```
-
-The suites score final answers rather than reasoning traces. They are deliberately small and
-public: category scores are diagnostic, and the corpus cannot be claimed contamination-free. See
-the [benchmark catalog](benchmarks/README.md) for interpretation and licensing.
-
-Local models are the initial priority. Planned backends include Ollama, llama.cpp and
-llama-server, OpenAI-compatible APIs, and later Unsloth evaluation or fine-tuning workflows.
-
-## Development installation
-
-ElaraBench requires Python 3.11 or newer.
+Requires Python 3.11 or newer. From a source checkout:
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -e ".[dev]"
+python -m pip install .
 ```
 
-Run the current CLI:
+Alternatively, install a built release wheel into your environment:
 
 ```bash
-elarabench --help
+python -m pip install dist/elarabench-0.4.0-py3-none-any.whl
+```
+
+These instructions do not assume a PyPI publication. Installation may require internet to obtain
+build tools and dependencies. Editable development installation is described below.
+
+## Quickstart
+
+Start Ollama separately and use an already installed, compatible model. Replace
+`YOUR_INSTALLED_MODEL` with its actual name; ElaraBench never downloads models.
+
+```bash
 elarabench --version
-elarabench validate tests/fixtures/tiny_suite
-elarabench run reasoning.core --provider ollama --model gemma3
-elarabench score runs/<run-id>
-elarabench summarize runs/<run-id>
-elarabench compare runs/<baseline-id> runs/<candidate-id> --intent model
+elarabench list
+elarabench validate reasoning.core
+
+elarabench run reasoning.core \
+  --provider ollama \
+  --model YOUR_INSTALLED_MODEL \
+  --endpoint http://127.0.0.1:11434 \
+  --temperature 0 \
+  --seed 42 \
+  --repeats 1 \
+  --no-think \
+  --timeout 120 \
+  --max-retries 0 \
+  --max-tokens 64 \
+  --runs-dir runs
+
+elarabench summarize runs/ACTUAL_RUN_ID
 ```
 
-`run` uses Ollama's native API and defaults to `http://127.0.0.1:11434`. The service and named
-model must already be available; ElaraBench never downloads models. `score` re-evaluates stored
-responses, while `summarize` only aggregates stored evaluations. Neither command contacts a
-provider.
+Use the actual `Run:` path printed by the command. By default, artifacts go under `runs/` in
+the current working directory, with a generated timestamp-and-fingerprint directory name.
 
-`compare` validates both source runs read-only and applies current evaluators symmetrically in
-memory before reporting `candidate - baseline`. It separates strict, qualified, and
-not-directly-comparable quality evidence from performance comparability. Full-suite deltas require
-identical benchmark content and complete scored populations. Different versions of the same suite
-may instead produce a clearly labeled, snapshot-fixture-verified case-intersection delta; different
-suite IDs and same-version identity conflicts never intersect. `--json` and `--output PATH` expose
-the versioned machine-readable result. Compare exit status reflects quality only: 0 for
-strict/qualified quality, 1 for quality that is not directly comparable, and 2 for input or
-operational failure. Performance comparability remains independently reported. See
-[Same-benchmark comparison](docs/comparison.md).
-
-Policy `1.2.0` also reports observed paired performance medians from immutable attempts and
-responses: generated tokens, explicit client/provider durations, generation throughput, and
-attempt/retry active cost. Each metric carries its own availability and comparability; unknown
-warm state keeps observations qualified, and CLI exit status remains quality-based.
-
-## Runtime policy
-
-ElaraBench v0.2.1 treats model reasoning/thinking as explicit inference configuration:
+Optional offline rescoring and comparison:
 
 ```bash
-# Default: explicitly disable thinking
-elarabench run path/to/suite --provider ollama --model qwen3.5:9b
-
-# Deliberately enable thinking for a reasoning-oriented comparison
-elarabench run path/to/suite --provider ollama --model qwen3.5:9b --think
-
-# Preserve the backend/model default, with reduced comparability made explicit
-elarabench run path/to/suite --provider ollama --model qwen3.5:9b \
-  --thinking provider-default
+elarabench score runs/ACTUAL_RUN_ID
+elarabench compare runs/BASELINE_ID runs/CANDIDATE_ID --intent model
 ```
 
-The three policies are `enabled`, `disabled`, and `provider_default`. CLI policy overrides a
-suite default; a suite default overrides ElaraBench's `disabled` default. Provider defaults are
-less reproducible because behavior may change with the model or backend without a benchmark-file
-change. Local reasoning defaults can also consume substantial hidden work, so initial
-deterministic and instruction-following benchmarks do not enable them implicitly.
+Comparison reports candidate minus baseline after checking comparability. `--json` prints the
+machine-readable result; `--output PATH` writes it. Exit codes are 0 for strict/qualified quality
+comparability, 1 for quality not directly comparable, and 2 for input/operational errors.
 
-Ollama enforcement is model-capability dependent and never inferred from model aliases. Its broad
-`thinking` capability does not prove boolean control. ElaraBench classifies control as none,
-boolean, level-valued, or unknown using a small exact provider-architecture compatibility rule.
-Only confirmed boolean control receives top-level `think: true` or `think: false`. A model whose
-valid capability list does not advertise thinking satisfies `disabled` without sending an
-unnecessary field, but rejects `enabled`. Unknown or level-valued control rejects explicit
-policies; `provider_default` remains available and omits the field. ElaraBench v0.2.1 deliberately
-does not model reasoning-effort levels.
+## Built-in discovery
 
-The default generation timeout is finite at 120 seconds and remains overrideable with
-`--timeout`. ElaraBench records client wall latency separately from provider-reported total,
-model-load, prompt-evaluation, and token-generation durations. Load time remains part of canonical
-latency; M2.1 performs no silent warmup. A generation read timeout is a final sample outcome and
-is not automatically retried merely because the model was slow.
+`elarabench list` shows all installed suite IDs, versions and case counts in stable order,
+without a provider or network. `elarabench validate SUITE_ID` validates a suite and prints its
+content hash. Both `validate` and `run` also accept custom suite directories.
 
-## Evaluation semantics
+## Ollama configuration
 
-`scored` means the evaluator had trustworthy benchmark inputs and could determine an outcome;
-it includes both correct answers and model failures with score `0.0`. Wrong answers, strict
-numeric-format failures, malformed or Markdown-fenced JSON, invalid model choices, regex
-mismatches, missing required content, and forbidden content are ordinary scored failures.
-Deterministic evaluators do not extract, repair, or silently normalize output beyond operations
-declared by the benchmark.
+Ollama is the implemented production provider. The default endpoint is
+`http://127.0.0.1:11434`; use `--endpoint` to override it. The service and named model must already
+be available. With dependencies and model installed, local benchmarking can operate without internet.
 
-`invalid` is reserved for an unusable benchmark or evaluator specification, such as invalid
-ground truth, regex, or JSON Schema. `error` represents a provider failure or unexpected technical
-evaluation failure. `pending_review` remains unscored. Consequently, a valid zero-score model
-failure counts toward scored coverage, while invalid, error, pending, and missing samples do not.
-This prevents malformed model output from disappearing from the score denominator.
+Thinking is explicit: `--no-think` disables it, `--think` enables it, and
+`--thinking provider-default` leaves the choice to the backend with reduced comparability.
+CLI policy overrides the suite policy, then the framework default of disabled. Explicit thinking
+control requires compatible model capabilities; unsupported control fails visibly. No reasoning-effort
+levels are inferred from model names. See [reproducibility](docs/reproducibility.md).
 
-Run the development checks:
+The generation read timeout defaults to the suite policy or 120 seconds. Read timeouts are not
+automatically retried; `--max-retries` controls eligible transport retries. See `run --help` for
+sampling, output limits, coverage, and run-directory options.
+
+## Results and artifacts
+
+| Artifact | Purpose |
+| --- | --- |
+| `benchmark.json` | Captured benchmark snapshot and identity. |
+| `manifest.json` | Configuration, provenance, request plan and lifecycle metadata. |
+| `samples/` | Canonical request/response/attempt evidence plus derived evaluations. |
+| `summary.json` | Regenerable aggregate results. |
+| `events.jsonl` | Diagnostic lifecycle history, not canonical replay authority. |
+
+`score` re-evaluates canonical responses; `summarize` aggregates stored evaluations; `compare`
+checks source runs and evaluates current semantics in memory without modifying them.
+`list`, `validate`, `score`, `summarize`, and `compare` require no provider contact.
+
+A scored zero is a model failure and counts toward scored coverage. Infrastructure errors,
+invalid benchmark inputs, pending review, and missing samples remain distinct. Headlines follow
+coverage requirements; incomplete evidence is not silently treated as success or failure.
+See [result format](docs/result-format.md) and [comparison](docs/comparison.md).
+
+## Reproducibility and compatibility
+
+Versioned benchmark/configuration identity and offline evidence replay support reproducibility.
+A seed is a requested control, not a guarantee of bit-identical model outputs across executions,
+runtimes or providers. Latency and token observations remain separate from quality scoring.
+
+Historical artifacts remain readable/rescorable according to supported eligibility rules.
+`elarabench run --resume RUN_PATH` requires compatible runtime provenance and rejects configuration
+overrides. An explicit `score` upgrade updates derived evaluation without rewriting canonical
+request/response evidence. Pre-1.0 compatibility is not promised indefinitely.
+
+| Independent version axis | Current identity |
+| --- | --- |
+| Product release | 0.4.0 |
+| Reactive evaluator | 1.3.0 |
+| Built-in suite versions | 1.0.0 |
+| Latest physical result schema | v4 |
+| Latest Summary schema | v9 |
+| Fingerprint schema | v3 |
+
+Historical artifacts and content-dependent summaries can use earlier supported schemas.
+Product version changes do not change benchmark or evaluator semantics.
+
+## Supported providers
+
+Production adapter: **Ollama**, using its native API. The architecture is provider-neutral.
+OpenAI-compatible and llama.cpp adapters remain future work. The deterministic fake provider is
+internal test infrastructure, not a production backend exposed by the CLI factory.
+
+## Scope and non-goals
+
+The v1 feature scope includes bounded deterministic synthetic multi-turn Reactive execution,
+filesystem artifacts, offline scoring/replay, durable resume and two-run comparison.
+It excludes real external tool execution, persistent external environments, arbitrary autonomous
+agent loops, provider-native agent orchestration, multi-agent routing, distributed execution,
+a Web UI, database and plugin system. No additional capability milestone is needed for this release.
+
+The product is CLI-first. Existing discovery helpers are available for Python callers, but this
+release makes no broad Python-library stability promise. Custom suite authoring is supported and
+[documented](docs/benchmark-authoring.md); internal behavioral-corpus validator interfaces may evolve
+during pre-1.0 development.
+
+## License
+
+Framework software is [Apache-2.0](LICENSE). Bundled benchmark corpus/data remain
+[CC0-1.0](src/elarabench/builtin_benchmarks/LICENSE) where declared. The distribution’s
+`Apache-2.0 AND CC0-1.0` expression describes these separately licensed components: it does not
+make framework code CC0 or apply Apache to benchmark data.
+
+## Development and deeper documentation
 
 ```bash
+python -m pip install -e ".[dev]"
 ruff check .
 mypy src
-python -m pytest
+pytest -q
 ```
 
-## Project status
-
-ElaraBench v0.2.1 through M5.6 includes local model
-execution, trustworthy same-benchmark and verified cross-version intersection comparison, and
-ten first-party benchmark suites totaling 282 cases. The engine provides the deterministic core, a
-synchronous concurrency-one runner, complete physical-v3/v4 run artifacts, bounded retries, durable
-attempt history, Ctrl-C
-recovery, strict resume, environment discovery, coverage-aware summaries, offline rescoring, and
-a native Ollama provider. Historical M2 schema-v2 runs remain available to offline `score` and
-`summarize`, but cannot resume under v3 runtime semantics. A deterministic fake provider keeps the
-complete runner and first-party suite paths testable without network or model hardware.
-
-M5.2 derives and scores strict static Action Compliance proposal, authorization-gate, simulation,
-and nine-way outcome evidence. The first-party `action_compliance.core` suite adds 36 balanced,
-contrastive cases with deterministic corpus-validity and shortcut-resistance gates.
-
-M5.3 derives and scores ten-way Action Recovery evidence from one benchmark-supplied failed-attempt
-observation. The 36-case `action_recovery.core` suite balances recoverable, bounded-unrecoverable,
-denied, and approval-required populations. Its proof and simulation are deterministic and offline;
-the preceding attempt is not generated or executed at runtime.
-
-M3 coding and cybersecurity coverage is intentionally static. It does not include executable
-benchmark sandboxes, arbitrary model-generated execution, live security targets, parallel or
-distributed execution, OpenAI-compatible or llama.cpp-specific providers, model downloading,
-LLM judges, a database, or a web interface.
-
-## ElaraBench v1 scope
-
-The v1 roadmap covers validated and versioned benchmark data, reproducible local-first runs,
-immutable filesystem artifacts, deterministic evaluators, Ollama and OpenAI-compatible model
-access, resumable execution, and auditable result comparison. It explicitly excludes a
-database, web UI, generalized plugin system, distributed execution, interactive agentic tool-use
-evaluation, real tool execution, autonomous agent loops, multi-turn action execution, and
-production tool or sandbox behavior. Static action-plan compliance evaluation remains in scope
-when it is offline and read-only: it evaluates a single stored provider response per sample against
-externally defined authorization/gating semantics through deterministic, pure, side-effect-free
-simulation. It executes no tools and introduces no agent loop.
+See [CHANGELOG](CHANGELOG.md), [architecture and milestone history](docs/architecture.md),
+[benchmark format](docs/benchmark-format.md), [authoring](docs/benchmark-authoring.md),
+[methodology](docs/benchmark-methodology.md), [deterministic core](docs/deterministic-core.md),
+[Action Compliance](docs/action-compliance.md), [Action Recovery](docs/action-recovery.md),
+[Reactive Execution](docs/reactive-execution.md), [failure recovery](docs/reactive-failure-recovery.md),
+and [observability](docs/reactive-observability.md).

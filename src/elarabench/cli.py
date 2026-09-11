@@ -10,8 +10,13 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from elarabench import __version__
-from elarabench.benchmark import BenchmarkLoadError, load_benchmark_suite
-from elarabench.builtin import BuiltinSuiteError, resolve_suite_path
+from elarabench.benchmark import BenchmarkLoadError, LoadedBenchmarkSuite, load_benchmark_suite
+from elarabench.builtin import (
+    BuiltinSuiteError,
+    available_builtin_suites,
+    get_builtin_suite_path,
+    resolve_suite_path,
+)
 from elarabench.comparison import (
     ComparisonError,
     compare_runs,
@@ -62,6 +67,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     commands = parser.add_subparsers(dest="command", title="commands")
 
+    commands.add_parser("list", help="list bundled suites offline",
+                        description="List installed Built-ins in stable order without a provider.")
+
     validate_parser = commands.add_parser(
         "validate",
         help="validate and hash a benchmark suite",
@@ -69,27 +77,66 @@ def build_parser() -> argparse.ArgumentParser:
             "Validate a benchmark suite path or bundled suite ID and print its canonical identity."
         ),
     )
-    validate_parser.add_argument("suite_path", type=Path, metavar="SUITE_PATH")
+    validate_parser.add_argument(
+        "suite_path", type=Path, metavar="SUITE_PATH",
+        help="suite directory or bundled suite ID",
+    )
 
     run_parser = commands.add_parser(
         "run",
         help="execute a benchmark sequentially",
         description="Run a suite with an implemented model provider, or resume a run.",
     )
-    run_parser.add_argument("suite_path", nargs="?", type=Path, metavar="SUITE_PATH")
-    run_parser.add_argument("--resume", type=Path, metavar="RUN_PATH")
-    run_parser.add_argument("--provider")
-    run_parser.add_argument("--model")
-    run_parser.add_argument("--endpoint")
-    run_parser.add_argument("--runs-dir", type=Path, default=Path("runs"))
-    run_parser.add_argument("--run-id")
-    run_parser.add_argument("--repeats", type=int)
-    run_parser.add_argument("--seed", type=int)
-    run_parser.add_argument("--temperature", type=float)
-    run_parser.add_argument("--top-p", type=float)
-    run_parser.add_argument("--top-k", type=int)
-    run_parser.add_argument("--max-tokens", type=int)
-    run_parser.add_argument("--stop", action="append")
+    run_parser.add_argument(
+        "suite_path", nargs="?", type=Path, metavar="SUITE_PATH",
+        help="suite directory or bundled suite ID",
+    )
+    run_parser.add_argument(
+        "--resume", type=Path, metavar="RUN_PATH",
+        help='resume stored configuration; runtime provenance must match; no overrides',
+    )
+    run_parser.add_argument(
+        "--provider",
+        help='model provider (default: ollama; currently the only production adapter)',
+    )
+    run_parser.add_argument(
+        "--model",
+        help='installed model name; required for a new run; never downloaded',
+    )
+    run_parser.add_argument(
+        "--endpoint",
+        help='provider URL (Ollama default: http://127.0.0.1:11434)',
+    )
+    run_parser.add_argument(
+        "--runs-dir", type=Path, default=Path("runs"),
+        help='run artifact parent directory (default: runs in the current directory)',
+    )
+    run_parser.add_argument(
+        "--run-id",
+        help='optional unique run directory name (default: generated timestamp and fingerprint)',
+    )
+    run_parser.add_argument("--repeats", type=int, help='repeats per case (default: suite policy)')
+    run_parser.add_argument(
+        "--seed", type=int,
+        help='request a generation seed; does not guarantee identical outputs',
+    )
+    run_parser.add_argument(
+        "--temperature", type=float,
+        help='sampling temperature (default: provider behavior)',
+    )
+    run_parser.add_argument(
+        "--top-p", type=float,
+        help='nucleus sampling probability (default: provider behavior)',
+    )
+    run_parser.add_argument(
+        "--top-k", type=int,
+        help='sampling candidate limit (default: provider behavior)',
+    )
+    run_parser.add_argument(
+        "--max-tokens", type=int,
+        help='maximum generated tokens (default: provider behavior)',
+    )
+    run_parser.add_argument("--stop", action="append", help='stop sequence; may be repeated')
     thinking_group = run_parser.add_mutually_exclusive_group()
     thinking_group.add_argument(
         "--think",
@@ -116,21 +163,32 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         help="generation read timeout in seconds (default: suite policy or 120)",
     )
-    run_parser.add_argument("--max-retries", type=int)
-    run_parser.add_argument("--retry-backoff", type=float)
-    run_parser.add_argument("--minimum-coverage", type=float)
+    run_parser.add_argument(
+        "--max-retries", type=int,
+        help='retryable transport failure retries (default: 2; read timeouts are not retried)',
+    )
+    run_parser.add_argument(
+        "--retry-backoff", type=float,
+        help='initial retry backoff in seconds (default: 0.5)',
+    )
+    run_parser.add_argument(
+        "--minimum-coverage", type=float,
+        help='minimum scored coverage fraction (default: suite aggregation policy)',
+    )
 
     score_parser = commands.add_parser(
         "score",
         help="re-evaluate stored canonical responses",
     )
-    score_parser.add_argument("run_path", type=Path, metavar="RUN_PATH")
+    score_parser.add_argument("run_path", type=Path, metavar="RUN_PATH",
+        help="stored run to rescore offline; canonical responses remain unchanged")
 
     summarize_parser = commands.add_parser(
         "summarize",
         help="regenerate a summary from stored evaluations",
     )
-    summarize_parser.add_argument("run_path", type=Path, metavar="RUN_PATH")
+    summarize_parser.add_argument("run_path", type=Path, metavar="RUN_PATH",
+        help="stored run to summarize offline from current stored evaluations")
 
     compare_parser = commands.add_parser(
         "compare",
@@ -142,22 +200,54 @@ def build_parser() -> argparse.ArgumentParser:
             "comparable, and 2 for input or operational failure."
         ),
     )
-    compare_parser.add_argument("baseline_run", type=Path, metavar="BASELINE_RUN")
-    compare_parser.add_argument("candidate_run", type=Path, metavar="CANDIDATE_RUN")
+    compare_parser.add_argument(
+        "baseline_run", type=Path, metavar="BASELINE_RUN",
+        help="reference run directory",
+    )
+    compare_parser.add_argument(
+        "candidate_run", type=Path, metavar="CANDIDATE_RUN",
+        help="candidate run directory; deltas are candidate minus baseline",
+    )
     compare_parser.add_argument(
         "--intent",
         choices=tuple(intent.value for intent in ComparisonIntent),
         default=ComparisonIntent.MODEL.value,
+        help="intended comparison dimension (default: model)",
     )
     compare_parser.add_argument(
         "--json", action="store_true", dest="json_output", help="print complete JSON"
     )
-    compare_parser.add_argument("--output", type=Path, metavar="PATH")
+    compare_parser.add_argument("--output", type=Path, metavar="PATH",
+        help="write comparison JSON to this path; source runs remain unchanged")
     return parser
 
 
+def _load_cli_suite(reference: Path) -> LoadedBenchmarkSuite:
+    path = resolve_suite_path(reference)
+    try:
+        return load_benchmark_suite(path)
+    except BenchmarkLoadError as error:
+        if not path.exists():
+            raise BenchmarkLoadError(
+                f"{error}; use `elarabench list` to see available Built-ins"
+            ) from error
+        raise
+
+
+def _list_command() -> int:
+    rows = []
+    for suite_id in available_builtin_suites():
+        loaded = load_benchmark_suite(get_builtin_suite_path(suite_id))
+        rows.append((loaded.suite.id, loaded.suite.version, len(loaded.suite.cases)))
+    width = max(len("Suite ID"), *(len(row[0]) for row in rows))
+    print(f"{'Suite ID':<{width}}  {'Version':<7}  Cases")
+    for suite_id, version, count in rows:
+        print(f"{suite_id:<{width}}  {version:<7}  {count:>5}")
+    return 0
+
+
 def _validate_command(suite_path: Path) -> int:
-    loaded = load_benchmark_suite(resolve_suite_path(suite_path))
+    loaded = _load_cli_suite(suite_path)
     print(f"Suite: {loaded.suite.id}")
     print(f"Version: {loaded.suite.version}")
     print(f"Cases: {len(loaded.suite.cases)}")
@@ -182,7 +272,7 @@ def _new_run_command(arguments: argparse.Namespace) -> int:
         raise RunnerError("SUITE_PATH is required unless --resume is used")
     if arguments.model is None:
         raise RunnerError("--model is required for a new run")
-    loaded = load_benchmark_suite(resolve_suite_path(arguments.suite_path))
+    loaded = _load_cli_suite(arguments.suite_path)
     provider_type = arguments.provider or "ollama"
     repeats = arguments.repeats if arguments.repeats is not None else loaded.suite.defaults.repeats
     timeout = (
@@ -632,6 +722,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     """Run the ElaraBench command-line interface."""
     arguments = build_parser().parse_args(argv)
     try:
+        if arguments.command == "list":
+            return _list_command()
         if arguments.command == "validate":
             return _validate_command(arguments.suite_path)
         if arguments.command == "run":
