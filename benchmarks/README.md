@@ -19,8 +19,9 @@ ElaraBench Python framework or package, which is a separate work.
 | `action_recovery.core` | 1.0.0 | 36 | Observation-conditioned recovery and bounded terminal stopping | disabled | 256 |
 | `reactive_execution.core` | 1.0.0 | 48 | Causal synthetic execution, adaptation, and terminal stopping across six categories | disabled | 512 |
 | `reactive_failure.core` | 1.0.0 | 24 | Retryable failure recovery and terminal failure stopping across six categories | disabled | 512 |
+| `reactive_observability.core` | 1.0.0 | 24 | Selective information acquisition and restraint under partial observation | disabled | 512 |
 
-All nine suites (258 production cases) are fully self-contained, deterministic, offline, and
+All ten suites (282 production cases) are fully self-contained, deterministic, offline, and
 weight every case equally.
 They score answers and synthetic behavioral evidence rather than reasoning traces. Their public
 and relatively small category
@@ -31,10 +32,11 @@ The [M5.5 Reactive Execution Failure Recovery design](../docs/reactive-failure-r
 **IMPLEMENTED**. Its `reactive_failure.core` v1.0.0 contributes 24 cases to the available catalog.
 
 [M5.6 Partially Observable Reactive Execution](../docs/reactive-observability.md) is
-**DESIGNED / RATIFIED — NOT YET IMPLEMENTED**. Planned `reactive_observability.core` v1.0.0 has
+**IMPLEMENTED**. `reactive_observability.core` v1.0.0 has
 24 cases: 12 `information_required` in six pairs and 12 ungrouped `information_sufficient`.
-Ten Built-ins / 282 cases are planned totals after implementation; the current available catalog
-remains nine Built-ins / 258 cases. The future suite and tenth hash are not yet registered.
+The current available catalog has ten Built-ins / 282 cases. The tenth suite hash is
+`08c581ad0eaf4ed4a063e884fc3a835c0797a2642dd40bb83a3c4c7805fd2846`;
+all nine historical hashes are unchanged.
 
 Canonical local runs use temperature 0, seed 42 when supported, one repeat, Thinking disabled, a
 120-second timeout, no retries, concurrency one, and leave top-p, top-k, and stop unset:

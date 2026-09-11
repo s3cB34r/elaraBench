@@ -116,10 +116,10 @@ credit. Its corrected bounded proof includes Control and independent per-variant
 Action usage, and failure-contact flags. The 250000 expanded-state cap remains a hard bound,
 never proof on exhaustion. M5.4 scoring and proof results remain unchanged.
 
-### M5.6 observability methodology (planned)
+### M5.6 observability methodology
 
 [M5.6 Partially Observable Reactive Execution](reactive-observability.md) is
-**DESIGNED / RATIFIED — NOT YET IMPLEMENTED**. It separates information acquisition from restraint:
+**IMPLEMENTED**. It separates information acquisition from restraint:
 required cases begin with insufficient visible information; sufficient cases independently satisfy
 epistemic sufficiency (S1/S2/S3) and exact shortest-path budget gates. Both capabilities require E5:
 completion with no precondition or benchmark execution failures. State-neutral inspection is the
@@ -127,7 +127,7 @@ primary first-party information route before committing to a failing branch. Pre
 recovery is M5.4 behavior and earns no M5.6 success; ordinary synthetic effects do not reveal
 arbitrary hidden current values.
 
-The planned headline equally averages acquisition, restraint, and discrimination. Behavioral mass
+The headline equally averages acquisition, restraint, and discrimination. Behavioral mass
 uses actual observed SCORED repeats per case, followed by pair minima and population macros;
 missing or non-scored results affect coverage only. Six required pairs prevent a lucky blind
 single-case E5 success from establishing discrimination. Each binary pair needs E5-only bounded
@@ -136,8 +136,8 @@ cross-variant request/response determinism. The core search stays unchanged; pro
 shares the scoring predicate and conditionally tracks precondition-failure history without changing
 historical state equivalence. The proof covers deterministic observation-blind policies only. The designated
 degenerate probes' `<= 1/3` headline gate and perfect `1.0` are empirical corpus requirements.
-All first-party failure catalogs and schedules are empty. These planned axes do not combine with
-implemented M5.4/M5.5 headlines; current catalog totals remain nine Built-ins / 258 cases.
+All first-party failure catalogs and schedules are empty. These axes do not combine with
+M5.4/M5.5 headlines; current catalog totals are ten Built-ins / 282 cases.
 
 ## Difficulty
 

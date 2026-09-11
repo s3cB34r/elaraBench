@@ -45,24 +45,24 @@ bounded corpus proof, summary schema v6, and the production `action_recovery.cor
 implemented M5.4a [Reactive Execution architecture](docs/reactive-execution.md) provides bounded
 causal multi-turn synthetic execution and physical-v4 evidence. The same authoritative document
 specifies implemented M5.4b scoring, Summary v7, observation-conditioned proof, and the production
-corpus. The current `reactive_execution` evaluator is version `1.2.0` with `SCORED` behavioral
+corpus. The current `reactive_execution` evaluator is version `1.3.0` with `SCORED` behavioral
 results.
 
 [M5.5 Reactive Execution Failure Recovery](docs/reactive-failure-recovery.md) is
 **IMPLEMENTED** with deterministic retryable/permanent execution failures, failure-contact
-scoring, Summary v8, and the 24-case `reactive_failure.core` suite. The catalog contains nine
+scoring, Summary v8, and the 24-case `reactive_failure.core` suite. M5.5 brought the catalog to nine
 Built-ins and 258 production cases. Historical evidence, M5.4 semantics, and all eight prior
 suite hashes remain unchanged.
 
 [M5.6 Partially Observable Reactive Execution](docs/reactive-observability.md) is
-**DESIGNED / RATIFIED — NOT YET IMPLEMENTED**. It specifies initial state projection, legitimate
-information acquisition, and restraint under sufficient information. Evaluator `1.3.0`, Summary
-v9, and `reactive_observability.core` are planned; ten Built-ins / 282 cases are totals only after
-future implementation. The current catalog remains nine Built-ins / 258 cases.
+**IMPLEMENTED** with initial state projection, successful-Action reveal state, E5-only
+information acquisition and restraint scoring, and Summary v9. `reactive_observability.core` adds
+24 cases in six categories. The current catalog has ten Built-ins / 282 cases; all nine prior
+production hashes, physical schema v4, and fingerprint v3 remain unchanged.
 
 ## First-party benchmarks
 
-ElaraBench includes nine original, public, deterministic suites:
+ElaraBench includes ten original, public, deterministic suites:
 
 | Suite | Version | Cases | Categories | Recommended output cap |
 | --- | --- | ---: | ---: | ---: |
@@ -75,8 +75,9 @@ ElaraBench includes nine original, public, deterministic suites:
 | `action_recovery.core` | 1.0.0 | 36 | 6 | 256 tokens |
 | `reactive_execution.core` | 1.0.0 | 48 | 6 | 512 tokens |
 | `reactive_failure.core` | 1.0.0 | 24 | 6 | 512 tokens |
+| `reactive_observability.core` | 1.0.0 | 24 | 6 | 512 tokens |
 
-All nine use equal case weights, Thinking disabled as the canonical suite policy, a 120-second
+All ten use equal case weights, Thinking disabled as the canonical suite policy, a 120-second
 timeout, and self-contained prompts with no fixtures or network requirements. The benchmark data
 are dedicated under CC0-1.0 separately from the Python framework. `coding.core` measures static
 code analysis and never executes model-generated code. `cybersecurity.core` uses synthetic,
@@ -261,9 +262,9 @@ python -m pytest
 
 ## Project status
 
-ElaraBench v0.2.1 through M5.5 includes local model
+ElaraBench v0.2.1 through M5.6 includes local model
 execution, trustworthy same-benchmark and verified cross-version intersection comparison, and
-nine first-party benchmark suites totaling 258 cases. The engine provides the deterministic core, a
+ten first-party benchmark suites totaling 282 cases. The engine provides the deterministic core, a
 synchronous concurrency-one runner, complete physical-v3/v4 run artifacts, bounded retries, durable
 attempt history, Ctrl-C
 recovery, strict resume, environment discovery, coverage-aware summaries, offline rescoring, and

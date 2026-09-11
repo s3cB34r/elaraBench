@@ -33,6 +33,7 @@ from elarabench.models import (
 )
 from elarabench.reactive_execution import (
     FAILURE_CAPABILITIES,
+    OBSERVABILITY_CAPABILITIES,
     ReactiveCapability,
     ReactiveEvaluationContext,
     ReactiveEvaluator,
@@ -128,6 +129,8 @@ class ProductState:
     failure_state_B: FailureState = ()
     execution_failure_seen_A: bool = False
     execution_failure_seen_B: bool = False
+    precondition_failure_seen_A: bool = False
+    precondition_failure_seen_B: bool = False
     turns_used: int = 0
 
 
@@ -180,10 +183,13 @@ def project_variant(
     response: str,
     failure_state: FailureState = (),
     execution_failure_seen: bool = False,
-) -> tuple[bytes, ProductStatus, int, FailureState, bool]:
+    precondition_failure_seen: bool = False,
+) -> tuple[bytes, ProductStatus, int, FailureState, bool, bool]:
     """Completion projection of the single runtime step, with a frozen terminal variant."""
     if status is not ProductStatus.ALIVE:
-        return state, status, actions_used, failure_state, execution_failure_seen
+        return (state, status, actions_used, failure_state, execution_failure_seen,
+                precondition_failure_seen if config.capability in OBSERVABILITY_CAPABILITIES
+                else False)
     runtime = step_reactive(
         config,
         ReactiveRuntime(
@@ -192,6 +198,8 @@ def project_variant(
             invoked_actions=actions_used,
             failure_state=failure_state,
             execution_failures=int(execution_failure_seen),
+            precondition_failures=(int(precondition_failure_seen)
+                                   if config.capability in OBSERVABILITY_CAPABILITIES else 0),
         ),
         GenerationResponse(text=response),
     )
@@ -201,7 +209,7 @@ def project_variant(
         ReactiveOutcome.COMPLETED_WITHOUT_EXECUTION_FAILURE,
         ReactiveOutcome.COMPLETED_AFTER_RECOVERY,
     }
-    if config.capability in FAILURE_CAPABILITIES:
+    if config.capability in (FAILURE_CAPABILITIES | OBSERVABILITY_CAPABILITIES):
         completed = reactive_outcome_passes(config, runtime.outcome, runtime.execution_failures > 0)
     assert runtime.failure_state is not None
     return (
@@ -214,6 +222,8 @@ def project_variant(
         runtime.invoked_actions,
         runtime.failure_state,
         runtime.execution_failures > 0,
+        runtime.precondition_failures > 0
+        if config.capability in OBSERVABILITY_CAPABILITIES else False,
     )
 
 
@@ -223,15 +233,21 @@ def advance_product(
     node: ProductState,
     response: str,
 ) -> ProductState:
-    sa, status_a, aa, fa, ea = project_variant(
+    sa, status_a, aa, fa, ea, pa = project_variant(
         a, node.state_A, node.status_A, node.actions_used_A, node.turns_used, response,
-        node.failure_state_A, node.execution_failure_seen_A,
+        node.failure_state_A, node.execution_failure_seen_A, node.precondition_failure_seen_A,
     )
-    sb, status_b, ab, fb, eb = project_variant(
+    sb, status_b, ab, fb, eb, pb = project_variant(
         b, node.state_B, node.status_B, node.actions_used_B, node.turns_used, response,
-        node.failure_state_B, node.execution_failure_seen_B,
+        node.failure_state_B, node.execution_failure_seen_B, node.precondition_failure_seen_B,
     )
-    return ProductState(sa, sb, status_a, status_b, aa, ab, fa, fb, ea, eb, node.turns_used + 1)
+    return ProductState(
+        state_A=sa, state_B=sb, status_A=status_a, status_B=status_b,
+        actions_used_A=aa, actions_used_B=ab, failure_state_A=fa, failure_state_B=fb,
+        execution_failure_seen_A=ea, execution_failure_seen_B=eb,
+        precondition_failure_seen_A=pa, precondition_failure_seen_B=pb,
+        turns_used=node.turns_used + 1,
+    )
 
 
 def analyze_blind_policy_group(

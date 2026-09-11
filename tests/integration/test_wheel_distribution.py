@@ -12,6 +12,8 @@ from typing import cast
 
 PROJECT_ROOT = Path(__file__).parents[2]
 EXPECTED_WHEEL_FILES = {
+    "elarabench/builtin_benchmarks/reactive_observability/core-v1/suite.yaml",
+    "elarabench/builtin_benchmarks/reactive_observability/core-v1/cases.jsonl",
     "elarabench/builtin_benchmarks/reactive_failure/core-v1/suite.yaml",
     "elarabench/builtin_benchmarks/reactive_failure/core-v1/cases.jsonl",
     "elarabench/builtin_benchmarks/LICENSE",
@@ -33,6 +35,9 @@ EXPECTED_WHEEL_FILES = {
     "elarabench/builtin_benchmarks/action_recovery/core-v1/cases.jsonl",
 }
 EXPECTED_HASHES = {
+    "reactive_observability.core": (
+        "08c581ad0eaf4ed4a063e884fc3a835c0797a2642dd40bb83a3c4c7805fd2846"
+    ),
     "reactive_failure.core": "61bc076d4d0edb5340b0b4d86ffd3081b18eb8189d75d494ec903086cca103a5",
     "reactive_execution.core": "6c0d74ddebe5f94e68498c4b31eb4cd494272f9ef79b52b8b0b094776890f498",
     "reasoning.core": "76e8699add4c94921e40215b85b2b8870abf25023dff02bff92b0a51e6021b3c",
@@ -115,6 +120,7 @@ def test_wheel_contains_and_runs_bundled_suites(tmp_path: Path) -> None:
     assert any("builtin_benchmarks/action_recovery/" in name for name in names)
     assert not any("builtin_suite_goldens" in name for name in names)
     assert not any(name.startswith("tests/") for name in names)
+    assert not any("foundation" in name for name in names)
     assert not any("fixtures/reactive_execution/" in name for name in names)
 
     installed = tmp_path / "installed"
@@ -152,16 +158,19 @@ from elarabench.benchmark import load_benchmark_suite
 from elarabench.builtin import available_builtin_suites, get_builtin_suite_path
 from elarabench.reactive_execution_corpus import validate_reactive_execution_corpus
 from elarabench.reactive_failure_corpus import validate_reactive_failure_corpus
+from elarabench.reactive_observability_corpus import validate_reactive_observability_corpus
 
 assert callable(validate_reactive_execution_corpus)
 
 assert pathlib.Path(elarabench.__file__).resolve().is_relative_to(installed)
 result = {}
-assert len(available_builtin_suites()) == 9
+assert len(available_builtin_suites()) == 10
 for suite_id in available_builtin_suites():
     path = get_builtin_suite_path(suite_id)
     assert path.is_relative_to(installed)
     loaded = load_benchmark_suite(path)
+    if suite_id == "reactive_observability.core":
+        assert validate_reactive_observability_corpus(loaded).valid
     if suite_id == "reactive_failure.core":
         assert validate_reactive_failure_corpus(loaded).valid
     result[suite_id] = {
@@ -177,8 +186,9 @@ print(json.dumps(result, sort_keys=True))
     )
     assert probe.returncode == 0, probe.stdout + probe.stderr
     result = cast(dict[str, dict[str, object]], json.loads(probe.stdout))
-    assert len(result) == 9
-    assert sum(cast(int, data["case_count"]) for data in result.values()) == 258
+    assert len(result) == 10
+    assert sum(cast(int, data["case_count"]) for data in result.values()) == 282
+    assert result["reactive_observability.core"]["case_count"] == 24
     assert result["reactive_failure.core"]["case_count"] == 24
     assert result["reactive_execution.core"]["case_count"] == 48
     assert result["reasoning.core"]["case_count"] == 18

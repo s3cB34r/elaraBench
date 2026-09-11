@@ -281,6 +281,8 @@ def test_product_tight_loose_control_and_minimal_state(reactive, monkeypatch):
         "failure_state_B",
         "execution_failure_seen_A",
         "execution_failure_seen_B",
+        "precondition_failure_seen_A",
+        "precondition_failure_seen_B",
         "turns_used",
     }
     assert corpus.analyze_blind_policy_group(a, b).error is None
@@ -394,8 +396,8 @@ def test_product_search_contact_mutations_against_full_runtime_reference(reactiv
     assert corpus.analyze_blind_policy_group(a, b).error is corpus.CorpusFindingCode.BLIND_COMPLETES
     project = corpus.project_variant
 
-    def omitted(c, state, status, actions, turns, response, failures, contact):
-        return project(c, state, status, actions, turns, response, failures, False)
+    def omitted(c, state, status, actions, turns, response, failures, contact, precondition=False):
+        return project(c, state, status, actions, turns, response, failures, False, precondition)
 
     with monkeypatch.context() as patch:
         patch.setattr(corpus, "project_variant", omitted)

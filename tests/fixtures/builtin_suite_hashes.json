@@ -43,5 +43,10 @@
     "version": "1.0.0",
     "case_count": 24,
     "content_hash": "61bc076d4d0edb5340b0b4d86ffd3081b18eb8189d75d494ec903086cca103a5"
+  },
+  "reactive_observability.core": {
+    "version": "1.0.0",
+    "case_count": 24,
+    "content_hash": "08c581ad0eaf4ed4a063e884fc3a835c0797a2642dd40bb83a3c4c7805fd2846"
   }
 }

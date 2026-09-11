@@ -10,18 +10,19 @@ proof, corpus, historical lifecycle, and distribution contracts below are implem
 Semantic changes require an explicit architecture revision.
 
 [M5.4 Reactive Execution](reactive-execution.md) remains the authority for implemented M5.4
-semantics. This design does not reopen M5.1–M5.4. M5.5 uses `reactive_execution` evaluator
+semantics. This design does not reopen M5.1–M5.4. M5.5 introduced `reactive_execution` evaluator
 `1.2.0`, nine Built-ins, and 258 production cases. It introduces no new top-level evaluator family. M5.4 cases without failure
 configuration retain their existing meaning.
 
 [M5.6 Partially Observable Reactive Execution](reactive-observability.md) is
-**DESIGNED / RATIFIED — NOT YET IMPLEMENTED** and governs the planned evaluator `1.3.0` extension.
+**IMPLEMENTED** and governs the current evaluator `1.3.0` extension.
 It leaves M5.5 outcomes, failure predicates, product proof, and corpus unchanged. Its first-party
 suite requires empty failure catalogs and schedules. M5.6 capability success is E5 only, including
 custom suites: E11 remains a legal shared-evaluator outcome but earns no M5.6 success.
-Planned Summary v9 adds a disjoint
-observability block under the exact presence contract in that specification. Current M5.5 remains
-evaluator `1.2.0`, Summary v8, and nine Built-ins / 258 cases.
+Summary v9 adds a disjoint observability block under the exact presence contract in that
+specification. Failure-only runs retain Summary v8. Current totals are ten Built-ins / 282 cases.
+Version and lifecycle references below preserve the original M5.5 `1.2.0` contract; current
+explicit upgrades and resume use `1.3.0` under the M5.6 lifecycle.
 
 ## Capability boundary
 
@@ -525,7 +526,8 @@ There are exactly six contrastive groups, one per category. Each group contains 
 one terminal case of the same difficulty. Group difficulty is exactly two easy, two medium, two
 hard. Exactly 12 cases are grouped and 12 ungrouped.
 
-Current implemented totals are **9 Built-ins / 258 production cases**.
+M5.5 introduced **9 Built-ins / 258 production cases**. Current M5.6 totals are
+**10 Built-ins / 282 production cases**, with all nine historical hashes unchanged.
 
 ### Production hard gates
 
@@ -685,4 +687,5 @@ hard workflows also require schema-declared payload arguments.
 All 12 mandatory strategies have complete scored coverage. Perfect achieves 1.0 on each axis
 and headline; the highest degenerate headline is 1/3. M5.4 product verdicts and sorted group
 node pins remain 8, 8, 17, 17, 17, 17. Physical result schema v4 and fingerprint schema v3 remain
-unchanged. Isolated wheel verification covers all nine suites and their hashes.
+unchanged. M5.5 wheel verification covered nine suites; the current M5.6 regression covers all ten
+suites and their hashes.

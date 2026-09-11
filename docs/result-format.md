@@ -252,10 +252,10 @@ cases. Their complete-population headline values are equally averaged as
 never enter that headline. Pure Recovery suites expose the balanced value as generic score and
 partial score; mixed evaluator-family suites expose neither generic value.
 
-### M5.6 Summary v9 (planned)
+### M5.6 Summary v9
 
 [M5.6 Partially Observable Reactive Execution](reactive-observability.md) is
-**DESIGNED / RATIFIED — NOT YET IMPLEMENTED**. Planned `ReactiveObservabilitySummary` owns only
+**IMPLEMENTED**. `ReactiveObservabilitySummary` owns only
 `information_required` and `information_sufficient`, with `reactive_observability_scoring_v1` and
 `reactive_observability_summary_v1`. Both `AggregationSummary` validation and
 `RunArtifactStore.replace_summary` must enforce one identical presence contract:
@@ -272,12 +272,13 @@ if observability exists, else v8 failure, v7 execution, v6 Action Recovery, v5 A
 else v4. Configured mixtures of M5.6 and M5.4/M5.5 populations suppress both generic scores,
 irrespective of observed coverage. Pure M5.6 follows the established complete/partial convention.
 
-Planned evaluator `1.3.0` and observation/rendering v3 introduce no physical or fingerprint bump:
+Evaluator `1.3.0` and observation/rendering v3 introduce no physical or fingerprint bump:
 those remain v4 and v3. Reveal state is reconstructed, not physically persisted. Historical raw
 configuration dictionaries remain authoritative; in-memory defaults must not rewrite them through
 `model_dump()`. The normative lifecycle requires whole-run preflight before score-upgrade writes
-or events and rejects stale resume before provider contact. Current implementation remains
-evaluator `1.2.0` and Summary v8; the following sections describe existing contracts.
+or events and rejects stale resume before provider contact. Current implementation uses
+evaluator `1.3.0`; the following sections preserve the M5.5/M5.4 summary contracts for runs
+without observability populations.
 
 ### M5.5 Summary v8
 
@@ -293,7 +294,8 @@ combined Reactive run may contain both blocks in v8, with generic `score=None` a
 remain in existing turn evidence, with deterministic offline replay and no canonical evidence
 rewrite during upgrade. The model and atomic summary writer enforce the same presence matrix:
 v7 requires only the Reactive Execution block; v8 requires the failure block and permits both.
-Current Reactive summaries carry evaluator `1.2.0`; historical v7 summaries with `1.1.0` remain readable.
+Current Reactive summaries carry evaluator `1.3.0`; historical v7/v8 summaries with
+`1.1.0`/`1.2.0` remain readable.
 
 ### Reactive Execution Summary v7
 

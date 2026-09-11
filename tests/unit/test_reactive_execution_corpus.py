@@ -94,10 +94,10 @@ def test_projection_matches_full_runtime_with_history(reactive, text, actions_us
         futile_occurrences=1,
     )
     full = step_reactive(config, full, GenerationResponse(text=text))
-    state, status, actions, failures, contact = project_variant(
+    state, status, actions, failures, contact, precondition = project_variant(
         config, b"{}", ProductStatus.ALIVE, actions_used, turns_used, text
     )
-    assert failures == () and contact is False
+    assert failures == () and contact is False and precondition is False
     assert state == canonical_json_bytes(full.current_state)
     assert actions == full.invoked_actions
     assert (status is ProductStatus.DONE) == (

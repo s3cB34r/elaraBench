@@ -1,14 +1,14 @@
 # M5.6 — Partially Observable Reactive Execution
 
-**DESIGNED / RATIFIED — NOT YET IMPLEMENTED.**
+**IMPLEMENTED — READY FOR FINAL ACCEPTANCE.**
 
 This is the authoritative, self-contained M5.6 architecture specification. It extends
 [Reactive Execution](reactive-execution.md) and
 [Reactive Execution Failure Recovery](reactive-failure-recovery.md); it does not replace their
-existing semantics. M5.2–M5.5 are implemented. The current repository has `reactive_execution`
-evaluator `1.2.0`, Summary v8, nine Built-ins and 258 production cases. Everything identified
-below as M5.6 is planned: evaluator `1.3.0`, Summary v9, and a tenth suite bringing the future
-catalog to 282 cases. Physical result schema v4 and fingerprint schema v3 remain unchanged.
+existing semantics. M5.2–M5.6 are implemented. The current repository has `reactive_execution`
+evaluator `1.3.0`, content-dependent Summary v9, ten Built-ins and 282 production cases.
+M5.6 adds the tenth suite while preserving all nine historical corpus hashes. Physical result
+schema v4 and fingerprint schema v3 remain unchanged.
 
 ## Capability and boundary
 
@@ -35,7 +35,7 @@ remain `ERROR`, separate from benchmark behavior.
 
 ## Trusted observability configuration
 
-The planned optional configuration is:
+The optional configuration is:
 
 ```python
 observability: ObservabilitySpec | None = None
@@ -90,7 +90,7 @@ content, content hash, and corpus renderer equality checks.
 
 ## Observation v3 and reveal runtime state
 
-M5.6 plans `reactive_observation_v3` and `reactive_observation_rendering_v3`. The observation field
+M5.6 uses `reactive_observation_v3` and `reactive_observation_rendering_v3`. The observation field
 structure is unchanged. Only `resulting_state` is projected:
 
 ```text
@@ -102,7 +102,7 @@ Observations must not expose hidden unrevealed current values, capability, group
 expected state, or reachability classification. With `observability == None`, projection is the
 identity and historical observation bytes remain unchanged.
 
-The planned ephemeral trusted `ReactiveRuntime` component is:
+The ephemeral trusted `ReactiveRuntime` component is:
 
 ```python
 revealed_keys: frozenset[Identifier]
@@ -198,7 +198,7 @@ sufficiency.
 
 ## First-party failure isolation
 
-Every case in planned `reactive_observability.core` must satisfy:
+Every case in `reactive_observability.core` must satisfy:
 
 ```text
 failure_schedule == {}
@@ -392,7 +392,7 @@ coverage. Existing M5.4/M5.5 generic behavior remains unchanged.
 
 ### Mandatory strategy probes
 
-All twelve probes are mandatory:
+All fourteen probes are mandatory:
 
 | Probe | Required interpretation |
 | --- | --- |
@@ -401,6 +401,8 @@ All twelve probes are mandatory:
 | `malformed` | Proven `0 / 0 / 0`, headline `0` |
 | `always_reveal` | Axis values, including restraint behavior, are empirical |
 | `never_reveal` | Proven discrimination `0` as an observation-blind strategy within valid contrast groups; acquisition, restraint, and headline are empirical first-party results |
+| `left_then_right` | Proven discrimination `0` as a deterministic blind policy; other axes empirical |
+| `right_then_left` | Proven discrimination `0` as a deterministic blind policy; other axes empirical |
 | `always_reveal_then_fixed` | Proven discrimination `0` as a deterministic blind policy; other axes empirical |
 | `fixed_second_response` | Proven discrimination `0` as a deterministic blind policy; other axes empirical |
 | `static_one_shot` | Proven discrimination `0` as a deterministic blind policy; other axes empirical |
@@ -425,7 +427,7 @@ Incomplete coverage, `ERROR`, `INVALID`, `PENDING_REVIEW`, or headline `None` fa
 
 ## Summary v9 and semantic identity
 
-Planned `ReactiveObservabilitySummary` owns only `information_required` and
+`ReactiveObservabilitySummary` owns only `information_required` and
 `information_sufficient`. It must not contaminate `ReactiveExecutionSummary` or
 `ReactiveFailureSummary`. The exact presence contract is:
 
@@ -452,7 +454,7 @@ else 5 if Action Compliance summary exists
 else 4
 ```
 
-Planned identifiers are `reactive_execution` evaluator `1.3.0`, `reactive_observation_v3`,
+Implemented identifiers are `reactive_execution` evaluator `1.3.0`, `reactive_observation_v3`,
 `reactive_observation_rendering_v3`, `reactive_observability_scoring_v1`, and
 `reactive_observability_summary_v1`. Preserve existing artifact semantic identity unless actual
 implementation needs only additive validation support. There is no new behavioral outcome semantic
@@ -481,7 +483,7 @@ snapshot bytes, requests, responses, attempts, observations, and production hash
 
 ## First-party production design
 
-Planned `reactive_observability.core` version `1.0.0` contains exactly **24 cases**:
+`reactive_observability.core` version `1.0.0` contains exactly **24 cases**:
 
 - 12 `information_required`, all in six two-variant groups.
 - 12 `information_sufficient`, all ungrouped.
@@ -493,7 +495,8 @@ Planned `reactive_observability.core` version `1.0.0` contains exactly **24 case
 
 ### Fail-closed corpus validator contract
 
-The future first-party validator must enforce all of these gates:
+The first-party `validate_reactive_observability_corpus` validator enforces these gates, with
+proof-compatibility and mutation regressions:
 
 1. Exactly 24 cases and 12/12 populations.
 2. No authorization-gated cases.
@@ -534,17 +537,23 @@ observability configuration, `observable_keys`, `reveals`, `revealed_keys`, true
 declared normal tool effects, failure configuration, or authorization. No recursive blacklist
 is introduced.
 
-### Built-in, hashes, and wheel plan
+### Built-in, hashes, and wheel integration
 
-The future registration is `reactive_observability.core -> reactive_observability/core-v1`.
-All nine existing production hashes must remain byte-identical. Future implementation adds one
-tenth pin; no existing production corpus file is rewritten. No new hash is assigned by this
-documentation task.
+The registration is `reactive_observability.core -> reactive_observability/core-v1`.
+All nine historical production hashes remain byte-identical. The independently verified tenth pin is:
 
-The future isolated wheel regression must verify ten Built-ins, 282 cases, discovery of the new
+`08c581ad0eaf4ed4a063e884fc3a835c0797a2642dd40bb83a3c4c7805fd2846`
+
+No historical production corpus file was rewritten.
+
+The isolated wheel regression verifies ten Built-ins, 282 cases, discovery of the new
 suite, an importable/executable new validator, and all ten hashes. Test-only Goldens and foundation
-fixtures remain excluded. `pyproject.toml` is expected unchanged.
+fixtures remain excluded. `pyproject.toml` is unchanged.
 
-The **current implemented** catalog remains **nine Built-ins / 258 cases**. The **planned catalog
-after M5.6 implementation** is **ten Built-ins / 282 cases**. This ratified architecture does not
-implement evaluator `1.3.0`, Summary v9, runtime projection, or the new corpus.
+The **current implemented** catalog is **ten Built-ins / 282 cases**. The M5.5 baseline was
+nine Built-ins / 258 cases. First-party workflows use one Action per plan: required cases need
+3/4/5 Actions across easy/medium/hard, including inspection; sufficient cases need exactly
+2/3/4 Actions. The six exhaustive product proofs expand 14, 14, 30, 30, 53, 53 states.
+Historical M5.4 pins remain 8, 8, 17, 17, 17, 17, and M5.5 proof behavior is preserved.
+All fourteen production probes pass: perfect is 1.0, and the largest designated degenerate
+headline is `never_reveal` at 1/3. These measured results do not broaden the proof claim.

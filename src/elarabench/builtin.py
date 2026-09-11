@@ -24,6 +24,7 @@ _BUILTIN_SUITE_PATHS: Final[Mapping[str, tuple[str, ...]]] = MappingProxyType(
         "action_recovery.core": ("action_recovery", "core-v1"),
         "reactive_execution.core": ("reactive_execution", "core-v1"),
         "reactive_failure.core": ("reactive_failure", "core-v1"),
+        "reactive_observability.core": ("reactive_observability", "core-v1"),
     }
 )
 

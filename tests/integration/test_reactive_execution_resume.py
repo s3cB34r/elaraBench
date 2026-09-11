@@ -25,8 +25,10 @@ class Crash(BaseException):
     ids=list("ABCDEFG"),
 )
 @pytest.mark.parametrize("failure_enabled", [False, True])
+@pytest.mark.parametrize("observability_enabled", [False, True])
 def test_first_resume_crash_boundary(
     reactive, monkeypatch, boundary, owner, method, target, after, expected_calls, failure_enabled,
+    observability_enabled,
 ):
     if failure_enabled:
         from dataclasses import replace
@@ -44,6 +46,29 @@ def test_first_resume_crash_boundary(
             "outcome_semantic": "reactive_execution_outcomes_v2",
             "observation_semantic": "reactive_observation_v2",
             "rendering_semantic": "reactive_observation_rendering_v2",
+        })
+        case = case.model_copy(update={
+            "evaluation": EvaluationSpecification(type="reactive_execution",
+                                                  config=config.model_dump(mode="json")),
+            "messages": (case.messages[0], ChatMessage(
+                role=ChatRole.USER, content=render_reactive_task(config, config.objective))),
+        })
+        suite = loaded.suite.model_copy(update={"cases": (case,)})
+        loaded = replace(loaded, suite=suite, content_hash=hash_suite(suite, {}))
+        monkeypatch.setattr(reactive, "suite", lambda **kwargs: loaded)
+    if observability_enabled:
+        from dataclasses import replace
+
+        from elarabench.hashing import hash_suite
+        from elarabench.models import ChatMessage, ChatRole, EvaluationSpecification
+        from elarabench.reactive_execution import ReactiveExecutionConfig, render_reactive_task
+
+        loaded = reactive.suite()
+        case = loaded.suite.cases[0]
+        config = ReactiveExecutionConfig.model_validate(case.evaluation.config | {
+            "observability": {"observable_keys": [], "reveals": {"open": ["open"]}},
+            "observation_semantic": "reactive_observation_v3",
+            "rendering_semantic": "reactive_observation_rendering_v3",
         })
         case = case.model_copy(update={
             "evaluation": EvaluationSpecification(type="reactive_execution",
@@ -120,6 +145,18 @@ def test_first_resume_crash_boundary(
         assert evaluation.score == 1
         assert evaluation.artifacts["reactive_execution"]["outcome"] == (
             "completed_after_execution_failure")
+    if observability_enabled:
+        from elarabench.reactive_execution import replay_reactive
+        from elarabench.scoring import _reactive_context
+
+        case = reactive.suite().suite.cases[0]
+        context = _reactive_context(store, identity, case.evaluation)
+        state, _ = replay_reactive(context)
+        assert state.revealed_keys == frozenset({"open"})
+        initial = state.steps[0].observation.resulting_state
+        assert initial == ({} if failure_enabled else {"open": True})
+        assert "revealed_keys" not in str(store.read_evaluation(
+            identity, source_result_schema_version=4).model_dump())
     assert result.manifest.schema_version == 4
     for index in (0, 1):
         view = store.for_turn(index)

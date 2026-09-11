@@ -196,19 +196,19 @@ brought the historical catalog to 234 cases. Summary v7 does not change physical
 ## M5.5 Reactive Execution Failure Recovery
 
 [M5.5 Reactive Execution Failure Recovery](reactive-failure-recovery.md) is the normative
-architecture authority for the **IMPLEMENTED** extension. It provides
+architecture authority for the **IMPLEMENTED** extension. It introduced
 `reactive_execution` evaluator `1.2.0`, visible failure catalog and hidden trusted schedule,
 failure-contact scoring, and disjoint failure populations in Summary semantic schema v8.
 Physical result schema remains v4. It adds no evaluator family, real tools, provider failure
 semantics, or new orchestration capability. M5.4 behavior and suite hashes remain unchanged under
-evaluator `1.2.0`. The 24-case ninth suite brings the catalog to nine Built-ins and 258 cases.
+evaluator `1.2.0`. The 24-case ninth suite brought the M5.5 catalog to nine Built-ins and 258 cases.
 The existing product BFS now includes Control, independent failure counters, and independent
 failure-contact flags; M5.4 node pins remain 8, 8, 17, 17, 17, 17.
 
-## M5.6 Partially Observable Reactive Execution (planned)
+## M5.6 Partially Observable Reactive Execution
 
 [M5.6 Partially Observable Reactive Execution](reactive-observability.md) is the normative authority
-and is **DESIGNED / RATIFIED — NOT YET IMPLEMENTED**. Planned evaluator `1.3.0` extends
+and is **IMPLEMENTED**. Evaluator `1.3.0` extends
 `reactive_execution` with trusted optional observability, initial projected values before the first
 Action, and observation v3 projecting only `resulting_state`. Ephemeral monotonic `revealed_keys`
 is reconstructed from successfully applied inspection Actions, without physical persistence.
@@ -220,5 +220,5 @@ The core binary search and full alphabet remain unchanged, while M5.6 product co
 same E5-only scoring predicate and conditionally tracks per-variant precondition-failure history.
 Visibility state remains excluded. Historical state equivalence is preserved, with mandatory
 M5.4 node-pin and M5.5 proof regressions. Physical result schema v4 and fingerprint schema v3
-remain unchanged. The current nine Built-ins / 258 cases become ten / 282 only after future
-implementation; current evaluator `1.2.0` and Summary v8 remain implemented.
+remain unchanged. The current catalog has ten Built-ins / 282 cases under evaluator `1.3.0`,
+with content-dependent Summary v9 and all nine historical suite hashes unchanged.

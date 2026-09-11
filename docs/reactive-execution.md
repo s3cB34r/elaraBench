@@ -88,16 +88,16 @@ human approval workflows, provider-native Tool APIs, cross-model routing or fall
 execution, synthetic `tool_error`, and transient synthetic tool failures are outside M5.4.
 
 The normative [M5.5 Reactive Execution Failure Recovery design](reactive-failure-recovery.md) is
-**IMPLEMENTED** under evaluator `1.2.0`. It extends this evaluator with deterministic
+**IMPLEMENTED**, introduced under evaluator `1.2.0`. It extends this evaluator with deterministic
 benchmark-generated `execution_failed` behavior; it does not change this document's M5.4 scope,
 E1–E10 semantics, or production corpus. Its corrected product proof includes Control and
 independent failure-contact flags. M5.4 Control remains dead for goal completion, with unchanged
 M5.4 proof verdicts and expanded-node counts verified by the compatibility regressions.
 The M5.4 version references below describe its original `1.1.0` contract; M5.5 preserves that
-behavior and permits explicit upgrades to current `1.2.0` derived evaluations.
+behavior; M5.6 permits eligible explicit upgrades to current `1.3.0` derived evaluations.
 
 [M5.6 Partially Observable Reactive Execution](reactive-observability.md) is the normative authority
-for the **DESIGNED / RATIFIED — NOT YET IMPLEMENTED** observability extension. It plans evaluator
+for the **IMPLEMENTED** observability extension. It provides evaluator
 `1.3.0`, projected Turn-0 state and observation v3, and information-required/sufficient populations.
 It preserves E1–E12, the full canonical blind-policy alphabet, and existing reachability and
 transition semantics. M5.6 capability success is E5 only; product completion shares that predicate
@@ -1082,11 +1082,12 @@ of 1. M5.4b defines no arbitrary per-axis `<= 1/12` threshold.
 
 M5.4b added exactly one built-in, `reactive_execution.core`. The seven historical suite byte
 streams and hashes remain unchanged. M5.5 adds the ninth built-in, `reactive_failure.core`, with
-its independently pinned hash. The resulting catalog has nine production suites and 258 cases.
+its independently pinned hash. M5.6 adds `reactive_observability.core`, bringing the current
+catalog to ten production suites and 282 cases without changing historical corpus bytes.
 
 The Reactive production suite ships as wheel/package data; production Goldens remain test-side
-under the existing convention. Distribution regression verifies all nine suites are discoverable,
-both Reactive suites are packaged, the Reactive corpus validators are importable, and historical
+under the existing convention. Distribution regression verifies all ten suites are discoverable,
+all three Reactive suites are packaged, the Reactive corpus validators are importable, and historical
 suites remain unchanged. Unrelated package metadata is not broadened.
 
 ## M5.3 reachability extraction compatibility

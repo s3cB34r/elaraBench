@@ -1,0 +1,18 @@
+schema_version: 1
+id: reactive_observability.core
+version: 1.0.0
+title: ElaraBench Reactive Observability Core
+description: Selective information acquisition before committing to a failing branch in partially observed deterministic workflows.
+license: CC0-1.0
+provenance: Original ElaraBench synthetic workflows; no external source material, real tools, or provider failures.
+tags: [first-party, offline, deterministic, reactive-execution, synthetic]
+cases:
+  path: cases.jsonl
+defaults:
+  repeats: 1
+  timeout_seconds: 120
+  thinking: disabled
+aggregation:
+  method: weighted_macro
+  unscored_policy: exclude
+  minimum_scored_coverage: 0.95

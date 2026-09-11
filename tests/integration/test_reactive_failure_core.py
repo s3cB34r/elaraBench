@@ -72,7 +72,7 @@ def test_live_offline_mandatory_strategy(reactive, name):
         retryable = case.evaluation.config["capability"] == "retryable_failure"
         length = len(case.evaluation.config["tools"])
         # Independent simple-chain oracle: one failed final invocation, then retry or Control.
-        assert evaluation.score == 1 and evaluation.evaluator_version == "1.2.0"
+        assert evaluation.score == 1 and evaluation.evaluator_version == "1.3.0"
         assert artifact["outcome"] == (
             "completed_after_execution_failure" if retryable else "correct_terminal_stop"
         )
@@ -85,7 +85,7 @@ def test_live_offline_mandatory_strategy(reactive, name):
     before = {p: p.read_bytes() for p in result.path.rglob("*") if p.is_file()}
     comparison = compare_runs(result.path, result.path)
     assert all(
-        r.status == "available" and r.evaluator_version == "1.2.0"
+        r.status == "available" and r.evaluator_version == "1.3.0"
         for r in comparison.evaluator_resolution
     )
     assert all(p.read_bytes() == data for p, data in before.items())
@@ -93,7 +93,7 @@ def test_live_offline_mandatory_strategy(reactive, name):
 
 def test_production_gates_and_all_historical_hashes():
     pins = json.loads(Path("tests/fixtures/builtin_suite_hashes.json").read_text())
-    assert len(pins) == len(available_builtin_suites()) == 9
+    assert len(pins) == len(available_builtin_suites()) == 10
     count = 0
     for name in available_builtin_suites():
         loaded = load_benchmark_suite(get_builtin_suite_path(name))
@@ -103,4 +103,4 @@ def test_production_gates_and_all_historical_hashes():
         if name == "reactive_failure.core":
             result = validate_reactive_failure_corpus(loaded)
             assert result.valid, result.errors
-    assert count == 258
+    assert count == 282

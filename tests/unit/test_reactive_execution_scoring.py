@@ -60,7 +60,7 @@ def test_real_e6_and_historical_artifact_derivation(reactive):
     before = dict(old.artifacts["reactive_execution"])
     after = dict(current.artifacts["reactive_execution"])
     assert before.pop("evaluator_version") == "1.0.0"
-    assert after.pop("evaluator_version") == "1.2.0"
+    assert after.pop("evaluator_version") == "1.3.0"
     assert before == after  # No scoring fields added to the behavioral artifact.
 
 
