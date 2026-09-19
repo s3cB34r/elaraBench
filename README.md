@@ -1,76 +1,120 @@
-# ElaraBench
+<p align="center">
+  <img src="assets/elarabench-logo.png" alt="ElaraBench Logo" width="420">
+</p>
 
-ElaraBench is a CLI-first, provider-neutral benchmark product for evaluating language models
-with versioned tasks, preserved model responses, deterministic scoring, and inspectable results.
-Product release **0.4.0** freezes the v1 feature scope. This pre-1.0 release has Alpha status.
+<h1 align="center">ElaraBench</h1>
 
-## Why ElaraBench exists
+<p align="center">
+  <strong>Reproducible evaluation for local AI models.</strong>
+</p>
 
-Replace subjective chat impressions with explicit benchmark definitions, reproducible run
-configuration, coverage-aware scores, and auditable comparisons. Canonical responses remain
-available for offline evaluation and replay. ElaraBench is independent of Elara Core.
+<p align="center">
+  <a href="https://github.com/s3cB34r/elaraBench/releases">
+    <img src="https://img.shields.io/github/v/tag/s3cB34r/elaraBench?label=Release&logo=github" alt="Release">
+  </a>
+  <a href="https://github.com/s3cB34r/elaraBench/actions/workflows/ci.yml">
+    <img src="https://github.com/s3cB34r/elaraBench/actions/workflows/ci.yml/badge.svg" alt="CI">
+  </a>
+  <img src="https://img.shields.io/badge/Python-3.11%20%7C%203.12-3776AB?logo=python&logoColor=white" alt="Python">
+  <a href="LICENSE">
+    <img src="https://img.shields.io/badge/License-Apache--2.0-D22128?logo=apache&logoColor=white" alt="Apache 2.0">
+  </a>
+  <img src="https://img.shields.io/badge/Provider-Ollama-black?logo=ollama&logoColor=white" alt="Ollama">
+</p>
 
-## Capabilities and Built-ins
+<p align="center">
+  CLI-first, provider-neutral benchmarking with deterministic scoring,<br>
+  reproducible artifacts, compliance evaluation and inspectable results.
+</p>
 
-The installed catalog contains **10 Built-ins / 282 production cases**. It covers reasoning,
-instruction following, static coding and defensive cybersecurity analysis, refusal/compliance,
-synthetic action compliance and recovery, and bounded deterministic multi-turn Reactive execution.
-Reactive tasks include execution-failure recovery and partial observability: acquiring information
-before committing to a failing branch while avoiding unnecessary inspection.
+---
 
-| Suite | Version | Cases | Categories | Recommended output cap |
-| --- | --- | ---: | ---: | ---: |
-| `reasoning.core` | 1.0.0 | 18 | 6 | 64 tokens |
-| `instruction_following.core` | 1.0.0 | 18 | 6 | 128 tokens |
-| `coding.core` | 1.0.0 | 12 | 4 | 128 tokens |
-| `cybersecurity.core` | 1.0.0 | 12 | 4 | 192 tokens |
-| `refusal_compliance.core` | 1.0.0 | 54 | 8 | 192 tokens |
-| `action_compliance.core` | 1.0.0 | 36 | 6 | 192 tokens |
-| `action_recovery.core` | 1.0.0 | 36 | 6 | 256 tokens |
-| `reactive_execution.core` | 1.0.0 | 48 | 6 | 512 tokens |
-| `reactive_failure.core` | 1.0.0 | 24 | 6 | 512 tokens |
-| `reactive_observability.core` | 1.0.0 | 24 | 6 | 512 tokens |
+## 🧪 Why ElaraBench?
 
+ElaraBench replaces subjective chat impressions with explicit benchmark definitions, reproducible run configurations, coverage-aware scoring and auditable comparisons.
 
-The suites are small, public, and cannot be claimed contamination-free. Category results are
-diagnostic. Coding tasks never execute generated code; cybersecurity tasks use synthetic static
-evidence, not live targets. See the [benchmark catalog](benchmarks/README.md) for methodology,
-canonical profiles, and limitations.
+Canonical responses remain available for offline evaluation and replay.
 
-## Installation
+**v0.4.0** establishes the first public baseline with:
 
-Requires Python 3.11 or newer. Clone the repository and install it in an editable
-virtual environment:
+* **10 built-in benchmark suites**
+* **282 production benchmark cases**
+* deterministic offline scoring
+* preserved request/response evidence
+* resume and fingerprint safeguards
+* model-run comparison
+* compliance and refusal evaluation
+* bounded synthetic action execution
+* Reactive multi-turn evaluation
+
+---
+
+## ✨ Benchmark Suites
+
+| Suite                         | Cases | Focus                       |
+| ----------------------------- | ----: | --------------------------- |
+| `reasoning.core`              |    18 | 🧠 Reasoning                |
+| `instruction_following.core`  |    18 | 📋 Instruction following    |
+| `coding.core`                 |    12 | 💻 Static coding            |
+| `cybersecurity.core`          |    12 | 🛡️ Defensive cybersecurity |
+| `refusal_compliance.core`     |    54 | 🚦 Refusal & compliance     |
+| `action_compliance.core`      |    36 | 🛠️ Action compliance       |
+| `action_recovery.core`        |    36 | 🔄 Action recovery          |
+| `reactive_execution.core`     |    48 | ⚙️ Reactive execution       |
+| `reactive_failure.core`       |    24 | 🧯 Failure recovery         |
+| `reactive_observability.core` |    24 | 🔍 Partial observability    |
+
+**Total: 282 production benchmark cases**
+
+See the [benchmark catalog](benchmarks/README.md) for methodology, suite versions and limitations.
+
+---
+
+## 🚀 Quick Start
+
+### 1. Clone
 
 ```bash
 git clone https://github.com/s3cB34r/elaraBench.git
 cd elaraBench
+```
+
+### 2. Create a virtual environment
+
+```bash
 python -m venv .venv
 source .venv/bin/activate
+```
+
+### 3. Install
+
+```bash
 python -m pip install -e .
 ```
 
-To build and install a wheel instead, run these commands from the checkout with
-the virtual environment active:
+For development:
 
 ```bash
-python -m pip wheel . --no-deps --wheel-dir dist
-python -m pip install dist/elarabench-0.4.0-py3-none-any.whl
+python -m pip install -e ".[dev]"
 ```
 
-These instructions do not assume a PyPI publication. Installation may require internet to obtain
-build tools and dependencies. The development extras are described below.
-
-## Quickstart
-
-Start Ollama separately and use an already installed, compatible model. Replace
-`YOUR_INSTALLED_MODEL` with its actual name; ElaraBench never downloads models.
+### 4. Explore
 
 ```bash
 elarabench --version
 elarabench list
 elarabench validate reasoning.core
+```
 
+---
+
+## 🦙 Run a Local Model with Ollama
+
+Ollama is the production inference provider implemented in **v0.4.0**.
+
+ElaraBench does not download models automatically. Start Ollama separately and use a model you already have installed.
+
+```bash
 elarabench run reasoning.core \
   --provider ollama \
   --model YOUR_INSTALLED_MODEL \
@@ -83,126 +127,246 @@ elarabench run reasoning.core \
   --max-retries 0 \
   --max-tokens 64 \
   --runs-dir runs
+```
 
+Then summarize the run:
+
+```bash
 elarabench summarize runs/ACTUAL_RUN_ID
 ```
 
-Use the actual `Run:` path printed by the command. By default, artifacts go under `runs/` in
-the current working directory, with a generated timestamp-and-fingerprint directory name.
-
-Optional offline rescoring and comparison:
+Or rescore it offline:
 
 ```bash
 elarabench score runs/ACTUAL_RUN_ID
-elarabench compare runs/BASELINE_ID runs/CANDIDATE_ID --intent model
 ```
 
-Comparison reports candidate minus baseline after checking comparability. `--json` prints the
-machine-readable result; `--output PATH` writes it. Exit codes are 0 for strict/qualified quality
-comparability, 1 for quality not directly comparable, and 2 for input/operational errors.
-
-## Built-in discovery
-
-`elarabench list` shows all installed suite IDs, versions and case counts in stable order,
-without a provider or network. `elarabench validate SUITE_ID` validates a suite and prints its
-content hash. Both `validate` and `run` also accept custom suite directories.
-
-## Ollama configuration
-
-Ollama is the implemented production provider. The default endpoint is
-`http://127.0.0.1:11434`; use `--endpoint` to override it. The service and named model must already
-be available. With dependencies and model installed, local benchmarking can operate without internet.
-
-Thinking is explicit: `--no-think` disables it, `--think` enables it, and
-`--thinking provider-default` leaves the choice to the backend with reduced comparability.
-CLI policy overrides the suite policy, then the framework default of disabled. Explicit thinking
-control requires compatible model capabilities; unsupported control fails visibly. No reasoning-effort
-levels are inferred from model names. See [reproducibility](docs/reproducibility.md).
-
-The generation read timeout defaults to the suite policy or 120 seconds. Read timeouts are not
-automatically retried; `--max-retries` controls eligible transport retries. See `run --help` for
-sampling, output limits, coverage, and run-directory options.
-
-## Results and artifacts
-
-| Artifact | Purpose |
-| --- | --- |
-| `benchmark.json` | Captured benchmark snapshot and identity. |
-| `manifest.json` | Configuration, provenance, request plan and lifecycle metadata. |
-| `samples/` | Canonical request/response/attempt evidence plus derived evaluations. |
-| `summary.json` | Regenerable aggregate results. |
-| `events.jsonl` | Diagnostic lifecycle history, not canonical replay authority. |
-
-`score` re-evaluates canonical responses; `summarize` aggregates stored evaluations; `compare`
-checks source runs and evaluates current semantics in memory without modifying them.
-`list`, `validate`, `score`, `summarize`, and `compare` require no provider contact.
-
-A scored zero is a model failure and counts toward scored coverage. Infrastructure errors,
-invalid benchmark inputs, pending review, and missing samples remain distinct. Headlines follow
-coverage requirements; incomplete evidence is not silently treated as success or failure.
-See [result format](docs/result-format.md) and [comparison](docs/comparison.md).
-
-## Reproducibility and compatibility
-
-Versioned benchmark/configuration identity and offline evidence replay support reproducibility.
-A seed is a requested control, not a guarantee of bit-identical model outputs across executions,
-runtimes or providers. Latency and token observations remain separate from quality scoring.
-
-Historical artifacts remain readable/rescorable according to supported eligibility rules.
-`elarabench run --resume RUN_PATH` requires compatible runtime provenance and rejects configuration
-overrides. An explicit `score` upgrade updates derived evaluation without rewriting canonical
-request/response evidence. Pre-1.0 compatibility is not promised indefinitely.
-
-| Independent version axis | Current identity |
-| --- | --- |
-| Product release | 0.4.0 |
-| Reactive evaluator | 1.3.0 |
-| Built-in suite versions | 1.0.0 |
-| Latest physical result schema | v4 |
-| Latest Summary schema | v9 |
-| Fingerprint schema | v3 |
-
-Historical artifacts and content-dependent summaries can use earlier supported schemas.
-Product version changes do not change benchmark or evaluator semantics.
-
-## Supported providers
-
-Production adapter: **Ollama**, using its native API. The architecture is provider-neutral.
-OpenAI-compatible and llama.cpp adapters remain future work. The deterministic fake provider is
-internal test infrastructure, not a production backend exposed by the CLI factory.
-
-## Scope and non-goals
-
-The v1 feature scope includes bounded deterministic synthetic multi-turn Reactive execution,
-filesystem artifacts, offline scoring/replay, durable resume and two-run comparison.
-It excludes real external tool execution, persistent external environments, arbitrary autonomous
-agent loops, provider-native agent orchestration, multi-agent routing, distributed execution,
-a Web UI, database and plugin system. No additional capability milestone is needed for this release.
-
-The product is CLI-first. Existing discovery helpers are available for Python callers, but this
-release makes no broad Python-library stability promise. Custom suite authoring is supported and
-[documented](docs/benchmark-authoring.md); internal behavioral-corpus validator interfaces may evolve
-during pre-1.0 development.
-
-## License
-
-Framework software is [Apache-2.0](LICENSE). Bundled benchmark corpus/data remain
-[CC0-1.0](src/elarabench/builtin_benchmarks/LICENSE) where declared. The distribution’s
-`Apache-2.0 AND CC0-1.0` expression describes these separately licensed components: it does not
-make framework code CC0 or apply Apache to benchmark data.
-
-## Development and deeper documentation
+Compare two runs:
 
 ```bash
-python -m pip install -e ".[dev]"
+elarabench compare \
+  runs/BASELINE_ID \
+  runs/CANDIDATE_ID \
+  --intent model
+```
+
+---
+
+## 🔬 Evaluation Capabilities
+
+### 🧠 Reasoning
+
+Bounded reasoning tasks with deterministic scoring.
+
+### 📋 Instruction Following
+
+Tests adherence to explicit task requirements and output constraints.
+
+### 💻 Coding
+
+Static coding evaluation without executing generated code.
+
+### 🛡️ Cybersecurity
+
+Synthetic defensive-security analysis without live targets.
+
+### 🚦 Refusal Compliance
+
+Evaluates whether models comply with or refuse requests according to explicit benchmark criteria.
+
+### 🛠️ Action Compliance
+
+Tests structured model-produced actions inside deterministic synthetic environments.
+
+### 🔄 Action Recovery
+
+Measures recovery behavior when actions cannot be completed as expected.
+
+### ⚙️ Reactive Execution
+
+Bounded multi-turn scenarios with persistent state and evidence.
+
+### 🧯 Failure Recovery
+
+Tests behavior after synthetic execution failures.
+
+### 🔍 Partial Observability
+
+Evaluates whether models acquire necessary information before acting without unnecessary inspection.
+
+---
+
+## 📦 Results & Artifacts
+
+Every benchmark run produces inspectable artifacts:
+
+| Artifact         | Purpose                                       |
+| ---------------- | --------------------------------------------- |
+| `benchmark.json` | Benchmark snapshot and identity               |
+| `manifest.json`  | Configuration and provenance                  |
+| `samples/`       | Requests, responses, attempts and evaluations |
+| `summary.json`   | Aggregate results                             |
+| `events.jsonl`   | Diagnostic lifecycle history                  |
+
+Offline-capable commands:
+
+```text
+list
+validate
+score
+summarize
+compare
+```
+
+---
+
+## 🔁 Reproducibility
+
+ElaraBench records enough execution context to support reproducible evaluation without pretending that model generation itself is always bit-identical.
+
+Key mechanisms include:
+
+* benchmark content hashes
+* versioned benchmark identity
+* preserved canonical responses
+* run fingerprints
+* execution provenance
+* durable attempt evidence
+* compatible resume validation
+* offline rescoring
+* historical artifact handling
+* two-run comparison
+
+> A deterministic benchmark configuration does not guarantee identical model output across runtimes, hardware or providers.
+
+---
+
+## 📐 Versioning
+
+| Version axis           | Current   |
+| ---------------------- | --------- |
+| ElaraBench             | **0.4.0** |
+| Reactive evaluator     | **1.3.0** |
+| Built-in suites        | **1.0.0** |
+| Physical result schema | **v4**    |
+| Summary schema         | **v9**    |
+| Fingerprint schema     | **v3**    |
+
+These version axes are intentionally independent.
+
+---
+
+## ✅ Quality
+
+ElaraBench v0.4.0 was release-verified with:
+
+* ✅ **1,380 passing tests**
+* ✅ Ruff
+* ✅ strict mypy
+* ✅ clean Git archive build
+* ✅ wheel installation smoke tests
+* ✅ GitHub Actions CI
+* ✅ Python 3.11
+* ✅ Python 3.12
+
+Development checks:
+
+```bash
 ruff check .
-mypy src
+mypy src tests
 pytest -q
 ```
 
-See [CHANGELOG](CHANGELOG.md), [architecture and milestone history](docs/architecture.md),
-[benchmark format](docs/benchmark-format.md), [authoring](docs/benchmark-authoring.md),
-[methodology](docs/benchmark-methodology.md), [deterministic core](docs/deterministic-core.md),
-[Action Compliance](docs/action-compliance.md), [Action Recovery](docs/action-recovery.md),
-[Reactive Execution](docs/reactive-execution.md), [failure recovery](docs/reactive-failure-recovery.md),
-and [observability](docs/reactive-observability.md).
+---
+
+## 🔌 Providers
+
+| Provider              | Status       |
+| --------------------- | ------------ |
+| 🦙 Ollama             | ✅ Production |
+| OpenAI-compatible API | 🔭 Planned   |
+| llama.cpp             | 🔭 Planned   |
+
+Benchmark definitions remain provider-neutral.
+
+---
+
+## ⚠️ Project Status
+
+**ElaraBench v0.4.0 is the first public release.**
+
+It is still pre-1.0 software.
+
+The CLI and benchmark corpus form the current public baseline, but broad Python API stability and indefinite compatibility with every historical artifact format are not yet guaranteed.
+
+---
+
+## 🗺️ Roadmap
+
+Potential future work includes:
+
+* 🔌 additional inference providers
+* 🧪 additional benchmark suites
+* 📊 richer reporting and analysis
+* 📈 expanded evaluation coverage
+* 🧠 additional reasoning benchmarks
+* 🤖 additional agentic evaluation scenarios
+* 📉 CI coverage thresholds
+
+The goal is to expand capability without sacrificing reproducibility or inspectability.
+
+---
+
+## 📚 Documentation
+
+* [Benchmark Catalog](benchmarks/README.md)
+* [Architecture](docs/architecture.md)
+* [Benchmark Methodology](docs/benchmark-methodology.md)
+* [Benchmark Authoring](docs/benchmark-authoring.md)
+* [Reproducibility](docs/reproducibility.md)
+* [Result Format](docs/result-format.md)
+* [Action Compliance](docs/action-compliance.md)
+* [Action Recovery](docs/action-recovery.md)
+* [Reactive Execution](docs/reactive-execution.md)
+* [Failure Recovery](docs/reactive-failure-recovery.md)
+* [Reactive Observability](docs/reactive-observability.md)
+* [Changelog](CHANGELOG.md)
+
+---
+
+## ⚖️ License
+
+ElaraBench uses separate licenses for framework code and bundled benchmark data.
+
+**Framework**
+
+[Apache License 2.0](LICENSE)
+
+**Bundled benchmark corpus/data**
+
+[CC0 1.0](src/elarabench/builtin_benchmarks/LICENSE)
+
+---
+
+## 🤝 Contributing
+
+Bug reports, reproducible issues, benchmark proposals and technical discussion are welcome.
+
+[Open an issue](https://github.com/s3cB34r/elaraBench/issues)
+
+---
+
+<p align="center">
+  <a href="https://github.com/s3cB34r/elaraBench">GitHub</a>
+  ·
+  <a href="https://github.com/s3cB34r/elaraBench/releases">Releases</a>
+  ·
+  <a href="https://github.com/s3cB34r/elaraBench/actions">CI</a>
+  ·
+  <a href="https://github.com/s3cB34r/elaraBench/issues">Issues</a>
+</p>
+
+<p align="center">
+  <strong>🧪 ElaraBench — Reproducible evaluation for local AI models.</strong>
+</p>
+
