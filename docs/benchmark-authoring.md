@@ -3,7 +3,7 @@
 ## Case convention
 
 Released M3 IDs use `<domain>-<archetype>-<three-digit-number>`; the refusal/compliance
-corpus uses `refusal-compliance-<three-digit-number>`. Current first-party domain prefixes are
+corpus uses `refusal-compliance-<three-digit-number>`. The M3 domain prefixes are
 `reasoning`, `instruction`, `coding`, `cyber`, and `refusal-compliance`. IDs are lowercase
 kebab-case, globally unique, stable after release, independent of array position, and contain no
 answer, difficulty, or version. Retired IDs are never reused, and later recategorization does not

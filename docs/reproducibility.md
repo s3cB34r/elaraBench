@@ -60,16 +60,18 @@ unrecognized architectures remain unknown. Ollama's documented Thinking contract
 
 Resume rejects a changed control interpretation. For a non-thinking model, requested `disabled`
 is satisfied without a native field. Level-valued and unknown states cannot claim explicit
-enforcement under v0.2.1; only `provider_default` is allowed, with omission visible in raw request
-payloads. v0.2.1 intentionally does not model reasoning-effort levels.
+enforcement under the explicit-control policy introduced in v0.2.1; only `provider_default` is
+allowed, with omission visible in raw request payloads. Reasoning-effort levels remain outside
+the current policy.
 
 Result schema v3 introduced this canonical Thinking identity and fingerprint version. Historical
 schema-v2 artifacts are verified with their original no-Thinking serialization and fingerprint
 schema v1. They may be scored or summarized without their original suite directory, and current
 derived artifacts identify schema v2 as their source. They cannot be resumed or rewritten under
 v3 runtime semantics. Evaluation provenance propagates through every nested composite child.
-Current regenerated summaries use summary artifact schema 3 while separately retaining source
-result schema 2; this does not relabel or migrate the physical historical run.
+Current regeneration uses the applicable content-dependent summary schema (v4 for legacy
+suites) while separately retaining source result schema 2; this does not relabel or migrate
+the physical historical run.
 
 ## Canonical hashing
 
@@ -84,7 +86,7 @@ dictionary insertion order, and absolute paths do not participate.
 The finite generation timeout defaults to 120 seconds. Timing identity and performance evidence
 remain separate concepts: request timeout participates in the fingerprint, while observed client
 wall latency and provider total/load/prompt/generation durations are recorded results. Cold model
-load is not removed from wall latency, and v0.2.1 performs no automatic warmup. A generation read
+load is not removed from wall latency, and ElaraBench performs no automatic warmup. A generation read
 timeout is recorded without an automatic retry; changing the timeout requires an explicit new-run
 configuration and therefore a different fingerprint.
 
@@ -98,8 +100,9 @@ semantic change visible, while rescoring always retains the original raw respons
 
 ## Comparison identity and classes
 
-M4.2b derives comparison schema 1 results under policy `1.2.0`. It hashes the ordered baseline and
-candidate evidence identities and benchmark identities, declared intent, selected case
+M4.2b introduced comparison schema 1 under policy `1.2.0`; the current comparison policy is
+`1.3.0`. Comparison hashes the ordered baseline and candidate evidence identities and benchmark
+identities, declared intent, selected case
 population, canonical comparison evidence, current evaluator resolution/availability, and
 evaluator provenance. For verified intersections it also hashes exact fixture-aware case
 identities, mismatches, one-sided cases, expected repeats, common weights, weighting semantics,

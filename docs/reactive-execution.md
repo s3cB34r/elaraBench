@@ -603,11 +603,11 @@ M5.4b turns the implemented M5.4a evaluator into a scored first-party benchmark 
 > Can this worker execute, observe, adapt, and terminate correctly under bounded causal
 > interaction?
 
-It changes neither the M5.4a runtime nor canonical evidence semantics. M5.4a remains evaluator
+It changes neither the M5.4a runtime nor canonical evidence semantics. M5.4a used evaluator
 `reactive_execution` version `1.0.0`, with completed behavioral results `PENDING_REVIEW`,
-`score = None`, and `passed = None`. M5.4b uses evaluator version `1.1.0` and returns `SCORED` for
-behavioral E1--E10 results. M5.4b artifact parsing must continue accepting historical evaluator
-version `1.0.0` as well as current version `1.1.0`, while retaining these semantic identifiers
+`score = None`, and `passed = None`. M5.4b introduced evaluator version `1.1.0` and `SCORED`
+behavioral E1--E10 results. M5.4b artifact parsing accepts historical evaluator version
+`1.0.0` as well as its version `1.1.0`, while retaining these semantic identifiers
 unchanged:
 
 - `reactive_execution_artifact_v1`;
@@ -907,19 +907,20 @@ the manifest, benchmark snapshot, request plan, any `turns/*/request.json`,
 `turns/*/response.json`, `turns/*/attempts/*`, or canonical observation bytes embedded in
 Requests. Regression tests compare canonical turn bytes before and after scoring.
 
-Current M5.4b-capable runs pin evaluator `1.1.0`. Resume rejects a stale `1.0.0` derived Reactive
-evaluation before provider contact. Historical M5.4a runs lacking capability metadata likewise
-reject resume before provider contact while remaining readable and replayable.
+M5.4b-capable runs originally pinned evaluator `1.1.0`; current runs use `1.3.0`. Resume rejects
+stale derived Reactive evaluations before provider contact. Historical M5.4a runs lacking
+capability metadata likewise reject resume before provider contact while remaining readable and
+replayable.
 
-Comparison remains non-mutating. Before invoking current Reactive evaluation or scoring semantics,
+Comparison remains non-mutating. Before invoking Reactive evaluation or scoring semantics,
 it performs a dedicated M5.4b scoring-metadata completeness check. This check is conceptually
 separate from `ReactiveEvaluator.validate_specification` and `resolve_evaluator_identity`. If a
-Reactive case lacks current scoring metadata, structural snapshot and evaluator parsing still
-succeed, the `1.1.0` Reactive evaluator is not called for scoring, and comparison marks the case or
+Reactive case lacks required scoring metadata, structural snapshot and evaluator parsing still
+succeed, the Reactive evaluator is not called for scoring, and comparison marks the case or
 evaluator unavailable through its evaluator-unavailable representation. Canonical evidence
 remains inspectable; comparison neither writes either source run nor infers capability or group
-membership. For M5.4b-capable snapshots, comparison may derive current `1.1.0` semantics in memory
-as already specified.
+membership. At M5.4b, comparison derived `1.1.0` semantics in memory for capable snapshots;
+current comparison uses `1.3.0` where eligible.
 
 ### Reactive summary and Summary schema v7
 

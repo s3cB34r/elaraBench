@@ -39,22 +39,27 @@ canonical profiles, and limitations.
 
 ## Installation
 
-Requires Python 3.11 or newer. From a source checkout:
+Requires Python 3.11 or newer. Clone the repository and install it in an editable
+virtual environment:
 
 ```bash
+git clone https://github.com/s3cB34r/elaraBench.git
+cd elaraBench
 python -m venv .venv
 source .venv/bin/activate
-python -m pip install .
+python -m pip install -e .
 ```
 
-Alternatively, install a built release wheel into your environment:
+To build and install a wheel instead, run these commands from the checkout with
+the virtual environment active:
 
 ```bash
+python -m pip wheel . --no-deps --wheel-dir dist
 python -m pip install dist/elarabench-0.4.0-py3-none-any.whl
 ```
 
 These instructions do not assume a PyPI publication. Installation may require internet to obtain
-build tools and dependencies. Editable development installation is described below.
+build tools and dependencies. The development extras are described below.
 
 ## Quickstart
 

@@ -1,6 +1,7 @@
 # Result format: schemas v3 and v4
 
-v0.2.1 produces inspectable filesystem runs:
+A non-Reactive physical-v3 run uses this inspectable filesystem layout. Reactive physical-v4
+runs use the turn layout described below.
 
 ```text
 runs/<run-id>/
@@ -44,8 +45,9 @@ Three version fields have deliberately separate meanings:
 - `evaluation.json.source_result_schema_version` identifies the physical canonical evidence that
   was evaluated. Composite children inherit the same value recursively.
 - `summary.json.schema_version` is the summary artifact's own shape. It is `4` by default, `5`
-  for summaries carrying normative Action Compliance data, `6` for Action Recovery, and `7` for
-  scored Reactive Execution. Higher versions take precedence when families coexist.
+  for summaries carrying normative Action Compliance data, `6` for Action Recovery, `7` for
+  scored Reactive Execution, `8` for Reactive Failure, and `9` for Reactive Observability.
+  Higher versions take precedence when families coexist.
   `summary.json.source_result_schema_version` identifies its physical source.
 
 Summary artifact shape does not establish physical provenance. Trusted run reads validate the
@@ -72,10 +74,10 @@ canonical manifests, benchmarks, requests, attempts, and responses remain unchan
 
 Historical schema-v2 `evaluation.json` files also predate the source-provenance field. Their
 physical manifest is authoritative: version-aware loading infers source result schema 2 in memory
-when the field is absent, without rewriting the evaluation merely to add it. Current schema-v3
-evaluation writers always serialize source result schema 3 explicitly. Missing, null, invalid, or
-contradictory provenance in a physical schema-v3 evaluation is rejected as an integrity error;
-it is never synthesized during read.
+when the field is absent, without rewriting the evaluation merely to add it. Physical-v3 and
+physical-v4 evaluation writers serialize their respective source result schema explicitly.
+Missing, null, invalid, or contradictory provenance in a physical-v3/v4 evaluation is rejected
+as an integrity error; it is never synthesized during read.
 
 All JSON is UTF-8, sorted, indented, and newline-terminated where practical. Atomic-write
 temporary files have a reserved name prefix. Resume safely removes only those leftovers and
@@ -147,21 +149,20 @@ request precedes canonical samples.
 ## Summary and coverage
 
 Summary semantic schema version 4 remains the default when no scored Action Compliance,
-Action Recovery, or Reactive Execution summary exists. A current physical v3 run without Action
-Compliance or Action Recovery
-data produces `schema_version: 4` and `source_result_schema_version: 3`; a regenerated historical
+Action Recovery, Reactive Execution, Reactive Failure, or Reactive Observability summary exists.
+A current physical-v3 run without those summaries produces `schema_version: 4` and
+`source_result_schema_version: 3`; a regenerated historical
 v2 summary without Action Compliance or Action Recovery produces `schema_version: 4` and
 `source_result_schema_version: 2`. Schema v4 adds optional `refusal_compliance`; it is null when
 compatible evaluator evidence is absent. A summary carrying normative Action Compliance scoring
 and summary semantics uses content-dependent schema version 5 and includes `action_compliance`.
 A summary carrying Action Recovery uses v6 and includes `action_recovery`; mixed suites may also
 carry Action Compliance diagnostics in v6. A scored Reactive Execution summary uses v7 and
-includes `reactive_execution`.
-Current v4/v5/v6/v7 summaries require explicit source provenance. The only inferred provenance is
+includes `reactive_execution`; Reactive Failure uses v8 and Reactive Observability uses v9.
+Current v4–v9 summaries require explicit source provenance. The only inferred provenance is
 for a provenance-less schema-v2 summary owned by a physical-v2 run. Historical v2/v3 summaries are
-read-only compatibility objects. The current writer accepts v4 summaries without Action Compliance,
-Action Recovery, or scored Reactive data; v5 summaries with Action Compliance; v6 summaries with
-Action Recovery; and v7 summaries with scored Reactive Execution. Absent
+read-only compatibility objects. The current writer accepts content-dependent v4–v9 summaries
+according to the presence rules described below. Absent
 Recovery data is omitted, so v4/v5 payloads do not gain `action_recovery: null`. Explicit rescore
 or summary regeneration is the upgrade path.
 

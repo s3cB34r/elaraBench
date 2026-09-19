@@ -54,8 +54,9 @@ stronger evidence. There are no user-facing model-name heuristics or task-type i
 Boolean-capable models map explicit policy to top-level `think`, outside generation `options`. A
 non-thinking model satisfies `disabled` without sending `think` and rejects `enabled`. Unknown or
 level-valued control rejects both explicit policies because enforcement cannot be proven with the
-v0.2.1 policy. `provider_default` is safe in every state because it intentionally omits the field.
-Translated requests are preserved as raw evidence. Reasoning-effort levels are outside v0.2.1.
+explicit-control policy introduced in v0.2.1. `provider_default` is safe in every state because
+it intentionally omits the field. Translated requests are preserved as raw evidence.
+Reasoning-effort levels remain outside the current policy.
 
 The general request and suite timeout default is 120 seconds. It remains finite, persisted,
 fingerprinted, and CLI-overrideable. Slowness alone never triggers a special retry or adaptive
@@ -95,13 +96,13 @@ replaces only the summary; resume likewise strictly validates finalized evidence
 reuse. Neither service constructs a provider, reads the original suite directory, or uses the
 network.
 Evaluation context carries the physical source result-schema version; composite dispatch forwards
-it unchanged at every nesting level. Current summaries use artifact schema version 4 by default
-and version 7 for scored Reactive Execution, otherwise 6 for Action Recovery, otherwise 5 for
-Action Compliance summary semantics. Summaries separately record whether their canonical
-source run was physical result schema 2, 3, or 4.
+it unchanged at every nesting level. Current summaries use artifact schema version 9 when
+Reactive Observability is present, otherwise 8 for Reactive Failure, 7 for scored Reactive
+Execution, 6 for Action Recovery, 5 for Action Compliance, or 4 by default. Summaries separately
+record whether their canonical source run was physical result schema 2, 3, or 4.
 Artifact loading receives the physical manifest schema explicitly. A versionless historical v2
 evaluation is interpreted as source schema 2 in memory and is not silently migrated on read;
-current v3 evaluation writes carry the field explicitly. Summary reads and writes likewise
+physical-v3/v4 evaluation writes carry the field explicitly. Summary reads and writes likewise
 validate source provenance against the owning manifest. Only a physical-v2 run may resolve the
 omitted provenance of a historical summary-v2 payload; context-free summary parsing does not
 invent that ownership fact.

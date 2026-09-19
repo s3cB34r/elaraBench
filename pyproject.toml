@@ -26,6 +26,11 @@ classifiers = [
     "Typing :: Typed",
 ]
 
+[project.urls]
+Homepage = "https://github.com/s3cB34r/elaraBench"
+Repository = "https://github.com/s3cB34r/elaraBench"
+Issues = "https://github.com/s3cB34r/elaraBench/issues"
+
 [project.optional-dependencies]
 dev = [
     "mypy>=1.11",

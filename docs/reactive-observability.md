@@ -1,6 +1,6 @@
 # M5.6 — Partially Observable Reactive Execution
 
-**IMPLEMENTED — READY FOR FINAL ACCEPTANCE.**
+**IMPLEMENTED.**
 
 This is the authoritative, self-contained M5.6 architecture specification. It extends
 [Reactive Execution](reactive-execution.md) and

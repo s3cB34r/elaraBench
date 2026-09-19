@@ -2,7 +2,7 @@
 
 ## Status and authority
 
-**IMPLEMENTED — READY FOR FINAL ACCEPTANCE.**
+**IMPLEMENTED.**
 
 This document is the normative M5.5 architecture authority. It records the finalized, corrected
 design and governs the implementation and its architecture gate. The runtime, scoring, summary,
@@ -310,7 +310,7 @@ implement the same presence rules:
 Equivalently, `reactive_execution` is allowed only for `schema_version >= 7`, and
 `reactive_failure` only for `schema_version >= 8`; v7 requires `reactive_execution`, and v8
 requires `reactive_failure`. V8 MUST NOT reject a combined run merely because
-`reactive_execution` is also present. The current v7 storage biconditional
+`reactive_execution` is also present. The then-current v7 storage biconditional
 `(schema_version == 7) == (reactive_execution is not None)` MUST NOT be carried forward unchanged:
 it would reject that valid v8 combination. These presence rules preserve the content-version
 selection precedence above.
@@ -656,7 +656,7 @@ historical scoring metadata is absent from those cases. Their lifecycle under M5
 | REPLAY | Yes; same behavior with empty/default failure configuration. |
 | Explicit SCORE | May rederive using evaluator `1.2.0`; replace only derived evaluation/summary data. |
 | SUMMARIZE | Current derivation expected after upgrade. |
-| RESUME | Requires current evaluator `1.2.0`; reject stale derived provenance before provider contact with explicit score-upgrade guidance. |
+| RESUME | At M5.5, required the then-current evaluator `1.2.0`; reject stale derived provenance before provider contact with explicit score-upgrade guidance. |
 | COMPARE | Non-mutating; current semantics rederived in memory. |
 
 Do not rewrite original canonical snapshots or turn evidence during upgrade. The older M5.4a
